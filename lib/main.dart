@@ -57,10 +57,11 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: colorScheme,
         scaffoldBackgroundColor: _appBackground,
+        fontFamily: 'Inter',
         fontFamilyFallback: const [
+          'Noto Sans SC',
           'PingFang SC',
           'Microsoft YaHei',
-          'Noto Sans CJK SC',
           'Arial Unicode MS',
         ],
         appBarTheme: const AppBarTheme(
