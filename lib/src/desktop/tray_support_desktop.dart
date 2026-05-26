@@ -80,9 +80,8 @@ class _DesktopTraySupport extends TraySupport
     }
 
     _quitRequested = true;
-    await trayManager.destroy();
     await windowManager.setPreventClose(false);
-    await windowManager.destroy();
+    await windowManager.close();
   }
 
   @override
