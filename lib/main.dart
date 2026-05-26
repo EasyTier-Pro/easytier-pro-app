@@ -75,7 +75,7 @@ class MyApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: _foreground,
             foregroundColor: Colors.white,
-            minimumSize: const Size(0, 44),
+            minimumSize: const Size(0, 38),
             padding: const EdgeInsets.symmetric(horizontal: 18),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -86,7 +86,7 @@ class MyApp extends StatelessWidget {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: _foreground,
-            minimumSize: const Size(0, 44),
+            minimumSize: const Size(0, 38),
             padding: const EdgeInsets.symmetric(horizontal: 18),
             side: const BorderSide(color: _border),
             shape: RoundedRectangleBorder(
@@ -329,7 +329,7 @@ class _UnauthenticatedBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < 720 ? 16.0 : 24.0;
+        final horizontalPadding = constraints.maxWidth < 720 ? 14.0 : 20.0;
 
         return SingleChildScrollView(
           padding: EdgeInsets.symmetric(
@@ -338,7 +338,7 @@ class _UnauthenticatedBody extends StatelessWidget {
           ),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1120),
+              constraints: const BoxConstraints(maxWidth: 760),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
                 switchInCurve: Curves.easeOutCubic,
@@ -393,11 +393,11 @@ class _AppHeader extends StatelessWidget {
     return Material(
       color: _cardBackground,
       child: Container(
-        height: 57,
+        height: 52,
         decoration: const BoxDecoration(
           border: Border(bottom: BorderSide(color: _border)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final showMetrics = constraints.maxWidth >= 720;
@@ -425,15 +425,15 @@ class _AppHeader extends StatelessWidget {
                   label: isOnline ? '在线' : '离线',
                 ),
                 if (isOnline && showMetrics) ...[
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 14),
                   _HeaderMetric(icon: Icons.group_outlined, label: '设备'),
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 14),
                   _HeaderMetric(icon: Icons.arrow_downward_rounded, label: '—'),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   _HeaderMetric(icon: Icons.arrow_upward_rounded, label: '—'),
                 ],
                 if (user != null) ...[
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 14),
                   _UserMenu(
                     user: user,
                     onLogout: onLogout,
@@ -662,10 +662,10 @@ class _AuthShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: const BoxConstraints(maxWidth: 640),
         child: _AppCard(
           child: Padding(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.all(24),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final compact = constraints.maxWidth < 560;
@@ -696,9 +696,9 @@ class _AuthShell extends StatelessWidget {
                         height: 1.6,
                       ),
                     ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 18),
                     detail,
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     action,
                   ],
                 );
@@ -710,7 +710,7 @@ class _AuthShell extends StatelessWidget {
                       : CrossAxisAlignment.center,
                   children: [
                     _AccentBadge(color: accentColor),
-                    SizedBox(width: compact ? 0 : 24, height: compact ? 20 : 0),
+                    SizedBox(width: compact ? 0 : 20, height: compact ? 18 : 0),
                     if (compact) content else Expanded(child: content),
                   ],
                 );
@@ -731,14 +731,14 @@ class _AccentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 96,
-      height: 96,
+      width: 80,
+      height: 80,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: color.withValues(alpha: 0.26)),
       ),
-      child: Icon(Icons.hub_outlined, color: color, size: 42),
+      child: Icon(Icons.hub_outlined, color: color, size: 36),
     );
   }
 }
@@ -985,24 +985,27 @@ class _WorkspaceHomeViewState extends State<_WorkspaceHomeView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
+        final compact = constraints.maxWidth < 680;
         if (compact) {
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             children: [
               _WorkspaceHero(session: widget.session, workspace: _workspace),
-              const SizedBox(height: 16),
-              _NetworkListCard(
-                networks: _networks,
-                selectedNetworkId: _selectedNetworkId,
-                isLoading: _isLoadingNetworks,
-                error: _networkError,
-                onRetry: _loadNetworks,
-                onSelect: _selectNetwork,
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               SizedBox(
-                height: 420,
+                height: 240,
+                child: _NetworkListCard(
+                  networks: _networks,
+                  selectedNetworkId: _selectedNetworkId,
+                  isLoading: _isLoadingNetworks,
+                  error: _networkError,
+                  onRetry: _loadNetworks,
+                  onSelect: _selectNetwork,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 360,
                 child: _DevicePanelCard(
                   selectedNetwork: selectedNetwork,
                   devices: _devices,
@@ -1014,7 +1017,7 @@ class _WorkspaceHomeViewState extends State<_WorkspaceHomeView> {
                   onShowHelloWorld: widget.onShowHelloWorld,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               FButton(
                 variant: FButtonVariant.outline,
                 onPress: () => unawaited(widget.onLogout()),
@@ -1026,19 +1029,19 @@ class _WorkspaceHomeViewState extends State<_WorkspaceHomeView> {
         }
 
         return Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 292,
+                width: 248,
                 child: Column(
                   children: [
                     _WorkspaceHero(
                       session: widget.session,
                       workspace: _workspace,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     Expanded(
                       child: _NetworkListCard(
                         networks: _networks,
@@ -1049,7 +1052,7 @@ class _WorkspaceHomeViewState extends State<_WorkspaceHomeView> {
                         onSelect: _selectNetwork,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     FButton(
                       variant: FButtonVariant.outline,
                       onPress: () => unawaited(widget.onLogout()),
@@ -1059,7 +1062,7 @@ class _WorkspaceHomeViewState extends State<_WorkspaceHomeView> {
                   ],
                 ),
               ),
-              const SizedBox(width: 20),
+              const SizedBox(width: 14),
               Expanded(
                 child: _DevicePanelCard(
                   selectedNetwork: selectedNetwork,
@@ -1092,14 +1095,14 @@ class _WorkspaceHero extends StatelessWidget {
 
     return _AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                _AvatarLabel(name: user.effectiveName, size: 42),
-                const SizedBox(width: 12),
+                _AvatarLabel(name: user.effectiveName, size: 36),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1130,7 +1133,7 @@ class _WorkspaceHero extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             _DetailRow(
               label: '邮箱',
               value: user.email.isEmpty ? '未提供' : user.email,
@@ -1164,12 +1167,12 @@ class _NetworkListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _CardTitle(icon: Icons.hub_outlined, title: '网络'),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             Expanded(child: _buildContent(context)),
           ],
         ),
@@ -1193,7 +1196,7 @@ class _NetworkListCard extends StatelessWidget {
 
     return ListView.separated(
       itemCount: networks.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (context, index) {
         final network = networks[index];
         final selected = network.id == selectedNetworkId;
@@ -1224,7 +1227,7 @@ class _NetworkTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: selected ? _foreground : _appBackground,
           borderRadius: BorderRadius.circular(16),
@@ -1274,7 +1277,7 @@ class _DevicePanelCard extends StatelessWidget {
 
     return _AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1295,10 +1298,10 @@ class _DevicePanelCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: [
                 _MetricTile(
                   label: '网络',
@@ -1321,7 +1324,7 @@ class _DevicePanelCard extends StatelessWidget {
                 const _MetricTile(label: '路由', value: '—', color: _brandPurple),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Expanded(child: _buildContent()),
           ],
         ),
@@ -1351,7 +1354,7 @@ class _DevicePanelCard extends StatelessWidget {
 
     return ListView.separated(
       itemCount: devices.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) => _DeviceTile(device: devices[index]),
     );
   }
@@ -1369,7 +1372,7 @@ class _DeviceTile extends StatelessWidget {
     final ipv4 = device.ipv4;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _appBackground,
         borderRadius: BorderRadius.circular(16),
@@ -1521,12 +1524,12 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 72,
+            width: 64,
             child: Text(
               label,
               style: const TextStyle(color: _mutedForeground, fontSize: 13),
@@ -1559,9 +1562,9 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 128,
+      width: 108,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _cardBackground,
           borderRadius: BorderRadius.circular(16),
@@ -1571,10 +1574,10 @@ class _MetricTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _StatusDot(color: color),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Text(
               value,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
             Text(
