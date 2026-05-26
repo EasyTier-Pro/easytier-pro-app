@@ -11,12 +11,8 @@ import 'src/desktop/tray_support.dart';
 const Color _appBackground = Color(0xFFF8F9FB);
 const Color _cardBackground = Color(0xFFFFFFFF);
 const Color _foreground = Color(0xFF0A0A0A);
-const Color _mutedForeground = Color(0xFF5E5E5E);
 const Color _border = Color(0xFFE5E7EB);
 const Color _brandCoral = Color(0xFFFF5530);
-const Color _brandBlue = Color(0xFF1456F0);
-const Color _brandPurple = Color(0xFFA855F7);
-const Color _success = Color(0xFF10B981);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
