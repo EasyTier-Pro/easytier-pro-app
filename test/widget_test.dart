@@ -1,30 +1,48 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:easytier_pro_app/main.dart';
+import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('shows logged in console state when credentials exist', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(authService: _FakeAuthService()));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('已登录控制台'), findsOneWidget);
+    expect(find.textContaining('tester@example.com'), findsOneWidget);
   });
+}
+
+class _FakeAuthService implements AuthService {
+  @override
+  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<AuthSession?> restoreSession() async {
+    return AuthSession(
+      user: const ConsoleUser(
+        email: 'tester@example.com',
+        displayName: 'Test User',
+        tenantNames: <String>['个人空间'],
+      ),
+      tokenSet: TokenSet(
+        accessToken: 'token',
+        tokenType: 'Bearer',
+        expiresIn: 3600,
+        obtainedAt: DateTime.utc(2026, 1, 1),
+      ),
+    );
+  }
+
+  @override
+  Future<DeviceAuthInfo> startDeviceAuth() {
+    throw UnimplementedError();
+  }
 }

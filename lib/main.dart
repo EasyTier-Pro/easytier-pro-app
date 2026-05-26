@@ -1,70 +1,152 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-void main() {
-  runApp(const MyApp());
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'src/auth/console_auth_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final preferences = await SharedPreferences.getInstance();
+  final authService = ConsoleAuthService(
+    tokenStore: OAuthTokenStore(preferences),
+  );
+
+  runApp(MyApp(authService: authService));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.authService});
 
-  // This widget is the root of your application.
+  final AuthService authService;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'EasyTier Pro',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B7A75)),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: AuthGate(authService: authService),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+enum AuthStage {
+  checking,
+  requestingCode,
+  waitingForApproval,
+  authenticated,
+  error,
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key, required this.authService});
 
-  void _incrementCounter() {
+  final AuthService authService;
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  AuthStage _stage = AuthStage.checking;
+  DeviceAuthInfo? _deviceAuthInfo;
+  AuthSession? _session;
+  String? _statusMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    _setStage(AuthStage.checking, statusMessage: '正在检查本地登录状态...');
+
+    try {
+      final session = await widget.authService.restoreSession();
+      if (session != null) {
+        _setSession(session);
+        return;
+      }
+
+      await _beginDeviceAuth();
+    } catch (error) {
+      _setError(error.toString());
+    }
+  }
+
+  Future<void> _beginDeviceAuth() async {
+    _setStage(AuthStage.requestingCode, statusMessage: '正在向控制台申请设备登录验证码...');
+
+    try {
+      final info = await widget.authService.startDeviceAuth();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _stage = AuthStage.waitingForApproval;
+        _deviceAuthInfo = info;
+        _statusMessage = '请在浏览器完成授权，应用会自动继续登录。';
+      });
+
+      unawaited(_openBrowser(info.verificationUriComplete));
+      unawaited(_waitForApproval(info));
+    } catch (error) {
+      _setError(error.toString());
+    }
+  }
+
+  Future<void> _waitForApproval(DeviceAuthInfo info) async {
+    try {
+      final session = await widget.authService.completeDeviceAuth(info);
+      _setSession(session);
+    } catch (error) {
+      _setError(error.toString());
+    }
+  }
+
+  Future<void> _openBrowser(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return;
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      setState(() {
+        _statusMessage = '未能自动打开浏览器，请手动复制链接完成授权。';
+      });
+    }
+  }
+
+  Future<void> _copyText(String value, String successMessage) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(successMessage)));
+  }
+
+  Future<void> _logout() async {
+    await widget.authService.logout();
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _session = null;
+      _deviceAuthInfo = null;
     });
+    await _beginDeviceAuth();
   }
 
   void _showHelloWorldDialog() {
@@ -72,12 +154,12 @@ class _MyHomePageState extends State<MyHomePage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Prompt'),
+          title: const Text('提示'),
           content: const Text('Hello world'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
+              child: const Text('确定'),
             ),
           ],
         );
@@ -85,60 +167,250 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void _setSession(AuthSession session) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stage = AuthStage.authenticated;
+      _session = session;
+      _deviceAuthInfo = null;
+      _statusMessage = null;
+    });
+  }
+
+  void _setError(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stage = AuthStage.error;
+      _statusMessage = message.replaceFirst('Exception: ', '');
+    });
+  }
+
+  void _setStage(AuthStage stage, {String? statusMessage}) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stage = stage;
+      _statusMessage = statusMessage;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('EasyTier Pro'),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: switch (_stage) {
+                AuthStage.checking || AuthStage.requestingCode => _LoadingView(
+                  key: ValueKey<AuthStage>(_stage),
+                  message: _statusMessage ?? '加载中...',
+                ),
+                AuthStage.waitingForApproval => _DeviceAuthView(
+                  key: const ValueKey<String>('device-auth'),
+                  info: _deviceAuthInfo!,
+                  statusMessage: _statusMessage,
+                  onOpenBrowser: () =>
+                      _openBrowser(_deviceAuthInfo!.verificationUriComplete),
+                  onCopyCode: () =>
+                      _copyText(_deviceAuthInfo!.userCode, '验证码已复制到剪贴板'),
+                  onCopyUrl: () => _copyText(
+                    _deviceAuthInfo!.verificationUriComplete,
+                    '登录链接已复制到剪贴板',
+                  ),
+                ),
+                AuthStage.authenticated => _LoggedInView(
+                  key: const ValueKey<String>('logged-in'),
+                  session: _session!,
+                  onLogout: _logout,
+                  onShowHelloWorld: _showHelloWorldDialog,
+                ),
+                AuthStage.error => _ErrorView(
+                  key: const ValueKey<String>('auth-error'),
+                  message: _statusMessage ?? '登录失败',
+                  onRetry: _beginDeviceAuth,
+                ),
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingView extends StatelessWidget {
+  const _LoadingView({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceAuthView extends StatelessWidget {
+  const _DeviceAuthView({
+    super.key,
+    required this.info,
+    required this.statusMessage,
+    required this.onOpenBrowser,
+    required this.onCopyCode,
+    required this.onCopyUrl,
+  });
+
+  final DeviceAuthInfo info;
+  final String? statusMessage;
+  final VoidCallback onOpenBrowser;
+  final VoidCallback onCopyCode;
+  final VoidCallback onCopyUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('请完成设备授权登录', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            Text(statusMessage ?? '请在浏览器中完成授权。'),
+            const SizedBox(height: 24),
+            SelectableText('登录链接：${info.verificationUriComplete}'),
+            const SizedBox(height: 12),
+            SelectableText(
+              '验证码：${info.userCode}',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            const SizedBox(height: 12),
+            Text('验证码将在 ${info.expiresIn} 秒后过期。'),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _showHelloWorldDialog,
-              child: const Text('Show Hello World'),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                FilledButton(
+                  onPressed: onOpenBrowser,
+                  child: const Text('打开浏览器'),
+                ),
+                OutlinedButton(
+                  onPressed: onCopyUrl,
+                  child: const Text('复制登录链接'),
+                ),
+                OutlinedButton(
+                  onPressed: onCopyCode,
+                  child: const Text('复制验证码'),
+                ),
+              ],
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+class _LoggedInView extends StatelessWidget {
+  const _LoggedInView({
+    super.key,
+    required this.session,
+    required this.onLogout,
+    required this.onShowHelloWorld,
+  });
+
+  final AuthSession session;
+  final VoidCallback onLogout;
+  final VoidCallback onShowHelloWorld;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = session.user;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('已登录控制台', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 16),
+            Text('用户：${user.effectiveName}'),
+            Text('邮箱：${user.email.isEmpty ? '未提供' : user.email}'),
+            Text(
+              '工作空间：${user.tenantNames.isEmpty ? '未读取到工作空间' : user.tenantNames.join('、')}',
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                FilledButton(
+                  onPressed: onShowHelloWorld,
+                  child: const Text('弹出 Hello World'),
+                ),
+                OutlinedButton(onPressed: onLogout, child: const Text('退出登录')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({super.key, required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('登录失败', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            Text(message),
+            const SizedBox(height: 24),
+            FilledButton(onPressed: onRetry, child: const Text('重新尝试登录')),
+          ],
+        ),
       ),
     );
   }
