@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -37,6 +36,7 @@ class MyApp extends StatelessWidget {
 
 enum AuthStage {
   checking,
+  loginRequired,
   requestingCode,
   waitingForApproval,
   authenticated,
@@ -74,13 +74,13 @@ class _AuthGateState extends State<AuthGate> {
         return;
       }
 
-      await _beginDeviceAuth();
+      _setStage(AuthStage.loginRequired);
     } catch (error) {
       _setError(error.toString());
     }
   }
 
-  Future<void> _beginDeviceAuth() async {
+  Future<void> _startLogin() async {
     _setStage(AuthStage.requestingCode, statusMessage: '正在向控制台申请设备登录验证码...');
 
     try {
@@ -95,7 +95,7 @@ class _AuthGateState extends State<AuthGate> {
         _statusMessage = '请在浏览器完成授权，应用会自动继续登录。';
       });
 
-      unawaited(_openBrowser(info.verificationUriComplete));
+      await _openBrowser(info.verificationUriComplete);
       unawaited(_waitForApproval(info));
     } catch (error) {
       _setError(error.toString());
@@ -125,17 +125,6 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  Future<void> _copyText(String value, String successMessage) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(successMessage)));
-  }
-
   Future<void> _logout() async {
     await widget.authService.logout();
     if (!mounted) {
@@ -145,8 +134,8 @@ class _AuthGateState extends State<AuthGate> {
     setState(() {
       _session = null;
       _deviceAuthInfo = null;
+      _stage = AuthStage.loginRequired;
     });
-    await _beginDeviceAuth();
   }
 
   void _showHelloWorldDialog() {
@@ -221,18 +210,16 @@ class _AuthGateState extends State<AuthGate> {
                   key: ValueKey<AuthStage>(_stage),
                   message: _statusMessage ?? '加载中...',
                 ),
+                AuthStage.loginRequired => _LoginRequiredView(
+                  key: const ValueKey<String>('login-required'),
+                  onLogin: _startLogin,
+                ),
                 AuthStage.waitingForApproval => _DeviceAuthView(
                   key: const ValueKey<String>('device-auth'),
-                  info: _deviceAuthInfo!,
                   statusMessage: _statusMessage,
-                  onOpenBrowser: () =>
-                      _openBrowser(_deviceAuthInfo!.verificationUriComplete),
-                  onCopyCode: () =>
-                      _copyText(_deviceAuthInfo!.userCode, '验证码已复制到剪贴板'),
-                  onCopyUrl: () => _copyText(
-                    _deviceAuthInfo!.verificationUriComplete,
-                    '登录链接已复制到剪贴板',
-                  ),
+                  onOpenBrowser: _deviceAuthInfo == null
+                      ? null
+                      : () => _openBrowser(_deviceAuthInfo!.verificationUriComplete),
                 ),
                 AuthStage.authenticated => _LoggedInView(
                   key: const ValueKey<String>('logged-in'),
@@ -243,11 +230,36 @@ class _AuthGateState extends State<AuthGate> {
                 AuthStage.error => _ErrorView(
                   key: const ValueKey<String>('auth-error'),
                   message: _statusMessage ?? '登录失败',
-                  onRetry: _beginDeviceAuth,
+                  onRetry: () async {
+                    _setStage(AuthStage.loginRequired);
+                  },
                 ),
               },
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginRequiredView extends StatelessWidget {
+  const _LoginRequiredView({super.key, required this.onLogin});
+
+  final Future<void> Function() onLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('请先登录控制台', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onLogin, child: const Text('登录 EasyTier Pro')),
+          ],
         ),
       ),
     );
@@ -280,18 +292,12 @@ class _LoadingView extends StatelessWidget {
 class _DeviceAuthView extends StatelessWidget {
   const _DeviceAuthView({
     super.key,
-    required this.info,
     required this.statusMessage,
     required this.onOpenBrowser,
-    required this.onCopyCode,
-    required this.onCopyUrl,
   });
 
-  final DeviceAuthInfo info;
   final String? statusMessage;
-  final VoidCallback onOpenBrowser;
-  final VoidCallback onCopyCode;
-  final VoidCallback onCopyUrl;
+  final VoidCallback? onOpenBrowser;
 
   @override
   Widget build(BuildContext context) {
@@ -304,33 +310,13 @@ class _DeviceAuthView extends StatelessWidget {
           children: [
             Text('请完成设备授权登录', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
-            Text(statusMessage ?? '请在浏览器中完成授权。'),
-            const SizedBox(height: 24),
-            SelectableText('登录链接：${info.verificationUriComplete}'),
-            const SizedBox(height: 12),
-            SelectableText(
-              '验证码：${info.userCode}',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 12),
-            Text('验证码将在 ${info.expiresIn} 秒后过期。'),
+            Text(statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。'),
             const SizedBox(height: 24),
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
-                FilledButton(
-                  onPressed: onOpenBrowser,
-                  child: const Text('打开浏览器'),
-                ),
-                OutlinedButton(
-                  onPressed: onCopyUrl,
-                  child: const Text('复制登录链接'),
-                ),
-                OutlinedButton(
-                  onPressed: onCopyCode,
-                  child: const Text('复制验证码'),
-                ),
+                FilledButton(onPressed: onOpenBrowser, child: const Text('重新打开浏览器')),
               ],
             ),
           ],
