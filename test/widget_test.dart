@@ -11,6 +11,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('EasyTier Pro'), findsWidgets);
+    expect(find.text('控制台已连接'), findsOneWidget);
     expect(find.text('网络: 办公网'), findsOneWidget);
     expect(find.text('办公室网关'), findsOneWidget);
   });
