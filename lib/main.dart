@@ -27,6 +27,12 @@ class MyApp extends StatelessWidget {
       title: 'EasyTier Pro',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B7A75)),
+        fontFamilyFallback: const [
+          'PingFang SC',
+          'Microsoft YaHei',
+          'Noto Sans CJK SC',
+          'Arial Unicode MS',
+        ],
         useMaterial3: true,
       ),
       home: AuthGate(authService: authService),
@@ -219,7 +225,9 @@ class _AuthGateState extends State<AuthGate> {
                   statusMessage: _statusMessage,
                   onOpenBrowser: _deviceAuthInfo == null
                       ? null
-                      : () => _openBrowser(_deviceAuthInfo!.verificationUriComplete),
+                      : () => _openBrowser(
+                          _deviceAuthInfo!.verificationUriComplete,
+                        ),
                 ),
                 AuthStage.authenticated => _LoggedInView(
                   key: const ValueKey<String>('logged-in'),
@@ -258,7 +266,10 @@ class _LoginRequiredView extends StatelessWidget {
           children: [
             Text('请先登录控制台', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onLogin, child: const Text('登录 EasyTier Pro')),
+            FilledButton(
+              onPressed: onLogin,
+              child: const Text('登录 EasyTier Pro'),
+            ),
           ],
         ),
       ),
@@ -316,7 +327,10 @@ class _DeviceAuthView extends StatelessWidget {
               spacing: 12,
               runSpacing: 12,
               children: [
-                FilledButton(onPressed: onOpenBrowser, child: const Text('重新打开浏览器')),
+                FilledButton(
+                  onPressed: onOpenBrowser,
+                  child: const Text('重新打开浏览器'),
+                ),
               ],
             ),
           ],
