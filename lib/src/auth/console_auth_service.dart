@@ -86,14 +86,48 @@ class ConsoleUser {
   const ConsoleUser({
     required this.email,
     required this.displayName,
-    required this.tenantNames,
+    required this.workspaces,
   });
 
   final String email;
   final String displayName;
-  final List<String> tenantNames;
+  final List<ConsoleWorkspace> workspaces;
+
+  List<String> get tenantNames =>
+      workspaces.map((workspace) => workspace.name).toList(growable: false);
+
+  ConsoleWorkspace? get currentWorkspace =>
+      workspaces.isEmpty ? null : workspaces.first;
 
   String get effectiveName => displayName.isEmpty ? email : displayName;
+}
+
+class ConsoleWorkspace {
+  const ConsoleWorkspace({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
+class ConsoleNetwork {
+  const ConsoleNetwork({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
+class NetworkDevice {
+  const NetworkDevice({
+    required this.id,
+    required this.name,
+    required this.online,
+    this.ipv4,
+  });
+
+  final String id;
+  final String name;
+  final bool online;
+  final String? ipv4;
 }
 
 class AuthSession {
@@ -109,6 +143,17 @@ abstract class AuthService {
   Future<DeviceAuthInfo> startDeviceAuth();
 
   Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info);
+
+  Future<List<ConsoleNetwork>> fetchNetworks({
+    required String accessToken,
+    required String workspaceId,
+  });
+
+  Future<List<NetworkDevice>> fetchNetworkDevices({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  });
 
   Future<void> logout();
 }
@@ -262,6 +307,89 @@ class ConsoleAuthService implements AuthService {
     await tokenStore.clear();
   }
 
+  @override
+  Future<List<ConsoleNetwork>> fetchNetworks({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/networks'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('读取网络列表失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final items = _decodeObjectOrList(response.body);
+    return items
+        .map((item) {
+          final id = item['id']?.toString() ?? '';
+          final name =
+              item['name']?.toString() ??
+              item['network_name']?.toString() ??
+              '';
+          if (id.isEmpty || name.isEmpty) {
+            return null;
+          }
+          return ConsoleNetwork(id: id, name: name);
+        })
+        .whereType<ConsoleNetwork>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<NetworkDevice>> fetchNetworkDevices({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId/nodes',
+      ),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('读取设备列表失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final items = _decodeObjectOrList(response.body);
+    return items
+        .map((item) {
+          final id = item['id']?.toString() ?? '';
+          if (id.isEmpty) {
+            return null;
+          }
+          final rawName =
+              item['hostname']?.toString() ??
+              item['name']?.toString() ??
+              item['device_name']?.toString();
+          final status =
+              item['connectivity_state']?.toString() ??
+              item['status']?.toString() ??
+              item['state']?.toString() ??
+              '';
+          final online =
+              status.toLowerCase() == 'online' ||
+              status.toLowerCase() == 'connected';
+          final ipv4 =
+              item['ipv4_addr']?.toString() ??
+              item['ipv4']?.toString() ??
+              item['ip']?.toString();
+
+          return NetworkDevice(
+            id: id,
+            name: (rawName == null || rawName.isEmpty) ? id : rawName,
+            online: online,
+            ipv4: ipv4,
+          );
+        })
+        .whereType<NetworkDevice>()
+        .toList(growable: false);
+  }
+
   Future<ConsoleUser> _fetchCurrentUser(String accessToken) async {
     final response = await _httpClient.get(
       Uri.parse('$consoleBaseUrl/api/v1/auth/me'),
@@ -277,14 +405,19 @@ class ConsoleAuthService implements AuthService {
         (body['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     final tenants = (body['tenants'] as List<dynamic>? ?? const <dynamic>[])
         .map((item) => item as Map<String, dynamic>)
-        .map((item) => item['name']?.toString() ?? '')
-        .where((item) => item.isNotEmpty)
+        .map(
+          (item) => ConsoleWorkspace(
+            id: item['id']?.toString() ?? '',
+            name: item['name']?.toString() ?? '',
+          ),
+        )
+        .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
         .toList(growable: false);
 
     return ConsoleUser(
       email: user['email']?.toString() ?? '',
       displayName: user['display_name']?.toString() ?? '',
-      tenantNames: tenants,
+      workspaces: tenants,
     );
   }
 
@@ -302,6 +435,36 @@ class ConsoleAuthService implements AuthService {
     } catch (_) {
       return null;
     }
+  }
+
+  static List<Map<String, dynamic>> _decodeObjectOrList(String source) {
+    final decoded = jsonDecode(source);
+    if (decoded is List<dynamic>) {
+      return decoded.whereType<Map<String, dynamic>>().toList(growable: false);
+    }
+    if (decoded is Map<String, dynamic>) {
+      if (decoded['items'] is List<dynamic>) {
+        return (decoded['items'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+      if (decoded['networks'] is List<dynamic>) {
+        return (decoded['networks'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+      if (decoded['nodes'] is List<dynamic>) {
+        return (decoded['nodes'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+      if (decoded['devices'] is List<dynamic>) {
+        return (decoded['devices'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+    }
+    return const <Map<String, dynamic>>[];
   }
 
   static String _extractErrorMessage(String source) {

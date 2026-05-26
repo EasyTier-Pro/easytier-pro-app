@@ -10,8 +10,9 @@ void main() {
     await tester.pumpWidget(MyApp(authService: _FakeAuthService()));
     await tester.pumpAndSettle();
 
-    expect(find.text('已登录控制台'), findsOneWidget);
-    expect(find.textContaining('tester@example.com'), findsOneWidget);
+    expect(find.text('EasyTier Pro'), findsWidgets);
+    expect(find.text('网络: 办公网'), findsOneWidget);
+    expect(find.text('办公室网关'), findsOneWidget);
   });
 }
 
@@ -30,7 +31,9 @@ class _FakeAuthService implements AuthService {
       user: const ConsoleUser(
         email: 'tester@example.com',
         displayName: 'Test User',
-        tenantNames: <String>['个人空间'],
+        workspaces: <ConsoleWorkspace>[
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+        ],
       ),
       tokenSet: TokenSet(
         accessToken: 'token',
@@ -44,5 +47,29 @@ class _FakeAuthService implements AuthService {
   @override
   Future<DeviceAuthInfo> startDeviceAuth() {
     throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ConsoleNetwork>> fetchNetworks({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return const <ConsoleNetwork>[ConsoleNetwork(id: 'net-1', name: '办公网')];
+  }
+
+  @override
+  Future<List<NetworkDevice>> fetchNetworkDevices({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    return const <NetworkDevice>[
+      NetworkDevice(
+        id: 'node-1',
+        name: '办公室网关',
+        online: true,
+        ipv4: '10.10.0.1',
+      ),
+    ];
   }
 }
