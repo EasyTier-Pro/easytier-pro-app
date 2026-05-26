@@ -2,12 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
+import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 
 void main() {
   testWidgets('shows logged in console state when credentials exist', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(MyApp(authService: _FakeAuthService()));
+    await tester.pumpWidget(
+      MyApp(authService: _FakeAuthService(), traySupport: createTraySupport()),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('EasyTier Pro'), findsWidgets);
