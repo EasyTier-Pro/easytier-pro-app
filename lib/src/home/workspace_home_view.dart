@@ -13,13 +13,11 @@ class WorkspaceHomeView extends StatefulWidget {
     required this.authService,
     required this.session,
     required this.onLogout,
-    required this.onShowHelloWorld,
   });
 
   final AuthService authService;
   final AuthSession session;
   final Future<void> Function() onLogout;
-  final VoidCallback onShowHelloWorld;
 
   @override
   State<WorkspaceHomeView> createState() => _WorkspaceHomeViewState();
@@ -233,7 +231,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         user: widget.session.user,
         workspaceName: _workspace?.name ?? '未关联工作区',
         onLogout: widget.onLogout,
-        onShowHelloWorld: widget.onShowHelloWorld,
       ),
     };
   }
@@ -419,7 +416,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               workspaceName: _workspace?.name ?? '未关联工作区',
               totalDevices: _devices.length,
               onlineDevices: _onlineDeviceCount,
-              onShowHelloWorld: widget.onShowHelloWorld,
             );
             final devices = _DeviceListPanel(
               deviceCount: _devices.length,
@@ -823,14 +819,12 @@ class _NetworkInfoPanel extends StatelessWidget {
     required this.workspaceName,
     required this.totalDevices,
     required this.onlineDevices,
-    required this.onShowHelloWorld,
   });
 
   final ConsoleNetwork network;
   final String workspaceName;
   final int totalDevices;
   final int onlineDevices;
-  final VoidCallback onShowHelloWorld;
 
   @override
   Widget build(BuildContext context) {
@@ -860,12 +854,6 @@ class _NetworkInfoPanel extends StatelessWidget {
                 details: Text('$onlineDevices / $totalDevices 在线'),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          FButton(
-            variant: .outline,
-            onPress: onShowHelloWorld,
-            child: const Text('弹出 Hello World'),
           ),
         ],
       ),
@@ -903,13 +891,11 @@ class _SettingsPanel extends StatelessWidget {
     required this.user,
     required this.workspaceName,
     required this.onLogout,
-    required this.onShowHelloWorld,
   });
 
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
-  final VoidCallback onShowHelloWorld;
 
   @override
   Widget build(BuildContext context) {
@@ -947,11 +933,6 @@ class _SettingsPanel extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  FButton(
-                    variant: .outline,
-                    onPress: onShowHelloWorld,
-                    child: const Text('弹出 Hello World'),
-                  ),
                   FButton(
                     variant: .outline,
                     onPress: () => unawaited(onLogout()),

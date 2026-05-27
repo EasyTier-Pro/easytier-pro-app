@@ -111,24 +111,6 @@ class _AuthGateState extends State<AuthGate> {
     });
   }
 
-  void _showHelloWorldDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('提示'),
-          content: const Text('Hello world'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _setSession(AuthSession session) {
     if (!mounted) {
       return;
@@ -210,7 +192,6 @@ class _AuthGateState extends State<AuthGate> {
         session: _session!,
         authService: widget.authService,
         onLogout: _logout,
-        onShowHelloWorld: _showHelloWorldDialog,
       );
     }
 
