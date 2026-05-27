@@ -13,6 +13,15 @@ const Color _cardBackground = Color(0xFFFFFFFF);
 const Color _foreground = Color(0xFF0A0A0A);
 const Color _border = Color(0xFFE5E7EB);
 const Color _brandCoral = Color(0xFFFF5530);
+const String _appFontFamily = 'Inter';
+const List<String> _appFontFamilyFallback = <String>[
+  'Noto Sans SC',
+  'PingFang SC',
+  'Microsoft YaHei',
+  'Arial Unicode MS',
+];
+
+final FThemeData _foruiThemeData = _createForuiThemeData();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,19 +76,14 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'EasyTier Pro',
       builder: (context, child) => FTheme(
-        data: FThemes.neutral.light.desktop,
+        data: _foruiThemeData,
         child: child ?? const SizedBox.shrink(),
       ),
       theme: ThemeData(
         colorScheme: colorScheme,
         scaffoldBackgroundColor: _appBackground,
-        fontFamily: 'Inter',
-        fontFamilyFallback: const [
-          'Noto Sans SC',
-          'PingFang SC',
-          'Microsoft YaHei',
-          'Arial Unicode MS',
-        ],
+        fontFamily: _appFontFamily,
+        fontFamilyFallback: _appFontFamilyFallback,
         appBarTheme: const AppBarTheme(
           backgroundColor: _cardBackground,
           foregroundColor: _foreground,
@@ -114,16 +118,64 @@ class _MyAppState extends State<MyApp> {
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(foregroundColor: _foreground),
         ),
-        textTheme: const TextTheme(
-          headlineMedium: TextStyle(fontWeight: FontWeight.w800, height: 1.08),
-          headlineSmall: TextStyle(fontWeight: FontWeight.w800, height: 1.12),
-          titleLarge: TextStyle(fontWeight: FontWeight.w800),
-          titleMedium: TextStyle(fontWeight: FontWeight.w700),
-          bodyMedium: TextStyle(height: 1.5),
-        ),
+        textTheme: _materialTextTheme,
         useMaterial3: true,
       ),
       home: AuthGate(authService: widget.authService),
     );
   }
+}
+
+final TextTheme _materialTextTheme = TextTheme(
+  headlineMedium: _appTextStyle(
+    const TextStyle(fontWeight: FontWeight.w800, height: 1.08),
+  ),
+  headlineSmall: _appTextStyle(
+    const TextStyle(fontWeight: FontWeight.w800, height: 1.12),
+  ),
+  titleLarge: _appTextStyle(const TextStyle(fontWeight: FontWeight.w800)),
+  titleMedium: _appTextStyle(const TextStyle(fontWeight: FontWeight.w700)),
+  bodyMedium: _appTextStyle(const TextStyle(height: 1.5)),
+);
+
+FThemeData _createForuiThemeData() {
+  final colors = FThemes.neutral.light.desktop.colors;
+  return FThemeData(
+    colors: colors,
+    touch: false,
+    debugLabel: 'EasyTier Pro Light Desktop',
+    typography: _foruiTypography(colors),
+  );
+}
+
+FTypography _foruiTypography(FColors colors) {
+  final base = FTypography.inherit(
+    colors: colors,
+    touch: false,
+    fontFamily: _appFontFamily,
+  );
+
+  return base.copyWith(
+    xs3: _appTextStyle(base.xs3),
+    xs2: _appTextStyle(base.xs2),
+    xs: _appTextStyle(base.xs),
+    sm: _appTextStyle(base.sm),
+    md: _appTextStyle(base.md),
+    lg: _appTextStyle(base.lg),
+    xl: _appTextStyle(base.xl),
+    xl2: _appTextStyle(base.xl2),
+    xl3: _appTextStyle(base.xl3),
+    xl4: _appTextStyle(base.xl4),
+    xl5: _appTextStyle(base.xl5),
+    xl6: _appTextStyle(base.xl6),
+    xl7: _appTextStyle(base.xl7),
+    xl8: _appTextStyle(base.xl8),
+  );
+}
+
+TextStyle _appTextStyle(TextStyle style) {
+  return style.copyWith(
+    fontFamily: _appFontFamily,
+    fontFamilyFallback: _appFontFamilyFallback,
+  );
 }
