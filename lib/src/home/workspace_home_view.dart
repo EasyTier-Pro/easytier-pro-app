@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../auth/console_auth_service.dart';
 
+enum _DashboardView { overview, network, settings }
+
 class WorkspaceHomeView extends StatefulWidget {
   const WorkspaceHomeView({
     super.key,
@@ -33,8 +35,22 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool _isLoadingDevices = false;
   int _networkRequestId = 0;
   int _deviceRequestId = 0;
+  _DashboardView _activeView = _DashboardView.overview;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
+
+  ConsoleNetwork? get _selectedNetwork {
+    for (final network in _networks) {
+      if (network.id == _selectedNetworkId) {
+        return network;
+      }
+    }
+    return null;
+  }
+
+  int get _onlineDeviceCount {
+    return _devices.where((device) => device.online).length;
+  }
 
   @override
   void initState() {
@@ -150,96 +166,150 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     unawaited(_loadDevices(networkId));
   }
 
+  void _openNetworkDetail(ConsoleNetwork network) {
+    if (_selectedNetworkId != network.id) {
+      _selectNetwork(network.id);
+    }
+    setState(() {
+      _activeView = _DashboardView.network;
+    });
+  }
+
+  void _showOverview() {
+    setState(() {
+      _activeView = _DashboardView.overview;
+    });
+  }
+
+  void _showSettings() {
+    setState(() {
+      _activeView = _DashboardView.settings;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    ConsoleNetwork? selectedNetwork;
-    for (final network in _networks) {
-      if (network.id == _selectedNetworkId) {
-        selectedNetwork = network;
-        break;
-      }
-    }
+    final selectedNetwork = _selectedNetwork;
     final workspaceName = _workspace?.name ?? '未关联工作区';
 
     return FScaffold(
       childPad: false,
-      sidebar: SizedBox(
-        width: 280,
-        child: FSidebar.raw(
-          header: _SidebarHeader(workspaceName: workspaceName),
-          footer: FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: () => unawaited(widget.onLogout()),
-            child: const Text('退出登录'),
+      child: Column(
+        children: [
+          _DashboardHeader(
+            userName: widget.session.user.effectiveName,
+            workspaceName: workspaceName,
+            activeView: _activeView,
+            hasOnlineDevice: _onlineDeviceCount > 0,
+            deviceCount: _devices.length,
+            onShowOverview: _showOverview,
+            onShowSettings: _showSettings,
+            onLogout: widget.onLogout,
           ),
-          child: _buildNetworkList(context),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    selectedNetwork == null
-                        ? '请选择网络'
-                        : '网络: ${selectedNetwork.name}',
-                    style: Theme.of(context).textTheme.headlineSmall,
+          Expanded(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1040),
+                    child: _buildContent(context, selectedNetwork),
                   ),
                 ),
-                FButton(
-                  variant: .outline,
-                  size: .sm,
-                  onPress: widget.onShowHelloWorld,
-                  child: const Text('弹出 Hello World'),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Expanded(child: _buildDevicePanel(context, selectedNetwork)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildNetworkList(BuildContext context) {
+  Widget _buildContent(BuildContext context, ConsoleNetwork? selectedNetwork) {
+    return switch (_activeView) {
+      _DashboardView.overview => _buildOverview(context, selectedNetwork),
+      _DashboardView.network => _buildNetworkDetail(context, selectedNetwork),
+      _DashboardView.settings => _SettingsPanel(
+        user: widget.session.user,
+        workspaceName: _workspace?.name ?? '未关联工作区',
+        onLogout: widget.onLogout,
+        onShowHelloWorld: widget.onShowHelloWorld,
+      ),
+    };
+  }
+
+  Widget _buildOverview(BuildContext context, ConsoleNetwork? selectedNetwork) {
     if (_isLoadingNetworks) {
-      return const Center(child: FCircularProgress());
+      return const SizedBox(
+        height: 360,
+        child: Center(child: FCircularProgress()),
+      );
     }
 
     if (_networkError != null) {
-      return _SidebarMessage(
+      return _StateMessage(
         message: _networkError!,
-        action: FButton(
-          size: .sm,
-          onPress: _loadNetworks,
-          child: const Text('重试'),
-        ),
+        action: FButton(onPress: _loadNetworks, child: const Text('重试')),
       );
     }
 
     if (_networks.isEmpty) {
-      return const _SidebarMessage(message: '当前工作区暂无网络');
+      return const SizedBox(
+        height: 360,
+        child: _StateMessage(message: '当前工作区暂无网络'),
+      );
     }
 
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FSidebarGroup(
-          label: const Text('网络'),
-          children: [
-            for (final network in _networks)
-              FSidebarItem(
-                icon: const Icon(Icons.device_hub_outlined),
-                label: Text(network.name),
-                selected: network.id == _selectedNetworkId,
-                onPress: () => _selectNetwork(network.id),
+        _SectionTitle(
+          title: '概览',
+          subtitle: '管理工作区内的零信任网络与设备状态。',
+          trailing: FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: _loadNetworks,
+            child: const Text('刷新网络'),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _MetricGrid(
+          networkCount: _networks.length,
+          deviceCount: _devices.length,
+          onlineDeviceCount: _onlineDeviceCount,
+        ),
+        const SizedBox(height: 24),
+        Text('网络', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final columns = width >= 860 ? 3 : (width >= 560 ? 2 : 1);
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _networks.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 1.58,
               ),
-          ],
+              itemBuilder: (context, index) {
+                final network = _networks[index];
+                final selected = network.id == selectedNetwork?.id;
+                return _NetworkCard(
+                  network: network,
+                  selected: selected,
+                  deviceCount: selected ? _devices.length : null,
+                  onlineDeviceCount: selected ? _onlineDeviceCount : null,
+                  loading: selected && _isLoadingDevices,
+                  onOpen: () => _openNetworkDetail(network),
+                );
+              },
+            );
+          },
         ),
       ],
     );
@@ -250,40 +320,43 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     ConsoleNetwork? selectedNetwork,
   ) {
     if (selectedNetwork == null) {
-      return const Center(child: Text('请选择左侧网络以查看设备情况'));
+      return const SizedBox(
+        height: 360,
+        child: _StateMessage(message: '请选择一个网络以查看设备情况'),
+      );
     }
 
     if (_isLoadingDevices) {
-      return const Center(child: FCircularProgress());
+      return const SizedBox(
+        height: 360,
+        child: Center(child: FCircularProgress()),
+      );
     }
 
     if (_deviceError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_deviceError!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FButton(
-                size: .sm,
-                onPress: () => _loadDevices(selectedNetwork.id),
-                child: const Text('重试'),
-              ),
-            ],
+      return SizedBox(
+        height: 360,
+        child: _StateMessage(
+          message: _deviceError!,
+          action: FButton(
+            onPress: () => _loadDevices(selectedNetwork.id),
+            child: const Text('重试'),
           ),
         ),
       );
     }
 
     if (_devices.isEmpty) {
-      return const Center(child: Text('该网络暂无设备'));
+      return const SizedBox(
+        height: 240,
+        child: _StateMessage(message: '该网络暂无设备'),
+      );
     }
 
     return FCard.raw(
       child: FItemGroup(
         divider: .full,
+        physics: const NeverScrollableScrollPhysics(),
         children: [
           for (final device in _devices)
             FItem(
@@ -303,12 +376,508 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       ),
     );
   }
+
+  Widget _buildNetworkDetail(
+    BuildContext context,
+    ConsoleNetwork? selectedNetwork,
+  ) {
+    if (selectedNetwork == null) {
+      return _buildDevicePanel(context, selectedNetwork);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle(
+          title: selectedNetwork.name,
+          subtitle: '网络详情与设备列表',
+          trailing: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: _showOverview,
+                child: const Text('返回概览'),
+              ),
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: () => _loadDevices(selectedNetwork.id),
+                child: const Text('刷新设备'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 760;
+            final info = _NetworkInfoPanel(
+              network: selectedNetwork,
+              workspaceName: _workspace?.name ?? '未关联工作区',
+              totalDevices: _devices.length,
+              onlineDevices: _onlineDeviceCount,
+              onShowHelloWorld: widget.onShowHelloWorld,
+            );
+            final devices = _DeviceListPanel(
+              deviceCount: _devices.length,
+              child: _buildDevicePanel(context, selectedNetwork),
+            );
+
+            if (!wide) {
+              return Column(
+                children: [info, const SizedBox(height: 16), devices],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: info),
+                const SizedBox(width: 16),
+                Expanded(flex: 3, child: devices),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
-class _SidebarHeader extends StatelessWidget {
-  const _SidebarHeader({required this.workspaceName});
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader({
+    required this.userName,
+    required this.workspaceName,
+    required this.activeView,
+    required this.hasOnlineDevice,
+    required this.deviceCount,
+    required this.onShowOverview,
+    required this.onShowSettings,
+    required this.onLogout,
+  });
 
+  final String userName;
   final String workspaceName;
+  final _DashboardView activeView;
+  final bool hasOnlineDevice;
+  final int deviceCount;
+  final VoidCallback onShowOverview;
+  final VoidCallback onShowSettings;
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmedName = userName.trim();
+    final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
+
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFFFFF),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      child: Row(
+        children: [
+          const _BrandMark(),
+          const SizedBox(width: 10),
+          Text('EasyTier Pro', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(width: 24),
+          FButton(
+            variant: activeView == _DashboardView.overview
+                ? .secondary
+                : .ghost,
+            size: .sm,
+            onPress: onShowOverview,
+            child: const Text('概览'),
+          ),
+          const SizedBox(width: 8),
+          FButton(
+            variant: activeView == _DashboardView.settings
+                ? .secondary
+                : .ghost,
+            size: .sm,
+            onPress: onShowSettings,
+            child: const Text('设置'),
+          ),
+          const Spacer(),
+          _HeaderMetric(
+            label: hasOnlineDevice ? '在线' : '离线',
+            icon: Icons.circle,
+            color: hasOnlineDevice ? const Color(0xFF16A34A) : Colors.grey,
+          ),
+          const SizedBox(width: 14),
+          _HeaderMetric(
+            label: '$deviceCount 台设备',
+            icon: Icons.devices_other_outlined,
+          ),
+          const SizedBox(width: 18),
+          FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  trimmedName.isEmpty ? '用户' : trimmedName,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0A0A0A),
+                  ),
+                ),
+                Text(
+                  workspaceName,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF737373),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: () => unawaited(onLogout()),
+            child: const Text('退出登录'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrandMark extends StatelessWidget {
+  const _BrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFFF5530), width: 1.5),
+        shape: BoxShape.circle,
+      ),
+      child: const Text(
+        'E',
+        style: TextStyle(
+          color: Color(0xFFFF5530),
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderMetric extends StatelessWidget {
+  const _HeaderMetric({required this.label, required this.icon, this.color});
+
+  final String label;
+  final IconData icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: color ?? const Color(0xFF737373)),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF737373),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF737373),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 16), trailing!],
+      ],
+    );
+  }
+}
+
+class _MetricGrid extends StatelessWidget {
+  const _MetricGrid({
+    required this.networkCount,
+    required this.deviceCount,
+    required this.onlineDeviceCount,
+  });
+
+  final int networkCount;
+  final int deviceCount;
+  final int onlineDeviceCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 620;
+        final cards = [
+          _MetricCard(label: '网络', value: '$networkCount', subValue: '当前工作区'),
+          _MetricCard(label: '设备', value: '$deviceCount', subValue: '当前网络'),
+          _MetricCard(
+            label: '在线设备',
+            value: '$onlineDeviceCount',
+            subValue: '实时状态',
+          ),
+        ];
+
+        if (narrow) {
+          return Column(
+            children: [
+              for (final card in cards) ...[card, const SizedBox(height: 12)],
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            for (final card in cards) ...[
+              Expanded(child: card),
+              if (card != cards.last) const SizedBox(width: 12),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.subValue,
+  });
+
+  final String label;
+  final String value;
+  final String subValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return FCard.raw(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF737373),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subValue,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NetworkCard extends StatelessWidget {
+  const _NetworkCard({
+    required this.network,
+    required this.selected,
+    required this.loading,
+    required this.onOpen,
+    this.deviceCount,
+    this.onlineDeviceCount,
+  });
+
+  final ConsoleNetwork network;
+  final bool selected;
+  final bool loading;
+  final int? deviceCount;
+  final int? onlineDeviceCount;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final online = (onlineDeviceCount ?? 0) > 0;
+    final statusText = selected ? (online ? '在线' : '离线') : '待查看';
+    final subtitle =
+        selected && deviceCount != null && onlineDeviceCount != null
+        ? '$onlineDeviceCount / $deviceCount 台设备在线'
+        : '点击查看设备与网络详情';
+
+    return GestureDetector(
+      onTap: onOpen,
+      child: FCard.raw(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _StatusDot(online: online),
+                  const SizedBox(width: 8),
+                  Text(
+                    statusText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (loading)
+                    const FCircularProgress(size: .sm)
+                  else if (selected)
+                    const Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: Color(0xFFFF5530),
+                    ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                network.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NetworkInfoPanel extends StatelessWidget {
+  const _NetworkInfoPanel({
+    required this.network,
+    required this.workspaceName,
+    required this.totalDevices,
+    required this.onlineDevices,
+    required this.onShowHelloWorld,
+  });
+
+  final ConsoleNetwork network;
+  final String workspaceName;
+  final int totalDevices;
+  final int onlineDevices;
+  final VoidCallback onShowHelloWorld;
+
+  @override
+  Widget build(BuildContext context) {
+    return FCard(
+      title: Text(network.name, style: Theme.of(context).textTheme.titleLarge),
+      subtitle: const Text('网络信息'),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          FItemGroup(
+            divider: .full,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              FItem(
+                prefix: const Icon(Icons.badge_outlined),
+                title: const Text('网络 ID'),
+                details: Text(network.id),
+              ),
+              FItem(
+                prefix: const Icon(Icons.apartment_outlined),
+                title: const Text('工作区'),
+                details: Text(workspaceName),
+              ),
+              FItem(
+                prefix: const Icon(Icons.devices_other_outlined),
+                title: const Text('设备'),
+                details: Text('$onlineDevices / $totalDevices 在线'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FButton(
+            variant: .outline,
+            onPress: onShowHelloWorld,
+            child: const Text('弹出 Hello World'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceListPanel extends StatelessWidget {
+  const _DeviceListPanel({required this.deviceCount, required this.child});
+
+  final int deviceCount;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -317,23 +886,89 @@ class _SidebarHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.hub_outlined),
-            const SizedBox(width: 8),
-            Text(
-              'EasyTier Pro',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('设备列表', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            FBadge(variant: .secondary, child: Text('$deviceCount 台设备')),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(workspaceName, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 12),
+        child,
       ],
     );
   }
 }
 
-class _SidebarMessage extends StatelessWidget {
-  const _SidebarMessage({required this.message, this.action});
+class _SettingsPanel extends StatelessWidget {
+  const _SettingsPanel({
+    required this.user,
+    required this.workspaceName,
+    required this.onLogout,
+    required this.onShowHelloWorld,
+  });
+
+  final ConsoleUser user;
+  final String workspaceName;
+  final Future<void> Function() onLogout;
+  final VoidCallback onShowHelloWorld;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
+        const SizedBox(height: 20),
+        FCard(
+          title: const Text('账号'),
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              FItemGroup(
+                divider: .full,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  FItem(
+                    prefix: const Icon(Icons.person_outline),
+                    title: const Text('用户'),
+                    subtitle: Text(user.email.isEmpty ? '未提供邮箱' : user.email),
+                    details: Text(
+                      user.effectiveName.isEmpty ? '用户' : user.effectiveName,
+                    ),
+                  ),
+                  FItem(
+                    prefix: const Icon(Icons.apartment_outlined),
+                    title: const Text('工作区'),
+                    details: Text(workspaceName),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FButton(
+                    variant: .outline,
+                    onPress: onShowHelloWorld,
+                    child: const Text('弹出 Hello World'),
+                  ),
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(onLogout()),
+                    child: const Text('退出登录'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StateMessage extends StatelessWidget {
+  const _StateMessage({required this.message, this.action});
 
   final String message;
   final Widget? action;
@@ -366,7 +1001,7 @@ class _StatusDot extends StatelessWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(
-        color: online ? Colors.green : Colors.grey,
+        color: online ? const Color(0xFF16A34A) : Colors.grey,
         shape: BoxShape.circle,
       ),
     );

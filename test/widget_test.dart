@@ -14,7 +14,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('EasyTier Pro'), findsWidgets);
-    expect(find.text('网络: 办公网'), findsOneWidget);
+    expect(find.text('概览'), findsWidgets);
+    expect(find.text('办公网'), findsOneWidget);
+    expect(find.text('1 / 1 台设备在线'), findsOneWidget);
+
+    await tester.tap(find.text('办公网'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('设备列表'), findsOneWidget);
     expect(find.text('办公室网关'), findsOneWidget);
   });
 }
