@@ -5,14 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/console_auth_service.dart';
 
-enum _DashboardView {
-  overview,
-  network,
-  networkDetail,
-  nodes,
-  services,
-  settings,
-}
+enum _DashboardView { overview, network, nodes, services, settings }
 
 enum _UserMenuAction { settings, logout }
 
@@ -43,6 +36,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   int _networkRequestId = 0;
   int _deviceRequestId = 0;
   _DashboardView _activeView = _DashboardView.overview;
+  bool _isNetworkDetailOpen = false;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -178,37 +172,48 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _selectNetwork(network.id);
     }
     setState(() {
-      _activeView = _DashboardView.networkDetail;
+      _isNetworkDetailOpen = true;
+    });
+  }
+
+  void _closeNetworkDetail() {
+    setState(() {
+      _isNetworkDetailOpen = false;
     });
   }
 
   void _showOverview() {
     setState(() {
       _activeView = _DashboardView.overview;
+      _isNetworkDetailOpen = false;
     });
   }
 
   void _showNetwork() {
     setState(() {
       _activeView = _DashboardView.network;
+      _isNetworkDetailOpen = false;
     });
   }
 
   void _showServices() {
     setState(() {
       _activeView = _DashboardView.services;
+      _isNetworkDetailOpen = false;
     });
   }
 
   void _showNodes() {
     setState(() {
       _activeView = _DashboardView.nodes;
+      _isNetworkDetailOpen = false;
     });
   }
 
   void _showSettings() {
     setState(() {
       _activeView = _DashboardView.settings;
+      _isNetworkDetailOpen = false;
     });
   }
 
@@ -219,36 +224,41 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
     return FScaffold(
       childPad: false,
-      child: Column(
+      child: Stack(
         children: [
-          _DashboardHeader(
-            userName: widget.session.user.effectiveName,
-            workspaceName: workspaceName,
-            activeView: _activeView,
-            networkCount: _networks.length,
-            deviceCount: _devices.length,
-            onlineDeviceCount: _onlineDeviceCount,
-            onShowOverview: _showOverview,
-            onShowNetwork: _showNetwork,
-            onShowNodes: _showNodes,
-            onShowServices: _showServices,
-            onShowSettings: _showSettings,
-            onLogout: widget.onLogout,
-          ),
-          Expanded(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1040),
-                    child: _buildContent(context, selectedNetwork),
+          Column(
+            children: [
+              _DashboardHeader(
+                userName: widget.session.user.effectiveName,
+                workspaceName: workspaceName,
+                activeView: _activeView,
+                networkCount: _networks.length,
+                deviceCount: _devices.length,
+                onlineDeviceCount: _onlineDeviceCount,
+                onShowOverview: _showOverview,
+                onShowNetwork: _showNetwork,
+                onShowNodes: _showNodes,
+                onShowServices: _showServices,
+                onShowSettings: _showSettings,
+                onLogout: widget.onLogout,
+              ),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1040),
+                        child: _buildContent(context, selectedNetwork),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
+          _buildNetworkDetailOverlay(selectedNetwork),
         ],
       ),
     );
@@ -258,10 +268,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return switch (_activeView) {
       _DashboardView.overview => _buildOverview(context, selectedNetwork),
       _DashboardView.network => _buildNetworkListPage(context, selectedNetwork),
-      _DashboardView.networkDetail => _buildNetworkDetail(
-        context,
-        selectedNetwork,
-      ),
       _DashboardView.nodes => _buildNodesPage(context, selectedNetwork),
       _DashboardView.services => const _ServicesPanel(),
       _DashboardView.settings => _SettingsPanel(
@@ -270,6 +276,68 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         onLogout: widget.onLogout,
       ),
     };
+  }
+
+  Widget _buildNetworkDetailOverlay(ConsoleNetwork? selectedNetwork) {
+    final isOpen = _isNetworkDetailOpen && selectedNetwork != null;
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !isOpen,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final panelWidth = constraints.maxWidth >= 720
+                ? 560.0
+                : constraints.maxWidth * 0.88;
+
+            return Stack(
+              children: [
+                AnimatedOpacity(
+                  opacity: isOpen ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closeNetworkDetail,
+                    child: const ColoredBox(color: Color(0x66000000)),
+                  ),
+                ),
+                AnimatedPositioned(
+                  top: 0,
+                  right: isOpen ? 0 : -panelWidth,
+                  bottom: 0,
+                  width: panelWidth,
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x330F172A),
+                          blurRadius: 24,
+                          offset: Offset(-8, 0),
+                        ),
+                      ],
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: !isOpen
+                          ? const SizedBox.shrink()
+                          : _buildNetworkDetail(
+                              context,
+                              selectedNetwork,
+                              onClose: _closeNetworkDetail,
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildOverview(BuildContext context, ConsoleNetwork? selectedNetwork) {
@@ -471,8 +539,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   Widget _buildNetworkDetail(
     BuildContext context,
-    ConsoleNetwork? selectedNetwork,
-  ) {
+    ConsoleNetwork? selectedNetwork, {
+    required VoidCallback onClose,
+  }) {
     if (selectedNetwork == null) {
       return _buildDevicePanel(context, selectedNetwork);
     }
@@ -490,8 +559,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               FButton(
                 variant: .outline,
                 size: .sm,
-                onPress: _showNetwork,
-                child: const Text('返回网络列表'),
+                onPress: onClose,
+                child: const Text('关闭'),
               ),
               FButton(
                 variant: .outline,
@@ -640,11 +709,7 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           FButton(
-            variant:
-                activeView == _DashboardView.network ||
-                    activeView == _DashboardView.networkDetail
-                ? .secondary
-                : .ghost,
+            variant: activeView == _DashboardView.network ? .secondary : .ghost,
             size: .sm,
             onPress: onShowNetwork,
             child: const Text('网络'),

@@ -42,8 +42,15 @@ void main() {
     await tester.tap(find.text('办公网'));
     await tester.pumpAndSettle();
 
+    expect(find.text('所有网络'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '关闭'), findsOneWidget);
     expect(find.text('设备列表'), findsOneWidget);
     expect(find.text('办公室网关'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '关闭'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('设备列表'), findsNothing);
   });
 }
 
