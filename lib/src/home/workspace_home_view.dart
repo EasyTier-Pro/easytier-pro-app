@@ -200,8 +200,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             userName: widget.session.user.effectiveName,
             workspaceName: workspaceName,
             activeView: _activeView,
-            hasOnlineDevice: _onlineDeviceCount > 0,
+            networkCount: _networks.length,
             deviceCount: _devices.length,
+            onlineDeviceCount: _onlineDeviceCount,
             onShowOverview: _showOverview,
             onShowSettings: _showSettings,
             onLogout: widget.onLogout,
@@ -273,12 +274,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           ),
         ),
         const SizedBox(height: 20),
-        _MetricGrid(
-          networkCount: _networks.length,
-          deviceCount: _devices.length,
-          onlineDeviceCount: _onlineDeviceCount,
-        ),
-        const SizedBox(height: 24),
         Text('网络', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         LayoutBuilder(
@@ -450,8 +445,9 @@ class _DashboardHeader extends StatelessWidget {
     required this.userName,
     required this.workspaceName,
     required this.activeView,
-    required this.hasOnlineDevice,
+    required this.networkCount,
     required this.deviceCount,
+    required this.onlineDeviceCount,
     required this.onShowOverview,
     required this.onShowSettings,
     required this.onLogout,
@@ -460,8 +456,9 @@ class _DashboardHeader extends StatelessWidget {
   final String userName;
   final String workspaceName;
   final _DashboardView activeView;
-  final bool hasOnlineDevice;
+  final int networkCount;
   final int deviceCount;
+  final int onlineDeviceCount;
   final VoidCallback onShowOverview;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
@@ -503,14 +500,24 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const Spacer(),
           _HeaderMetric(
-            label: hasOnlineDevice ? '在线' : '离线',
-            icon: Icons.circle,
-            color: hasOnlineDevice ? const Color(0xFF16A34A) : Colors.grey,
+            label: '网络',
+            value: '$networkCount',
+            icon: Icons.hub_outlined,
           ),
           const SizedBox(width: 14),
           _HeaderMetric(
-            label: '$deviceCount 台设备',
+            label: '设备',
+            value: '$deviceCount',
             icon: Icons.devices_other_outlined,
+          ),
+          const SizedBox(width: 14),
+          _HeaderMetric(
+            label: '在线',
+            value: '$onlineDeviceCount',
+            icon: Icons.circle,
+            color: onlineDeviceCount > 0
+                ? const Color(0xFF16A34A)
+                : Colors.grey,
           ),
           const SizedBox(width: 18),
           _UserMenu(
@@ -614,32 +621,6 @@ class _UserMenu extends StatelessWidget {
           child: Row(
             children: [
               FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0A0A0A),
-                      ),
-                    ),
-                    Text(
-                      workspaceName,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(width: 4),
               const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
             ],
@@ -666,9 +647,15 @@ class _BrandMark extends StatelessWidget {
 }
 
 class _HeaderMetric extends StatelessWidget {
-  const _HeaderMetric({required this.label, required this.icon, this.color});
+  const _HeaderMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.color,
+  });
 
   final String label;
+  final String value;
   final IconData icon;
   final Color? color;
 
@@ -679,7 +666,7 @@ class _HeaderMetric extends StatelessWidget {
         Icon(icon, size: 13, color: color ?? const Color(0xFF737373)),
         const SizedBox(width: 5),
         Text(
-          label,
+          '$label $value',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: const Color(0xFF737373),
             fontWeight: FontWeight.w600,
@@ -723,101 +710,6 @@ class _SectionTitle extends StatelessWidget {
         ),
         if (trailing != null) ...[const SizedBox(width: 16), trailing!],
       ],
-    );
-  }
-}
-
-class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({
-    required this.networkCount,
-    required this.deviceCount,
-    required this.onlineDeviceCount,
-  });
-
-  final int networkCount;
-  final int deviceCount;
-  final int onlineDeviceCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 620;
-        final cards = [
-          _MetricCard(label: '网络', value: '$networkCount', subValue: '当前工作区'),
-          _MetricCard(label: '设备', value: '$deviceCount', subValue: '当前网络'),
-          _MetricCard(
-            label: '在线设备',
-            value: '$onlineDeviceCount',
-            subValue: '实时状态',
-          ),
-        ];
-
-        if (narrow) {
-          return Column(
-            children: [
-              for (final card in cards) ...[card, const SizedBox(height: 12)],
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            for (final card in cards) ...[
-              Expanded(child: card),
-              if (card != cards.last) const SizedBox(width: 12),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.subValue,
-  });
-
-  final String label;
-  final String value;
-  final String subValue;
-
-  @override
-  Widget build(BuildContext context) {
-    return FCard.raw(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF737373),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subValue,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
