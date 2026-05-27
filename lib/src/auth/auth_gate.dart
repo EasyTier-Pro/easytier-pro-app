@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -204,19 +205,18 @@ class _AuthGateState extends State<AuthGate> {
       ),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('EasyTier Pro'),
-      ),
-      body: _stage == AuthStage.authenticated
-          ? WorkspaceHomeView(
-              session: _session!,
-              authService: widget.authService,
-              onLogout: _logout,
-              onShowHelloWorld: _showHelloWorldDialog,
-            )
-          : unauthenticatedBody,
+    if (_stage == AuthStage.authenticated) {
+      return WorkspaceHomeView(
+        session: _session!,
+        authService: widget.authService,
+        onLogout: _logout,
+        onShowHelloWorld: _showHelloWorldDialog,
+      );
+    }
+
+    return FScaffold(
+      header: const FHeader(title: Text('EasyTier Pro')),
+      child: unauthenticatedBody,
     );
   }
 }
@@ -228,16 +228,17 @@ class _LoginRequiredView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return FCard(
+      title: Text('请先登录控制台', style: Theme.of(context).textTheme.headlineSmall),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.only(top: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('请先登录控制台', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onLogin,
+            const Text('使用控制台账号授权此设备加入你的零信任网络。'),
+            const SizedBox(height: 20),
+            FButton(
+              onPress: () => unawaited(onLogin()),
               child: const Text('登录 EasyTier Pro'),
             ),
           ],
@@ -254,13 +255,13 @@ class _LoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return FCard(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            const FCircularProgress(),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
           ],
@@ -282,27 +283,20 @@ class _DeviceAuthView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return FCard(
+      title: Text(
+        '请完成设备授权登录',
+        style: Theme.of(context).textTheme.headlineSmall,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.only(top: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('请完成设备授权登录', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 12),
             Text(statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。'),
             const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton(
-                  onPressed: onOpenBrowser,
-                  child: const Text('重新打开浏览器'),
-                ),
-              ],
-            ),
+            FButton(onPress: onOpenBrowser, child: const Text('重新打开浏览器')),
           ],
         ),
       ),
@@ -318,18 +312,20 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return FCard(
+      title: Text('登录失败', style: Theme.of(context).textTheme.headlineSmall),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.only(top: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('登录失败', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 12),
             Text(message),
             const SizedBox(height: 24),
-            FilledButton(onPressed: onRetry, child: const Text('重新尝试登录')),
+            FButton(
+              onPress: () => unawaited(onRetry()),
+              child: const Text('重新尝试登录'),
+            ),
           ],
         ),
       ),
