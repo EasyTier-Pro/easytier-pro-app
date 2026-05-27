@@ -556,22 +556,12 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Image.asset(
+      'assets/images/easytier.png',
       width: 30,
       height: 30,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFFF5530), width: 1.5),
-        shape: BoxShape.circle,
-      ),
-      child: const Text(
-        'E',
-        style: TextStyle(
-          color: Color(0xFFFF5530),
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-      ),
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
     );
   }
 }
