@@ -7,6 +7,8 @@ import '../auth/console_auth_service.dart';
 
 enum _DashboardView { overview, network, settings }
 
+enum _UserMenuAction { settings, logout }
+
 class WorkspaceHomeView extends StatefulWidget {
   const WorkspaceHomeView({
     super.key,
@@ -511,41 +513,138 @@ class _DashboardHeader extends StatelessWidget {
             icon: Icons.devices_other_outlined,
           ),
           const SizedBox(width: 18),
-          FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
-          const SizedBox(width: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          _UserMenu(
+            userName: trimmedName,
+            workspaceName: workspaceName,
+            initial: initial,
+            onShowSettings: onShowSettings,
+            onLogout: onLogout,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UserMenu extends StatelessWidget {
+  const _UserMenu({
+    required this.userName,
+    required this.workspaceName,
+    required this.initial,
+    required this.onShowSettings,
+    required this.onLogout,
+  });
+
+  final String userName;
+  final String workspaceName;
+  final String initial;
+  final VoidCallback onShowSettings;
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = userName.isEmpty ? '用户' : userName;
+
+    return Material(
+      color: Colors.transparent,
+      child: PopupMenuButton<_UserMenuAction>(
+        tooltip: '账户菜单',
+        position: PopupMenuPosition.under,
+        onSelected: (action) {
+          switch (action) {
+            case _UserMenuAction.settings:
+              onShowSettings();
+            case _UserMenuAction.logout:
+              unawaited(onLogout());
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem<_UserMenuAction>(
+            enabled: false,
+            child: SizedBox(
+              width: 200,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF0A0A0A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    workspaceName,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const PopupMenuDivider(),
+          const PopupMenuItem<_UserMenuAction>(
+            value: _UserMenuAction.settings,
+            child: Row(
               children: [
-                Text(
-                  trimmedName.isEmpty ? '用户' : trimmedName,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0A0A0A),
-                  ),
-                ),
-                Text(
-                  workspaceName,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF737373),
-                    fontSize: 11,
-                  ),
-                ),
+                Icon(Icons.settings_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('设置'),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: () => unawaited(onLogout()),
-            child: const Text('退出登录'),
+          const PopupMenuItem<_UserMenuAction>(
+            value: _UserMenuAction.logout,
+            child: Row(
+              children: [
+                Icon(Icons.logout_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('退出登录'),
+              ],
+            ),
           ),
         ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            children: [
+              FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0A0A0A),
+                      ),
+                    ),
+                    Text(
+                      workspaceName,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+            ],
+          ),
+        ),
       ),
     );
   }
