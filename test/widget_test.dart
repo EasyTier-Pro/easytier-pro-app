@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
 
 import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
@@ -21,6 +22,12 @@ void main() {
     expect(find.text('设备 1'), findsOneWidget);
     expect(find.text('在线 1'), findsOneWidget);
     expect(find.text('办公网'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('所有网络'), findsOneWidget);
+    expect(find.text('1 / 1 台设备在线'), findsOneWidget);
 
     await tester.tap(find.text('办公网'));
     await tester.pumpAndSettle();

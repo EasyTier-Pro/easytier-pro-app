@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/console_auth_service.dart';
 
-enum _DashboardView { overview, network, services, settings }
+enum _DashboardView { overview, network, networkDetail, services, settings }
 
 enum _UserMenuAction { settings, logout }
 
@@ -171,7 +171,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _selectNetwork(network.id);
     }
     setState(() {
-      _activeView = _DashboardView.network;
+      _activeView = _DashboardView.networkDetail;
     });
   }
 
@@ -243,7 +243,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Widget _buildContent(BuildContext context, ConsoleNetwork? selectedNetwork) {
     return switch (_activeView) {
       _DashboardView.overview => _buildOverview(context, selectedNetwork),
-      _DashboardView.network => _buildNetworkDetail(context, selectedNetwork),
+      _DashboardView.network => _buildNetworkListPage(context, selectedNetwork),
+      _DashboardView.networkDetail => _buildNetworkDetail(
+        context,
+        selectedNetwork,
+      ),
       _DashboardView.services => const _ServicesPanel(),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
@@ -386,6 +390,70 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     );
   }
 
+  Widget _buildNetworkListPage(
+    BuildContext context,
+    ConsoleNetwork? selectedNetwork,
+  ) {
+    if (_isLoadingNetworks) {
+      return const SizedBox(
+        height: 360,
+        child: Center(child: FCircularProgress()),
+      );
+    }
+
+    if (_networkError != null) {
+      return _StateMessage(
+        message: _networkError!,
+        action: FButton(onPress: _loadNetworks, child: const Text('重试')),
+      );
+    }
+
+    if (_networks.isEmpty) {
+      return const SizedBox(
+        height: 360,
+        child: _StateMessage(message: '当前工作区暂无网络'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle(
+          title: '所有网络',
+          subtitle: '当前用户工作区下的全部零信任网络。',
+          trailing: FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: _loadNetworks,
+            child: const Text('刷新网络'),
+          ),
+        ),
+        const SizedBox(height: 20),
+        FCard.raw(
+          child: FItemGroup(
+            divider: .full,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              for (final network in _networks)
+                FItem(
+                  prefix: const Icon(Icons.hub_outlined),
+                  title: Text(network.name),
+                  subtitle: Text(
+                    network.id == selectedNetwork?.id
+                        ? '$_onlineDeviceCount / ${_devices.length} 台设备在线'
+                        : '点击查看设备列表',
+                  ),
+                  details: Text(network.id),
+                  suffix: const Icon(Icons.chevron_right_rounded),
+                  onPress: () => _openNetworkDetail(network),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildNetworkDetail(
     BuildContext context,
     ConsoleNetwork? selectedNetwork,
@@ -407,8 +475,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               FButton(
                 variant: .outline,
                 size: .sm,
-                onPress: _showOverview,
-                child: const Text('返回概览'),
+                onPress: _showNetwork,
+                child: const Text('返回网络列表'),
               ),
               FButton(
                 variant: .outline,
@@ -510,7 +578,11 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           FButton(
-            variant: activeView == _DashboardView.network ? .secondary : .ghost,
+            variant:
+                activeView == _DashboardView.network ||
+                    activeView == _DashboardView.networkDetail
+                ? .secondary
+                : .ghost,
             size: .sm,
             onPress: onShowNetwork,
             child: const Text('网络'),
