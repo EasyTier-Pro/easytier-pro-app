@@ -5,7 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../auth/console_auth_service.dart';
 
-enum _DashboardView { overview, network, networkDetail, services, settings }
+enum _DashboardView {
+  overview,
+  network,
+  networkDetail,
+  nodes,
+  services,
+  settings,
+}
 
 enum _UserMenuAction { settings, logout }
 
@@ -193,6 +200,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     });
   }
 
+  void _showNodes() {
+    setState(() {
+      _activeView = _DashboardView.nodes;
+    });
+  }
+
   void _showSettings() {
     setState(() {
       _activeView = _DashboardView.settings;
@@ -217,6 +230,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onlineDeviceCount: _onlineDeviceCount,
             onShowOverview: _showOverview,
             onShowNetwork: _showNetwork,
+            onShowNodes: _showNodes,
             onShowServices: _showServices,
             onShowSettings: _showSettings,
             onLogout: widget.onLogout,
@@ -248,6 +262,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         context,
         selectedNetwork,
       ),
+      _DashboardView.nodes => _buildNodesPage(context, selectedNetwork),
       _DashboardView.services => const _ServicesPanel(),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
@@ -521,6 +536,51 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       ],
     );
   }
+
+  Widget _buildNodesPage(
+    BuildContext context,
+    ConsoleNetwork? selectedNetwork,
+  ) {
+    if (selectedNetwork == null) {
+      return const SizedBox(
+        height: 360,
+        child: _StateMessage(message: '请选择一个网络以查看节点'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle(
+          title: '节点',
+          subtitle: '当前网络 ${selectedNetwork.name} 下的节点。',
+          trailing: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: _showNetwork,
+                child: const Text('切换网络'),
+              ),
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: () => _loadDevices(selectedNetwork.id),
+                child: const Text('刷新节点'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        _NodeListPanel(
+          nodeCount: _devices.length,
+          child: _buildDevicePanel(context, selectedNetwork),
+        ),
+      ],
+    );
+  }
 }
 
 class _DashboardHeader extends StatelessWidget {
@@ -533,6 +593,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.onlineDeviceCount,
     required this.onShowOverview,
     required this.onShowNetwork,
+    required this.onShowNodes,
     required this.onShowServices,
     required this.onShowSettings,
     required this.onLogout,
@@ -546,6 +607,7 @@ class _DashboardHeader extends StatelessWidget {
   final int onlineDeviceCount;
   final VoidCallback onShowOverview;
   final VoidCallback onShowNetwork;
+  final VoidCallback onShowNodes;
   final VoidCallback onShowServices;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
@@ -557,7 +619,7 @@ class _DashboardHeader extends StatelessWidget {
 
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const BoxDecoration(
         color: Color(0xFFFFFFFF),
         border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
@@ -565,9 +627,9 @@ class _DashboardHeader extends StatelessWidget {
       child: Row(
         children: [
           const _BrandMark(),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text('EasyTier Pro', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(width: 24),
+          const SizedBox(width: 16),
           FButton(
             variant: activeView == _DashboardView.overview
                 ? .secondary
@@ -576,7 +638,7 @@ class _DashboardHeader extends StatelessWidget {
             onPress: onShowOverview,
             child: const Text('概览'),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           FButton(
             variant:
                 activeView == _DashboardView.network ||
@@ -587,7 +649,14 @@ class _DashboardHeader extends StatelessWidget {
             onPress: onShowNetwork,
             child: const Text('网络'),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
+          FButton(
+            variant: activeView == _DashboardView.nodes ? .secondary : .ghost,
+            size: .sm,
+            onPress: onShowNodes,
+            child: const Text('节点'),
+          ),
+          const SizedBox(width: 6),
           FButton(
             variant: activeView == _DashboardView.services
                 ? .secondary
@@ -602,13 +671,13 @@ class _DashboardHeader extends StatelessWidget {
             value: '$networkCount',
             icon: Icons.hub_outlined,
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           _HeaderMetric(
             label: '设备',
             value: '$deviceCount',
             icon: Icons.devices_other_outlined,
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           _HeaderMetric(
             label: '在线',
             value: '$onlineDeviceCount',
@@ -617,7 +686,7 @@ class _DashboardHeader extends StatelessWidget {
                 ? const Color(0xFF16A34A)
                 : Colors.grey,
           ),
-          const SizedBox(width: 18),
+          const SizedBox(width: 12),
           _UserMenu(
             userName: trimmedName,
             workspaceName: workspaceName,
@@ -956,6 +1025,31 @@ class _DeviceListPanel extends StatelessWidget {
             Text('设备列表', style: Theme.of(context).textTheme.titleLarge),
             const Spacer(),
             FBadge(variant: .secondary, child: Text('$deviceCount 台设备')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        child,
+      ],
+    );
+  }
+}
+
+class _NodeListPanel extends StatelessWidget {
+  const _NodeListPanel({required this.nodeCount, required this.child});
+
+  final int nodeCount;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('节点列表', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            FBadge(variant: .secondary, child: Text('$nodeCount 个节点')),
           ],
         ),
         const SizedBox(height: 12),
