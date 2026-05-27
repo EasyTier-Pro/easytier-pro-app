@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/console_auth_service.dart';
 
-enum _DashboardView { overview, network, settings }
+enum _DashboardView { overview, network, services, settings }
 
 enum _UserMenuAction { settings, logout }
 
@@ -181,6 +181,18 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     });
   }
 
+  void _showNetwork() {
+    setState(() {
+      _activeView = _DashboardView.network;
+    });
+  }
+
+  void _showServices() {
+    setState(() {
+      _activeView = _DashboardView.services;
+    });
+  }
+
   void _showSettings() {
     setState(() {
       _activeView = _DashboardView.settings;
@@ -204,6 +216,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             deviceCount: _devices.length,
             onlineDeviceCount: _onlineDeviceCount,
             onShowOverview: _showOverview,
+            onShowNetwork: _showNetwork,
+            onShowServices: _showServices,
             onShowSettings: _showSettings,
             onLogout: widget.onLogout,
           ),
@@ -230,6 +244,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return switch (_activeView) {
       _DashboardView.overview => _buildOverview(context, selectedNetwork),
       _DashboardView.network => _buildNetworkDetail(context, selectedNetwork),
+      _DashboardView.services => const _ServicesPanel(),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
         workspaceName: _workspace?.name ?? '未关联工作区',
@@ -449,6 +464,8 @@ class _DashboardHeader extends StatelessWidget {
     required this.deviceCount,
     required this.onlineDeviceCount,
     required this.onShowOverview,
+    required this.onShowNetwork,
+    required this.onShowServices,
     required this.onShowSettings,
     required this.onLogout,
   });
@@ -460,6 +477,8 @@ class _DashboardHeader extends StatelessWidget {
   final int deviceCount;
   final int onlineDeviceCount;
   final VoidCallback onShowOverview;
+  final VoidCallback onShowNetwork;
+  final VoidCallback onShowServices;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
 
@@ -491,12 +510,19 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           FButton(
-            variant: activeView == _DashboardView.settings
+            variant: activeView == _DashboardView.network ? .secondary : .ghost,
+            size: .sm,
+            onPress: onShowNetwork,
+            child: const Text('网络'),
+          ),
+          const SizedBox(width: 8),
+          FButton(
+            variant: activeView == _DashboardView.services
                 ? .secondary
                 : .ghost,
             size: .sm,
-            onPress: onShowSettings,
-            child: const Text('设置'),
+            onPress: onShowServices,
+            child: const Text('服务'),
           ),
           const Spacer(),
           _HeaderMetric(
@@ -923,6 +949,25 @@ class _SettingsPanel extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ServicesPanel extends StatelessWidget {
+  const _ServicesPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        _SectionTitle(title: '服务', subtitle: '管理常用服务与快捷访问入口。'),
+        SizedBox(height: 20),
+        SizedBox(
+          height: 320,
+          child: _StateMessage(message: '服务功能即将接入。当前客户端尚未从控制台读取服务配置。'),
         ),
       ],
     );

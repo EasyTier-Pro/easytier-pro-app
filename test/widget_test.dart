@@ -15,6 +15,8 @@ void main() {
 
     expect(find.text('EasyTier Pro'), findsWidgets);
     expect(find.text('概览'), findsWidgets);
+    expect(find.text('网络'), findsWidgets);
+    expect(find.text('服务'), findsWidgets);
     expect(find.text('网络 1'), findsOneWidget);
     expect(find.text('设备 1'), findsOneWidget);
     expect(find.text('在线 1'), findsOneWidget);
