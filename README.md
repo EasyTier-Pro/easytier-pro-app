@@ -1,6 +1,6 @@
-# easytier_pro_app
+# EasyTier Pro
 
-A new Flutter project.
+Flutter client for EasyTier Pro.
 
 ## Getting Started
 

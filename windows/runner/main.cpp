@@ -27,7 +27,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(880, 560);
-  if (!window.Create(L"easytier_pro_app", origin, size)) {
+  if (!window.Create(L"EasyTier Pro", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
