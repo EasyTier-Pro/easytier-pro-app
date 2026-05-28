@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../core/core_lifecycle_service.dart';
 import 'tray_support.dart';
 
 class _DesktopTraySupport extends TraySupport
@@ -17,6 +18,8 @@ class _DesktopTraySupport extends TraySupport
   bool _initialized = false;
   bool _quitRequested = false;
   bool _trayMenuVisible = false;
+  String _coreStatusText = '未登录';
+  Future<void> Function()? _onRepairRequested;
 
   bool get _isDesktopPlatform {
     return !kIsWeb &&
@@ -37,25 +40,7 @@ class _DesktopTraySupport extends TraySupport
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(_trayIconForCurrentPlatform());
     await trayManager.setToolTip(_trayTooltip);
-    await trayManager.setContextMenu(
-      Menu(
-        items: [
-          MenuItem(
-            label: '打开主窗口',
-            onClick: (_) {
-              unawaited(showWindow());
-            },
-          ),
-          MenuItem.separator(),
-          MenuItem(
-            label: '退出 EasyTier Pro',
-            onClick: (_) {
-              unawaited(quitApp());
-            },
-          ),
-        ],
-      ),
-    );
+    await _refreshContextMenu();
 
     _initialized = true;
   }
@@ -97,6 +82,29 @@ class _DesktopTraySupport extends TraySupport
   }
 
   @override
+  Future<void> updateCoreStatus(CoreRunStatus status) async {
+    _coreStatusText = switch (status.phase) {
+      CoreRunPhase.running => '运行中',
+      CoreRunPhase.checking => '检查中',
+      CoreRunPhase.repairing => '修复中',
+      CoreRunPhase.error => '异常',
+      CoreRunPhase.signedOut => '未登录',
+    };
+
+    if (_initialized && _isDesktopPlatform) {
+      await _refreshContextMenu();
+    }
+  }
+
+  @override
+  void setRepairAction(Future<void> Function()? onRepair) {
+    _onRepairRequested = onRepair;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
+
+  @override
   void onTrayIconMouseDown() {
     unawaited(showWindow());
   }
@@ -129,6 +137,39 @@ class _DesktopTraySupport extends TraySupport
     } finally {
       _trayMenuVisible = false;
     }
+  }
+
+  Future<void> _refreshContextMenu() async {
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(label: '连接引擎: $_coreStatusText', onClick: (_) {}),
+          MenuItem(
+            label: '修复连接引擎',
+            onClick: (_) {
+              final repair = _onRepairRequested;
+              if (repair != null) {
+                unawaited(repair());
+              }
+            },
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            label: '打开主窗口',
+            onClick: (_) {
+              unawaited(showWindow());
+            },
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            label: '退出 EasyTier Pro',
+            onClick: (_) {
+              unawaited(quitApp());
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override

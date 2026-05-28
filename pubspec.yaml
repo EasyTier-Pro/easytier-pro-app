@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.4.0
+  crypto: ^3.0.6
   shared_preferences: ^2.5.3
   tray_manager: ^0.5.2
   url_launcher: ^6.3.1

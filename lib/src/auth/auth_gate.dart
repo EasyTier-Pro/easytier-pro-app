@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/core_lifecycle_service.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
 
@@ -17,9 +18,14 @@ enum AuthStage {
 }
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key, required this.authService});
+  const AuthGate({
+    super.key,
+    required this.authService,
+    required this.coreLifecycleService,
+  });
 
   final AuthService authService;
+  final CoreLifecycleService coreLifecycleService;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -99,6 +105,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _logout() async {
+    await widget.coreLifecycleService.onLogout();
     await widget.authService.logout();
     if (!mounted) {
       return;
@@ -115,6 +122,8 @@ class _AuthGateState extends State<AuthGate> {
     if (!mounted) {
       return;
     }
+
+    unawaited(widget.coreLifecycleService.bindSession(session));
 
     setState(() {
       _stage = AuthStage.authenticated;
@@ -191,6 +200,7 @@ class _AuthGateState extends State<AuthGate> {
       return WorkspaceHomeView(
         session: _session!,
         authService: widget.authService,
+        coreLifecycleService: widget.coreLifecycleService,
         onLogout: _logout,
       );
     }

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/auth/auth_gate.dart';
 import 'src/auth/console_auth_service.dart';
+import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/tray_support.dart';
 
 const Color _appBackground = Color(0xFFF8F9FB);
@@ -29,11 +30,18 @@ Future<void> main() async {
   final authService = ConsoleAuthService(
     tokenStore: OAuthTokenStore(preferences),
   );
+  final coreLifecycleService = CoreLifecycleService(authService: authService);
   final traySupport = createTraySupport();
 
   await traySupport.initialize();
 
-  runApp(MyApp(authService: authService, traySupport: traySupport));
+  runApp(
+    MyApp(
+      authService: authService,
+      traySupport: traySupport,
+      coreLifecycleService: coreLifecycleService,
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -41,10 +49,12 @@ class MyApp extends StatefulWidget {
     super.key,
     required this.authService,
     required this.traySupport,
+    required this.coreLifecycleService,
   });
 
   final AuthService authService;
   final TraySupport traySupport;
+  final CoreLifecycleService coreLifecycleService;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -52,9 +62,32 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   @override
+  void initState() {
+    super.initState();
+    widget.traySupport.setRepairAction(
+      () => widget.coreLifecycleService.repair(),
+    );
+    widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
+    unawaited(
+      widget.traySupport.updateCoreStatus(
+        widget.coreLifecycleService.status.value,
+      ),
+    );
+  }
+
+  @override
   void dispose() {
+    widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     unawaited(widget.traySupport.dispose());
     super.dispose();
+  }
+
+  void _onCoreStatusChanged() {
+    unawaited(
+      widget.traySupport.updateCoreStatus(
+        widget.coreLifecycleService.status.value,
+      ),
+    );
   }
 
   @override
@@ -121,7 +154,10 @@ class _MyAppState extends State<MyApp> {
         textTheme: _materialTextTheme,
         useMaterial3: true,
       ),
-      home: AuthGate(authService: widget.authService),
+      home: AuthGate(
+        authService: widget.authService,
+        coreLifecycleService: widget.coreLifecycleService,
+      ),
     );
   }
 }

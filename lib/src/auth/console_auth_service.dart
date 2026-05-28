@@ -130,6 +130,18 @@ class NetworkDevice {
   final String? ipv4;
 }
 
+class CoreBootstrapConfig {
+  const CoreBootstrapConfig({
+    required this.bootstrapToken,
+    required this.version,
+    required this.configServer,
+  });
+
+  final String bootstrapToken;
+  final String version;
+  final String configServer;
+}
+
 class AuthSession {
   const AuthSession({required this.user, required this.tokenSet});
 
@@ -153,6 +165,11 @@ abstract class AuthService {
     required String accessToken,
     required String workspaceId,
     required String networkId,
+  });
+
+  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+    required String accessToken,
+    required String workspaceId,
   });
 
   Future<void> logout();
@@ -388,6 +405,114 @@ class ConsoleAuthService implements AuthService {
         })
         .whereType<NetworkDevice>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    final releaseResponse = await _httpClient.get(
+      Uri.parse('$consoleBaseUrl/api/v1/releases/latest'),
+    );
+    if (!releaseResponse.statusCode.toString().startsWith('2')) {
+      throw AuthException(
+        '读取版本信息失败：${_extractErrorMessage(releaseResponse.body)}',
+      );
+    }
+
+    final releaseBody = _decodeObject(releaseResponse.body);
+    final stable =
+        (releaseBody['stable'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final rawVersion =
+        stable['version']?.toString() ??
+        releaseBody['version']?.toString() ??
+        '';
+    if (rawVersion.trim().isEmpty) {
+      throw const AuthException('控制台未返回可用版本');
+    }
+    final version = rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
+
+    final keysResponse = await _httpClient.get(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',
+      ),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (!keysResponse.statusCode.toString().startsWith('2')) {
+      throw AuthException(
+        '读取注册密钥失败：${_extractErrorMessage(keysResponse.body)}',
+      );
+    }
+    final keyItems = _decodeObjectOrList(keysResponse.body);
+
+    final key = keyItems.firstWhere(
+      (item) =>
+          item['id']?.toString().isNotEmpty == true &&
+          item['revoked'] != true &&
+          item['lifecycle_state']?.toString() != 'expired',
+      orElse: () => const <String, dynamic>{},
+    );
+
+    String bootstrapToken;
+    if (key.isNotEmpty) {
+      final keyId = key['id']!.toString();
+      final secretResponse = await _httpClient.get(
+        Uri.parse(
+          '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys/$keyId/secret',
+        ),
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+      if (secretResponse.statusCode.toString().startsWith('2')) {
+        final secretBody = _decodeObject(secretResponse.body);
+        bootstrapToken = secretBody['bootstrap_token']?.toString() ?? '';
+      } else {
+        bootstrapToken = '';
+      }
+    } else {
+      bootstrapToken = '';
+    }
+
+    if (bootstrapToken.isEmpty) {
+      final createResponse = await _httpClient.post(
+        Uri.parse(
+          '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',
+        ),
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'display_name': 'Desktop Auto Key',
+          'reusable': true,
+          'pre_approved': true,
+        }),
+      );
+      if (!createResponse.statusCode.toString().startsWith('2')) {
+        throw AuthException(
+          '创建注册密钥失败：${_extractErrorMessage(createResponse.body)}',
+        );
+      }
+      final createBody = _decodeObject(createResponse.body);
+      bootstrapToken = createBody['bootstrap_token']?.toString() ?? '';
+      if (bootstrapToken.isEmpty) {
+        throw const AuthException('创建密钥后未返回 bootstrap_token');
+      }
+    }
+
+    final configServerRaw =
+        releaseBody['web_config_server_url']?.toString() ??
+        'tcp://api.console.easytier.net:22020';
+    final configServer = configServerRaw.trim().isEmpty
+        ? 'tcp://api.console.easytier.net:22020'
+        : configServerRaw;
+
+    return CoreBootstrapConfig(
+      bootstrapToken: bootstrapToken,
+      version: version,
+      configServer: configServer,
+    );
   }
 
   Future<ConsoleUser> _fetchCurrentUser(String accessToken) async {

@@ -1,16 +1,33 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 
 import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
+import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 
 void main() {
   testWidgets('shows logged in console state when credentials exist', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final authService = _FakeAuthService();
     await tester.pumpWidget(
-      MyApp(authService: _FakeAuthService(), traySupport: createTraySupport()),
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -109,5 +126,42 @@ class _FakeAuthService implements AuthService {
         ipv4: '10.10.0.1',
       ),
     ];
+  }
+
+  @override
+  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return const CoreBootstrapConfig(
+      bootstrapToken: 'bootstrap-token',
+      version: 'v1.0.0',
+      configServer: 'tcp://api.console.easytier.net:22020',
+    );
+  }
+}
+
+class _NoopCoreLifecycleService extends CoreLifecycleService {
+  _NoopCoreLifecycleService({required super.authService});
+
+  @override
+  Future<void> bindSession(AuthSession session) async {
+    status.value = const CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: '连接引擎运行中',
+    );
+  }
+
+  @override
+  Future<void> onLogout() async {
+    status.value = CoreRunStatus.signedOut;
+  }
+
+  @override
+  Future<void> repair() async {
+    status.value = const CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: '连接引擎运行中',
+    );
   }
 }

@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:forui/forui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../core/core_lifecycle_service.dart';
 import '../auth/console_auth_service.dart';
 
 enum _DashboardView { overview, network, nodes, services, settings }
@@ -13,11 +15,13 @@ class WorkspaceHomeView extends StatefulWidget {
   const WorkspaceHomeView({
     super.key,
     required this.authService,
+    required this.coreLifecycleService,
     required this.session,
     required this.onLogout,
   });
 
   final AuthService authService;
+  final CoreLifecycleService coreLifecycleService;
   final AuthSession session;
   final Future<void> Function() onLogout;
 
@@ -241,6 +245,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 onShowServices: _showServices,
                 onShowSettings: _showSettings,
                 onLogout: widget.onLogout,
+                coreStatusListenable: widget.coreLifecycleService.status,
               ),
               Expanded(
                 child: DecoratedBox(
@@ -269,7 +274,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _DashboardView.overview => _buildOverview(context, selectedNetwork),
       _DashboardView.network => _buildNetworkListPage(context, selectedNetwork),
       _DashboardView.nodes => _buildNodesPage(context, selectedNetwork),
-      _DashboardView.services => const _ServicesPanel(),
+      _DashboardView.services => _ServicesPanel(
+        coreLifecycleService: widget.coreLifecycleService,
+      ),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
         workspaceName: _workspace?.name ?? '未关联工作区',
@@ -666,6 +673,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.onShowServices,
     required this.onShowSettings,
     required this.onLogout,
+    required this.coreStatusListenable,
   });
 
   final String userName;
@@ -680,6 +688,7 @@ class _DashboardHeader extends StatelessWidget {
   final VoidCallback onShowServices;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
+  final ValueListenable<CoreRunStatus> coreStatusListenable;
 
   @override
   Widget build(BuildContext context) {
@@ -750,6 +759,32 @@ class _DashboardHeader extends StatelessWidget {
             color: onlineDeviceCount > 0
                 ? const Color(0xFF16A34A)
                 : Colors.grey,
+          ),
+          const SizedBox(width: 10),
+          ValueListenableBuilder<CoreRunStatus>(
+            valueListenable: coreStatusListenable,
+            builder: (context, status, _) {
+              final color = switch (status.phase) {
+                CoreRunPhase.running => const Color(0xFF16A34A),
+                CoreRunPhase.repairing => const Color(0xFFF59E0B),
+                CoreRunPhase.checking => const Color(0xFF2563EB),
+                CoreRunPhase.error => const Color(0xFFDC2626),
+                CoreRunPhase.signedOut => Colors.grey,
+              };
+              return Row(
+                children: [
+                  Icon(Icons.circle, size: 12, color: color),
+                  const SizedBox(width: 5),
+                  Text(
+                    '引擎',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(width: 12),
           _UserMenu(
@@ -1187,20 +1222,55 @@ class _SettingsPanel extends StatelessWidget {
 }
 
 class _ServicesPanel extends StatelessWidget {
-  const _ServicesPanel();
+  const _ServicesPanel({required this.coreLifecycleService});
+
+  final CoreLifecycleService coreLifecycleService;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        _SectionTitle(title: '服务', subtitle: '管理常用服务与快捷访问入口。'),
-        SizedBox(height: 20),
-        SizedBox(
-          height: 320,
-          child: _StateMessage(message: '服务功能即将接入。当前客户端尚未从控制台读取服务配置。'),
-        ),
-      ],
+    return ValueListenableBuilder<CoreRunStatus>(
+      valueListenable: coreLifecycleService.status,
+      builder: (context, status, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionTitle(title: '服务', subtitle: '核心连接引擎状态与修复入口。'),
+            const SizedBox(height: 20),
+            FCard(
+              title: const Text('连接引擎'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _StatusDot(online: status.phase == CoreRunPhase.running),
+                      const SizedBox(width: 8),
+                      Text(status.message),
+                    ],
+                  ),
+                  if (status.lastError != null &&
+                      status.lastError!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      status.lastError!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(coreLifecycleService.repair()),
+                    child: const Text('重试/修复'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
