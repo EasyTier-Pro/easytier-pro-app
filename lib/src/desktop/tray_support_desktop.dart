@@ -5,6 +5,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/core_lifecycle_service.dart';
+import '../logging/app_logger.dart';
 import 'tray_support.dart';
 
 class _DesktopTraySupport extends TraySupport
@@ -20,6 +21,7 @@ class _DesktopTraySupport extends TraySupport
   bool _trayMenuVisible = false;
   String _coreStatusText = '未登录';
   Future<void> Function()? _onRepairRequested;
+  final AppLogger _logger = AppLogger.instance;
 
   bool get _isDesktopPlatform {
     return !kIsWeb &&
@@ -43,6 +45,7 @@ class _DesktopTraySupport extends TraySupport
     await _refreshContextMenu();
 
     _initialized = true;
+    _logger.info('tray', 'Tray initialized');
   }
 
   @override
@@ -90,6 +93,10 @@ class _DesktopTraySupport extends TraySupport
       CoreRunPhase.error => '异常',
       CoreRunPhase.signedOut => '未登录',
     };
+    _logger.info('tray', 'Core status updated on tray', context: {
+      'phase': status.phase.name,
+      'message': status.message,
+    });
 
     if (_initialized && _isDesktopPlatform) {
       await _refreshContextMenu();
@@ -147,6 +154,7 @@ class _DesktopTraySupport extends TraySupport
           MenuItem(
             label: '修复连接引擎',
             onClick: (_) {
+              _logger.info('tray', 'Repair action clicked from tray');
               final repair = _onRepairRequested;
               if (repair != null) {
                 unawaited(repair());

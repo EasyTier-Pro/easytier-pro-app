@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth/console_auth_service.dart';
+import '../logging/app_logger.dart';
 
 enum CoreRunPhase { signedOut, checking, repairing, running, error }
 
@@ -34,6 +35,7 @@ class CoreLifecycleService {
 
   final AuthService authService;
   final ValueNotifier<CoreRunStatus> status;
+  final AppLogger _logger = AppLogger.instance;
 
   AuthSession? _session;
   Future<void> _serial = Future<void>.value();
@@ -48,6 +50,11 @@ class CoreLifecycleService {
           previousWorkspace != nextWorkspace;
 
       _session = session;
+      _logger.info('core', 'Binding session', context: {
+        'workspace_changed': workspaceChanged,
+        'previous_workspace': previousWorkspace,
+        'next_workspace': nextWorkspace,
+      });
       if (workspaceChanged) {
         status.value = const CoreRunStatus(
           phase: CoreRunPhase.repairing,
@@ -61,6 +68,7 @@ class CoreLifecycleService {
   Future<void> onLogout() {
     return _enqueue(() async {
       _session = null;
+      _logger.info('core', 'Logout flow: uninstalling local engine binding');
       status.value = const CoreRunStatus(
         phase: CoreRunPhase.repairing,
         message: '正在卸载连接引擎...',
@@ -70,8 +78,14 @@ class CoreLifecycleService {
         if (snapshot.installed) {
           await _desktopCommand('uninstall', const {'purge': false});
         }
+        _logger.info('core', 'Logout cleanup completed', context: {
+          'installed_before_cleanup': snapshot.installed,
+        });
         status.value = CoreRunStatus.signedOut;
       } catch (error) {
+        _logger.error('core', 'Logout cleanup failed', context: {
+          'error': error.toString(),
+        });
         status.value = CoreRunStatus(
           phase: CoreRunPhase.error,
           message: '退出登录后卸载失败',
@@ -85,9 +99,11 @@ class CoreLifecycleService {
     return _enqueue(() async {
       final session = _session;
       if (session == null) {
+        _logger.warn('core', 'Repair requested without active session');
         status.value = CoreRunStatus.signedOut;
         return;
       }
+      _logger.info('core', 'Manual repair requested');
       await _ensureRunning(forceReinstall: true);
     });
   }
@@ -100,6 +116,7 @@ class CoreLifecycleService {
     }
     final workspace = session.user.currentWorkspace;
     if (workspace == null) {
+      _logger.error('core', 'No workspace available for lifecycle binding');
       status.value = const CoreRunStatus(
         phase: CoreRunPhase.error,
         message: '当前账号未绑定工作区',
@@ -111,6 +128,10 @@ class CoreLifecycleService {
       phase: CoreRunPhase.checking,
       message: '正在检查连接引擎状态...',
     );
+    _logger.info('core', 'Ensure running start', context: {
+      'force_reinstall': forceReinstall,
+      'workspace_id': workspace.id,
+    });
 
     try {
       final bootstrap = await authService.prepareCoreBootstrap(
@@ -131,6 +152,12 @@ class CoreLifecycleService {
           !snapshot.serviceRunning ||
           mismatch ||
           snapshot.currentBootstrapFingerprint == null;
+      _logger.info('core', 'Status evaluated', context: {
+        'installed': snapshot.installed,
+        'service_running': snapshot.serviceRunning,
+        'fingerprint_mismatch': mismatch,
+        'should_reinstall': shouldReinstall,
+      });
 
       if (shouldReinstall) {
         status.value = CoreRunStatus(
@@ -152,6 +179,7 @@ class CoreLifecycleService {
       if (snapshot.installed &&
           snapshot.serviceRunning &&
           snapshot.currentBootstrapFingerprint == expectedFingerprint) {
+        _logger.info('core', 'Engine running and fingerprint matched');
         status.value = CoreRunStatus(
           phase: CoreRunPhase.running,
           message: '连接引擎运行中',
@@ -164,7 +192,14 @@ class CoreLifecycleService {
         message: '连接引擎状态异常',
         lastError: '服务运行状态或身份指纹不一致',
       );
+      _logger.error('core', 'Engine status invalid after repair', context: {
+        'installed': snapshot.installed,
+        'service_running': snapshot.serviceRunning,
+      });
     } catch (error) {
+      _logger.error('core', 'Ensure running failed', context: {
+        'error': error.toString(),
+      });
       status.value = CoreRunStatus(
         phase: CoreRunPhase.error,
         message: '连接引擎启动失败',
@@ -189,6 +224,10 @@ class CoreLifecycleService {
     Map<String, Object?> request,
   ) async {
     final executable = _resolveInstallerExecutable();
+    _logger.info('core.desktop', 'Executing desktop command', context: {
+      'command': command,
+      'executable': executable,
+    });
     final process = await Process.start(executable, [
       'desktop',
       command,
@@ -211,6 +250,9 @@ class CoreLifecycleService {
       const Duration(minutes: 3),
       onTimeout: () {
         process.kill();
+        _logger.error('core.desktop', 'Desktop command timeout', context: {
+          'command': command,
+        });
         throw TimeoutException('desktop 命令执行超时');
       },
     );
@@ -240,12 +282,21 @@ class CoreLifecycleService {
       );
       if (errorEvent.isNotEmpty) {
         final data = errorEvent['data'] as Map<String, dynamic>? ?? const {};
+        _logger.error('core.desktop', 'Desktop command returned error event', context: {
+          'command': command,
+          'event': data,
+        });
         throw StateError(data['message']?.toString() ?? 'desktop 命令执行失败');
       }
     }
 
     if (exitCode != 0) {
       final stderrText = stderrLines.join('\n').trim();
+      _logger.error('core.desktop', 'Desktop command failed', context: {
+        'command': command,
+        'exit_code': exitCode,
+        'stderr': stderrText,
+      });
       throw StateError(
         stderrText.isEmpty
             ? 'desktop $command 执行失败 (exit=$exitCode)'
@@ -256,6 +307,10 @@ class CoreLifecycleService {
     for (var index = events.length - 1; index >= 0; index--) {
       final event = events[index];
       if (event['event'] == 'finished') {
+        _logger.info('core.desktop', 'Desktop command finished', context: {
+          'command': command,
+          'exit_code': exitCode,
+        });
         return event;
       }
     }

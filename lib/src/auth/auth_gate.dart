@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/core_lifecycle_service.dart';
+import '../logging/app_logger.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
 
@@ -36,6 +37,7 @@ class _AuthGateState extends State<AuthGate> {
   DeviceAuthInfo? _deviceAuthInfo;
   AuthSession? _session;
   String? _statusMessage;
+  final AppLogger _logger = AppLogger.instance;
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _bootstrap() async {
+    _logger.info('auth.gate', 'Bootstrapping auth gate');
     _setStage(AuthStage.checking, statusMessage: '正在检查本地登录状态...');
 
     try {
@@ -60,6 +63,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _startLogin() async {
+    _logger.info('auth.gate', 'Starting interactive login');
     _setStage(AuthStage.requestingCode, statusMessage: '正在向控制台申请设备登录验证码...');
 
     try {
@@ -77,6 +81,9 @@ class _AuthGateState extends State<AuthGate> {
       await _openBrowser(info.verificationUriComplete);
       unawaited(_waitForApproval(info));
     } catch (error) {
+      _logger.error('auth.gate', 'Start login failed', context: {
+        'error': error.toString(),
+      });
       _setError(error.toString());
     }
   }
@@ -86,6 +93,9 @@ class _AuthGateState extends State<AuthGate> {
       final session = await widget.authService.completeDeviceAuth(info);
       _setSession(session);
     } catch (error) {
+      _logger.error('auth.gate', 'Authorization completion failed', context: {
+        'error': error.toString(),
+      });
       _setError(error.toString());
     }
   }
@@ -105,6 +115,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _logout() async {
+    _logger.info('auth.gate', 'Logout requested from UI');
     await widget.coreLifecycleService.onLogout();
     await widget.authService.logout();
     if (!mounted) {
@@ -123,6 +134,9 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
+    _logger.info('auth.gate', 'Session established', context: {
+      'workspace_count': session.user.workspaces.length,
+    });
     unawaited(widget.coreLifecycleService.bindSession(session));
 
     setState(() {
@@ -138,6 +152,9 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
+    _logger.error('auth.gate', 'Stage switched to error', context: {
+      'message': message,
+    });
     setState(() {
       _stage = AuthStage.error;
       _statusMessage = message.replaceFirst('Exception: ', '');
@@ -149,6 +166,10 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
+    _logger.debug('auth.gate', 'Stage updated', context: {
+      'stage': stage.name,
+      'status': statusMessage ?? '',
+    });
     setState(() {
       _stage = stage;
       _statusMessage = statusMessage;

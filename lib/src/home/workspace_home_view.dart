@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/core_lifecycle_service.dart';
+import '../logging/app_logger.dart';
 import '../auth/console_auth_service.dart';
 
 enum _DashboardView { overview, network, nodes, services, settings }
@@ -1170,6 +1172,47 @@ class _SettingsPanel extends StatelessWidget {
   final String workspaceName;
   final Future<void> Function() onLogout;
 
+  Future<void> _exportLogs(BuildContext context) async {
+    try {
+      final file = await AppLogger.instance.exportDiagnostics();
+      AppLogger.instance.info('settings', 'Diagnostics exported', context: {
+        'file': file.path,
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('诊断日志已导出: ${file.path}')),
+        );
+      }
+    } catch (error) {
+      AppLogger.instance.error('settings', 'Diagnostics export failed', context: {
+        'error': error.toString(),
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导出诊断日志失败')),
+        );
+      }
+    }
+  }
+
+  Future<void> _copyLogDirectory(BuildContext context) async {
+    final path = AppLogger.instance.logDirectoryPath;
+    if (path == null || path.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('日志目录尚未初始化')),
+        );
+      }
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: path));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('日志目录已复制: $path')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1212,6 +1255,59 @@ class _SettingsPanel extends StatelessWidget {
                     child: const Text('退出登录'),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        FCard(
+          title: const Text('诊断日志'),
+          subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(_exportLogs(context)),
+                    child: const Text('导出诊断日志'),
+                  ),
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(_copyLogDirectory(context)),
+                    child: const Text('复制日志目录'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<List<AppLogEntry>>(
+                valueListenable: AppLogger.instance.recentEntries,
+                builder: (context, entries, _) {
+                  if (entries.isEmpty) {
+                    return const Text('暂无日志');
+                  }
+                  final start = entries.length > 8 ? entries.length - 8 : 0;
+                  final recent = entries.sublist(start);
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F9FB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Text(
+                      recent.map((entry) => entry.humanLine).join('\n'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),

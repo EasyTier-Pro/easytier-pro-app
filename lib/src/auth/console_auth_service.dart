@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../logging/app_logger.dart';
+
 const String defaultConsoleBaseUrl = String.fromEnvironment(
   'EASYTIER_CONSOLE_URL',
   defaultValue: 'https://api.console.easytier.net',
@@ -211,9 +213,11 @@ class ConsoleAuthService implements AuthService {
   final OAuthTokenStore tokenStore;
   final http.Client _httpClient;
   final String consoleBaseUrl;
+  final AppLogger _logger = AppLogger.instance;
 
   @override
   Future<AuthSession?> restoreSession() async {
+    _logger.info('auth', 'Restoring local session');
     final tokenSet = await tokenStore.load();
     if (tokenSet == null || tokenSet.isExpired) {
       await tokenStore.clear();
@@ -222,8 +226,12 @@ class ConsoleAuthService implements AuthService {
 
     try {
       final user = await _fetchCurrentUser(tokenSet.accessToken);
+      _logger.info('auth', 'Session restored', context: {
+        'workspace_count': user.workspaces.length,
+      });
       return AuthSession(user: user, tokenSet: tokenSet);
     } on AuthException {
+      _logger.warn('auth', 'Stored session invalid, clearing local token');
       await tokenStore.clear();
       return null;
     }
@@ -231,6 +239,7 @@ class ConsoleAuthService implements AuthService {
 
   @override
   Future<DeviceAuthInfo> startDeviceAuth() async {
+    _logger.info('auth', 'Starting device authorization');
     final response = await _httpClient.post(
       Uri.parse('$consoleBaseUrl/api/v1/auth/device'),
       body: const {'client_id': '', 'scope': 'openid profile email'},
@@ -261,6 +270,7 @@ class ConsoleAuthService implements AuthService {
 
   @override
   Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) async {
+    _logger.info('auth', 'Waiting for device authorization approval');
     final deadline = DateTime.now().toUtc().add(
       Duration(seconds: info.expiresIn),
     );
@@ -291,6 +301,9 @@ class ConsoleAuthService implements AuthService {
 
         await tokenStore.save(tokenSet);
         final user = await _fetchCurrentUser(tokenSet.accessToken);
+        _logger.info('auth', 'Device authorization completed', context: {
+          'workspace_count': user.workspaces.length,
+        });
         return AuthSession(user: user, tokenSet: tokenSet);
       }
 
@@ -321,6 +334,7 @@ class ConsoleAuthService implements AuthService {
 
   @override
   Future<void> logout() async {
+    _logger.info('auth', 'Clearing local auth token');
     await tokenStore.clear();
   }
 
@@ -412,6 +426,9 @@ class ConsoleAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
+    _logger.info('auth.bootstrap', 'Preparing core bootstrap payload', context: {
+      'workspace_id': workspaceId,
+    });
     final releaseResponse = await _httpClient.get(
       Uri.parse('$consoleBaseUrl/api/v1/releases/latest'),
     );
@@ -430,6 +447,7 @@ class ConsoleAuthService implements AuthService {
         releaseBody['version']?.toString() ??
         '';
     if (rawVersion.trim().isEmpty) {
+      _logger.error('auth.bootstrap', 'No release version available from console');
       throw const AuthException('控制台未返回可用版本');
     }
     final version = rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
@@ -475,6 +493,7 @@ class ConsoleAuthService implements AuthService {
     }
 
     if (bootstrapToken.isEmpty) {
+      _logger.info('auth.bootstrap', 'No reusable key available, creating a new enrollment key');
       final createResponse = await _httpClient.post(
         Uri.parse(
           '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'src/auth/auth_gate.dart';
 import 'src/auth/console_auth_service.dart';
 import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/tray_support.dart';
+import 'src/logging/app_logger.dart';
 
 const Color _appBackground = Color(0xFFF8F9FB);
 const Color _cardBackground = Color(0xFFFFFFFF);
@@ -26,6 +28,24 @@ final FThemeData _foruiThemeData = _createForuiThemeData();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLogger.instance.initialize();
+  FlutterError.onError = (details) {
+    AppLogger.instance.error(
+      'flutter',
+      details.exceptionAsString(),
+      context: {'stack': details.stack?.toString() ?? ''},
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.instance.error(
+      'platform',
+      error.toString(),
+      context: {'stack': stack.toString()},
+    );
+    return false;
+  };
+
   final preferences = await SharedPreferences.getInstance();
   final authService = ConsoleAuthService(
     tokenStore: OAuthTokenStore(preferences),
@@ -34,6 +54,7 @@ Future<void> main() async {
   final traySupport = createTraySupport();
 
   await traySupport.initialize();
+  AppLogger.instance.info('main', 'Application initialized');
 
   runApp(
     MyApp(
