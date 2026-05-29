@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth/console_auth_service.dart';
@@ -78,14 +77,11 @@ class CoreLifecycleService {
         message: '正在卸载连接引擎...',
       );
       try {
-        final snapshot = await _status();
-        if (snapshot.installed) {
-          await _desktopCommand('uninstall', const {'purge': false});
-        }
+        await _desktopCommand('uninstall', const {'purge': false});
         _logger.info(
           'core',
           'Logout cleanup completed',
-          context: {'installed_before_cleanup': snapshot.installed},
+          context: const {'uninstall_requested': true},
         );
         status.value = CoreRunStatus.signedOut;
       } catch (error) {
@@ -150,71 +146,44 @@ class CoreLifecycleService {
         accessToken: session.tokenSet.accessToken,
         workspaceId: workspace.id,
       );
-      final expectedFingerprint = _fingerprintForToken(
-        bootstrap.bootstrapToken,
-      );
-      var snapshot = await _status();
-
-      final mismatch =
-          snapshot.currentBootstrapFingerprint != null &&
-          snapshot.currentBootstrapFingerprint != expectedFingerprint;
-      final shouldReinstall =
-          forceReinstall ||
-          !snapshot.installed ||
-          !snapshot.serviceRunning ||
-          mismatch ||
-          snapshot.currentBootstrapFingerprint == null;
-      _logger.info(
-        'core',
-        'Status evaluated',
-        context: {
-          'installed': snapshot.installed,
-          'service_running': snapshot.serviceRunning,
-          'fingerprint_mismatch': mismatch,
-          'should_reinstall': shouldReinstall,
-        },
-      );
-
-      if (shouldReinstall) {
+      if (forceReinstall) {
         status.value = CoreRunStatus(
           phase: CoreRunPhase.repairing,
-          message: mismatch ? '身份已变更，正在重装连接引擎...' : '正在修复连接引擎...',
+          message: '正在重装连接引擎...',
         );
-
-        if (snapshot.installed) {
+        try {
           await _desktopCommand('uninstall', const {'purge': false});
+        } catch (error) {
+          _logger.warn(
+            'core',
+            'Forced reinstall pre-uninstall failed, continuing install',
+            context: {'error': error.toString()},
+          );
         }
-        await _desktopCommand('install', {
-          'bootstrap_token': bootstrap.bootstrapToken,
-          'version': bootstrap.version,
-          'config_server': bootstrap.configServer,
-        });
-        snapshot = await _status();
-      }
-
-      if (snapshot.installed &&
-          snapshot.serviceRunning &&
-          snapshot.currentBootstrapFingerprint == expectedFingerprint) {
-        _logger.info('core', 'Engine running and fingerprint matched');
-        status.value = CoreRunStatus(
-          phase: CoreRunPhase.running,
-          message: '连接引擎运行中',
+      } else {
+        status.value = const CoreRunStatus(
+          phase: CoreRunPhase.repairing,
+          message: '正在检查并应用连接引擎配置...',
         );
-        return;
       }
 
-      status.value = CoreRunStatus(
-        phase: CoreRunPhase.error,
-        message: '连接引擎状态异常',
-        lastError: '服务运行状态或身份指纹不一致',
-      );
-      _logger.error(
+      final installEvent = await _desktopCommand('install', {
+        'bootstrap_token': bootstrap.bootstrapToken,
+        'version': bootstrap.version,
+        'config_server': bootstrap.configServer,
+      });
+      _logger.info(
         'core',
-        'Engine status invalid after repair',
+        'Desktop install completed',
         context: {
-          'installed': snapshot.installed,
-          'service_running': snapshot.serviceRunning,
+          'force_reinstall': forceReinstall,
+          'event': installEvent['data']?.toString() ?? '',
         },
+      );
+
+      status.value = const CoreRunStatus(
+        phase: CoreRunPhase.running,
+        message: '连接引擎运行中',
       );
     } catch (error) {
       _logger.error(
@@ -228,31 +197,6 @@ class CoreLifecycleService {
         lastError: _normalizeError(error),
       );
     }
-  }
-
-  Future<_CoreStatusSnapshot> _status() async {
-    final event = await _desktopCommand('status', const <String, Object?>{});
-    final data = event['data'] as Map<String, dynamic>? ?? const {};
-    final serviceStatusSuccess = data['service_status_success'] == true;
-    final serviceStatusStderr = data['service_status_stderr']?.toString() ?? '';
-    final serviceStatusStdout = data['service_status_stdout']?.toString() ?? '';
-    if (!serviceStatusSuccess || serviceStatusStderr.trim().isNotEmpty) {
-      _logger.warn(
-        'core.desktop',
-        'Service status probe returned warnings',
-        context: {
-          'service_status_success': serviceStatusSuccess,
-          'service_status_stderr': serviceStatusStderr,
-          'service_status_stdout': serviceStatusStdout,
-        },
-      );
-    }
-    return _CoreStatusSnapshot(
-      installed: data['installed'] == true,
-      serviceRunning: data['service_running'] == true,
-      currentBootstrapFingerprint: data['current_bootstrap_fingerprint']
-          ?.toString(),
-    );
   }
 
   Future<Map<String, dynamic>> _desktopCommand(
@@ -460,14 +404,6 @@ class CoreLifecycleService {
     return buffer.toString();
   }
 
-  String _fingerprintForToken(String token) {
-    final digest = sha256.convert(utf8.encode(token));
-    return digest.bytes
-        .take(16)
-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
-        .join();
-  }
-
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
   }
@@ -479,16 +415,4 @@ class CoreLifecycleService {
     );
     return _serial;
   }
-}
-
-class _CoreStatusSnapshot {
-  const _CoreStatusSnapshot({
-    required this.installed,
-    required this.serviceRunning,
-    required this.currentBootstrapFingerprint,
-  });
-
-  final bool installed;
-  final bool serviceRunning;
-  final String? currentBootstrapFingerprint;
 }
