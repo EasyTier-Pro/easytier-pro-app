@@ -93,10 +93,11 @@ class _DesktopTraySupport extends TraySupport
       CoreRunPhase.error => '异常',
       CoreRunPhase.signedOut => '未登录',
     };
-    _logger.info('tray', 'Core status updated on tray', context: {
-      'phase': status.phase.name,
-      'message': status.message,
-    });
+    _logger.info(
+      'tray',
+      'Core status updated on tray',
+      context: {'phase': status.phase.name, 'message': status.message},
+    );
 
     if (_initialized && _isDesktopPlatform) {
       await _refreshContextMenu();

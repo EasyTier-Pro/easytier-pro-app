@@ -81,9 +81,11 @@ class _AuthGateState extends State<AuthGate> {
       await _openBrowser(info.verificationUriComplete);
       unawaited(_waitForApproval(info));
     } catch (error) {
-      _logger.error('auth.gate', 'Start login failed', context: {
-        'error': error.toString(),
-      });
+      _logger.error(
+        'auth.gate',
+        'Start login failed',
+        context: {'error': error.toString()},
+      );
       _setError(error.toString());
     }
   }
@@ -93,9 +95,11 @@ class _AuthGateState extends State<AuthGate> {
       final session = await widget.authService.completeDeviceAuth(info);
       _setSession(session);
     } catch (error) {
-      _logger.error('auth.gate', 'Authorization completion failed', context: {
-        'error': error.toString(),
-      });
+      _logger.error(
+        'auth.gate',
+        'Authorization completion failed',
+        context: {'error': error.toString()},
+      );
       _setError(error.toString());
     }
   }
@@ -134,9 +138,11 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
-    _logger.info('auth.gate', 'Session established', context: {
-      'workspace_count': session.user.workspaces.length,
-    });
+    _logger.info(
+      'auth.gate',
+      'Session established',
+      context: {'workspace_count': session.user.workspaces.length},
+    );
     unawaited(widget.coreLifecycleService.bindSession(session));
 
     setState(() {
@@ -152,9 +158,11 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
-    _logger.error('auth.gate', 'Stage switched to error', context: {
-      'message': message,
-    });
+    _logger.error(
+      'auth.gate',
+      'Stage switched to error',
+      context: {'message': message},
+    );
     setState(() {
       _stage = AuthStage.error;
       _statusMessage = message.replaceFirst('Exception: ', '');
@@ -166,10 +174,11 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
-    _logger.debug('auth.gate', 'Stage updated', context: {
-      'stage': stage.name,
-      'status': statusMessage ?? '',
-    });
+    _logger.debug(
+      'auth.gate',
+      'Stage updated',
+      context: {'stage': stage.name, 'status': statusMessage ?? ''},
+    );
     setState(() {
       _stage = stage;
       _statusMessage = statusMessage;

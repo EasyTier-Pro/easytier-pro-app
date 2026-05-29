@@ -1175,22 +1175,26 @@ class _SettingsPanel extends StatelessWidget {
   Future<void> _exportLogs(BuildContext context) async {
     try {
       final file = await AppLogger.instance.exportDiagnostics();
-      AppLogger.instance.info('settings', 'Diagnostics exported', context: {
-        'file': file.path,
-      });
+      AppLogger.instance.info(
+        'settings',
+        'Diagnostics exported',
+        context: {'file': file.path},
+      );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('诊断日志已导出: ${file.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('诊断日志已导出: ${file.path}')));
       }
     } catch (error) {
-      AppLogger.instance.error('settings', 'Diagnostics export failed', context: {
-        'error': error.toString(),
-      });
+      AppLogger.instance.error(
+        'settings',
+        'Diagnostics export failed',
+        context: {'error': error.toString()},
+      );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('导出诊断日志失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('导出诊断日志失败')));
       }
     }
   }
@@ -1199,17 +1203,17 @@ class _SettingsPanel extends StatelessWidget {
     final path = AppLogger.instance.logDirectoryPath;
     if (path == null || path.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('日志目录尚未初始化')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('日志目录尚未初始化')));
       }
       return;
     }
     await Clipboard.setData(ClipboardData(text: path));
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('日志目录已复制: $path')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('日志目录已复制: $path')));
     }
   }
 
@@ -1302,9 +1306,9 @@ class _SettingsPanel extends StatelessWidget {
                     ),
                     child: Text(
                       recent.map((entry) => entry.humanLine).join('\n'),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
                     ),
                   );
                 },

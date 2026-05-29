@@ -226,9 +226,11 @@ class ConsoleAuthService implements AuthService {
 
     try {
       final user = await _fetchCurrentUser(tokenSet.accessToken);
-      _logger.info('auth', 'Session restored', context: {
-        'workspace_count': user.workspaces.length,
-      });
+      _logger.info(
+        'auth',
+        'Session restored',
+        context: {'workspace_count': user.workspaces.length},
+      );
       return AuthSession(user: user, tokenSet: tokenSet);
     } on AuthException {
       _logger.warn('auth', 'Stored session invalid, clearing local token');
@@ -301,9 +303,11 @@ class ConsoleAuthService implements AuthService {
 
         await tokenStore.save(tokenSet);
         final user = await _fetchCurrentUser(tokenSet.accessToken);
-        _logger.info('auth', 'Device authorization completed', context: {
-          'workspace_count': user.workspaces.length,
-        });
+        _logger.info(
+          'auth',
+          'Device authorization completed',
+          context: {'workspace_count': user.workspaces.length},
+        );
         return AuthSession(user: user, tokenSet: tokenSet);
       }
 
@@ -426,9 +430,11 @@ class ConsoleAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
-    _logger.info('auth.bootstrap', 'Preparing core bootstrap payload', context: {
-      'workspace_id': workspaceId,
-    });
+    _logger.info(
+      'auth.bootstrap',
+      'Preparing core bootstrap payload',
+      context: {'workspace_id': workspaceId},
+    );
     final releaseResponse = await _httpClient.get(
       Uri.parse('$consoleBaseUrl/api/v1/releases/latest'),
     );
@@ -447,7 +453,10 @@ class ConsoleAuthService implements AuthService {
         releaseBody['version']?.toString() ??
         '';
     if (rawVersion.trim().isEmpty) {
-      _logger.error('auth.bootstrap', 'No release version available from console');
+      _logger.error(
+        'auth.bootstrap',
+        'No release version available from console',
+      );
       throw const AuthException('控制台未返回可用版本');
     }
     final version = rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
@@ -493,7 +502,10 @@ class ConsoleAuthService implements AuthService {
     }
 
     if (bootstrapToken.isEmpty) {
-      _logger.info('auth.bootstrap', 'No reusable key available, creating a new enrollment key');
+      _logger.info(
+        'auth.bootstrap',
+        'No reusable key available, creating a new enrollment key',
+      );
       final createResponse = await _httpClient.post(
         Uri.parse(
           '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',
