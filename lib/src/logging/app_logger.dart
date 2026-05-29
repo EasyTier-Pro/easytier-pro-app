@@ -21,8 +21,9 @@ class AppLogEntry {
   final Map<String, Object?> context;
 
   String get humanLine {
-    final contextText =
-        context.isEmpty ? '' : ' ${jsonEncode(_jsonEncodableContext(context))}';
+    final contextText = context.isEmpty
+        ? ''
+        : ' ${jsonEncode(_jsonEncodableContext(context))}';
     return '[${time.toIso8601String()}] [$level] [$scope] $message$contextText';
   }
 
@@ -73,6 +74,7 @@ class AppLogger {
   Directory? _logDir;
   IOSink? _sink;
   String? _sinkDate;
+  Future<void> _fileWriteSerial = Future<void>.value();
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -131,12 +133,13 @@ class AppLogger {
       ..writeln('# log_dir=${logDir.path}')
       ..writeln();
 
-    final files = logDir
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.log'))
-        .toList(growable: false)
-      ..sort((a, b) => a.path.compareTo(b.path));
+    final files =
+        logDir
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.log'))
+            .toList(growable: false)
+          ..sort((a, b) => a.path.compareTo(b.path));
 
     for (final file in files) {
       if (file.path == outputFile.path) {
@@ -180,11 +183,12 @@ class AppLogger {
     while (_recent.length > _maxInMemoryEntries) {
       _recent.removeFirst();
     }
-    recentEntries.value =
-        List<AppLogEntry>.unmodifiable(_recent.toList(growable: false));
+    recentEntries.value = List<AppLogEntry>.unmodifiable(
+      _recent.toList(growable: false),
+    );
 
     debugPrint(entry.humanLine);
-    unawaited(_writeToFile(entry));
+    _fileWriteSerial = _fileWriteSerial.then((_) => _writeToFile(entry));
   }
 
   Future<void> _writeToFile(AppLogEntry entry) async {

@@ -50,11 +50,15 @@ class CoreLifecycleService {
           previousWorkspace != nextWorkspace;
 
       _session = session;
-      _logger.info('core', 'Binding session', context: {
-        'workspace_changed': workspaceChanged,
-        'previous_workspace': previousWorkspace,
-        'next_workspace': nextWorkspace,
-      });
+      _logger.info(
+        'core',
+        'Binding session',
+        context: {
+          'workspace_changed': workspaceChanged,
+          'previous_workspace': previousWorkspace,
+          'next_workspace': nextWorkspace,
+        },
+      );
       if (workspaceChanged) {
         status.value = const CoreRunStatus(
           phase: CoreRunPhase.repairing,
@@ -78,14 +82,18 @@ class CoreLifecycleService {
         if (snapshot.installed) {
           await _desktopCommand('uninstall', const {'purge': false});
         }
-        _logger.info('core', 'Logout cleanup completed', context: {
-          'installed_before_cleanup': snapshot.installed,
-        });
+        _logger.info(
+          'core',
+          'Logout cleanup completed',
+          context: {'installed_before_cleanup': snapshot.installed},
+        );
         status.value = CoreRunStatus.signedOut;
       } catch (error) {
-        _logger.error('core', 'Logout cleanup failed', context: {
-          'error': error.toString(),
-        });
+        _logger.error(
+          'core',
+          'Logout cleanup failed',
+          context: {'error': error.toString()},
+        );
         status.value = CoreRunStatus(
           phase: CoreRunPhase.error,
           message: '退出登录后卸载失败',
@@ -128,10 +136,14 @@ class CoreLifecycleService {
       phase: CoreRunPhase.checking,
       message: '正在检查连接引擎状态...',
     );
-    _logger.info('core', 'Ensure running start', context: {
-      'force_reinstall': forceReinstall,
-      'workspace_id': workspace.id,
-    });
+    _logger.info(
+      'core',
+      'Ensure running start',
+      context: {
+        'force_reinstall': forceReinstall,
+        'workspace_id': workspace.id,
+      },
+    );
 
     try {
       final bootstrap = await authService.prepareCoreBootstrap(
@@ -152,12 +164,16 @@ class CoreLifecycleService {
           !snapshot.serviceRunning ||
           mismatch ||
           snapshot.currentBootstrapFingerprint == null;
-      _logger.info('core', 'Status evaluated', context: {
-        'installed': snapshot.installed,
-        'service_running': snapshot.serviceRunning,
-        'fingerprint_mismatch': mismatch,
-        'should_reinstall': shouldReinstall,
-      });
+      _logger.info(
+        'core',
+        'Status evaluated',
+        context: {
+          'installed': snapshot.installed,
+          'service_running': snapshot.serviceRunning,
+          'fingerprint_mismatch': mismatch,
+          'should_reinstall': shouldReinstall,
+        },
+      );
 
       if (shouldReinstall) {
         status.value = CoreRunStatus(
@@ -192,14 +208,20 @@ class CoreLifecycleService {
         message: '连接引擎状态异常',
         lastError: '服务运行状态或身份指纹不一致',
       );
-      _logger.error('core', 'Engine status invalid after repair', context: {
-        'installed': snapshot.installed,
-        'service_running': snapshot.serviceRunning,
-      });
+      _logger.error(
+        'core',
+        'Engine status invalid after repair',
+        context: {
+          'installed': snapshot.installed,
+          'service_running': snapshot.serviceRunning,
+        },
+      );
     } catch (error) {
-      _logger.error('core', 'Ensure running failed', context: {
-        'error': error.toString(),
-      });
+      _logger.error(
+        'core',
+        'Ensure running failed',
+        context: {'error': error.toString()},
+      );
       status.value = CoreRunStatus(
         phase: CoreRunPhase.error,
         message: '连接引擎启动失败',
@@ -211,6 +233,20 @@ class CoreLifecycleService {
   Future<_CoreStatusSnapshot> _status() async {
     final event = await _desktopCommand('status', const <String, Object?>{});
     final data = event['data'] as Map<String, dynamic>? ?? const {};
+    final serviceStatusSuccess = data['service_status_success'] == true;
+    final serviceStatusStderr = data['service_status_stderr']?.toString() ?? '';
+    final serviceStatusStdout = data['service_status_stdout']?.toString() ?? '';
+    if (!serviceStatusSuccess || serviceStatusStderr.trim().isNotEmpty) {
+      _logger.warn(
+        'core.desktop',
+        'Service status probe returned warnings',
+        context: {
+          'service_status_success': serviceStatusSuccess,
+          'service_status_stderr': serviceStatusStderr,
+          'service_status_stdout': serviceStatusStdout,
+        },
+      );
+    }
     return _CoreStatusSnapshot(
       installed: data['installed'] == true,
       serviceRunning: data['service_running'] == true,
@@ -224,10 +260,11 @@ class CoreLifecycleService {
     Map<String, Object?> request,
   ) async {
     final executable = _resolveInstallerExecutable();
-    _logger.info('core.desktop', 'Executing desktop command', context: {
-      'command': command,
-      'executable': executable,
-    });
+    _logger.info(
+      'core.desktop',
+      'Executing desktop command',
+      context: {'command': command, 'executable': executable},
+    );
     final process = await Process.start(executable, [
       'desktop',
       command,
@@ -250,9 +287,11 @@ class CoreLifecycleService {
       const Duration(minutes: 3),
       onTimeout: () {
         process.kill();
-        _logger.error('core.desktop', 'Desktop command timeout', context: {
-          'command': command,
-        });
+        _logger.error(
+          'core.desktop',
+          'Desktop command timeout',
+          context: {'command': command},
+        );
         throw TimeoutException('desktop 命令执行超时');
       },
     );
@@ -282,21 +321,26 @@ class CoreLifecycleService {
       );
       if (errorEvent.isNotEmpty) {
         final data = errorEvent['data'] as Map<String, dynamic>? ?? const {};
-        _logger.error('core.desktop', 'Desktop command returned error event', context: {
-          'command': command,
-          'event': data,
-        });
+        _logger.error(
+          'core.desktop',
+          'Desktop command returned error event',
+          context: {'command': command, 'event': data},
+        );
         throw StateError(data['message']?.toString() ?? 'desktop 命令执行失败');
       }
     }
 
     if (exitCode != 0) {
       final stderrText = stderrLines.join('\n').trim();
-      _logger.error('core.desktop', 'Desktop command failed', context: {
-        'command': command,
-        'exit_code': exitCode,
-        'stderr': stderrText,
-      });
+      _logger.error(
+        'core.desktop',
+        'Desktop command failed',
+        context: {
+          'command': command,
+          'exit_code': exitCode,
+          'stderr': stderrText,
+        },
+      );
       throw StateError(
         stderrText.isEmpty
             ? 'desktop $command 执行失败 (exit=$exitCode)'
@@ -307,10 +351,11 @@ class CoreLifecycleService {
     for (var index = events.length - 1; index >= 0; index--) {
       final event = events[index];
       if (event['event'] == 'finished') {
-        _logger.info('core.desktop', 'Desktop command finished', context: {
-          'command': command,
-          'exit_code': exitCode,
-        });
+        _logger.info(
+          'core.desktop',
+          'Desktop command finished',
+          context: {'command': command, 'exit_code': exitCode},
+        );
         return event;
       }
     }
@@ -319,8 +364,14 @@ class CoreLifecycleService {
   }
 
   String _resolveInstallerExecutable() {
+    final bundledCandidates = _bundledInstallerCandidates();
+    final bundled = _firstExistingFile(bundledCandidates);
+    if (bundled != null) {
+      return bundled;
+    }
+
     final override = Platform.environment['EASYTIER_INSTALLER_PATH'];
-    if (override != null && override.trim().isNotEmpty) {
+    if (!kReleaseMode && override != null && override.trim().isNotEmpty) {
       return override;
     }
 
@@ -341,19 +392,72 @@ class CoreLifecycleService {
       '/usr/local/bin/easytier-pro-installer',
       'easytier-pro-installer',
     ];
-    for (final candidate in unixCandidates) {
+    final unixResolved = _firstExistingFile(unixCandidates);
+    if (unixResolved != null) {
+      return unixResolved;
+    }
+
+    return 'easytier-pro-installer';
+  }
+
+  List<String> _bundledInstallerCandidates() {
+    final executableFile = File(Platform.resolvedExecutable);
+    final executableDir = executableFile.parent;
+
+    if (Platform.isWindows) {
+      return <String>[
+        _joinPath(executableDir.path, 'easytier-pro-installer.exe'),
+        _joinPath(
+          executableDir.path,
+          'resources',
+          'easytier-pro-installer.exe',
+        ),
+      ];
+    }
+
+    if (Platform.isMacOS) {
+      final macOsDir = executableDir;
+      final contentsDir = macOsDir.parent;
+      return <String>[
+        _joinPath(macOsDir.path, 'easytier-pro-installer'),
+        _joinPath(contentsDir.path, 'Resources', 'easytier-pro-installer'),
+      ];
+    }
+
+    return <String>[
+      _joinPath(executableDir.path, 'easytier-pro-installer'),
+      _joinPath(executableDir.path, 'lib', 'easytier-pro-installer'),
+    ];
+  }
+
+  String? _firstExistingFile(Iterable<String> candidates) {
+    for (final candidate in candidates) {
       if (candidate.isEmpty) {
         continue;
       }
-      if (!candidate.contains('/')) {
+      if (!candidate.contains(Platform.pathSeparator)) {
         return candidate;
       }
       if (File(candidate).existsSync()) {
         return candidate;
       }
     }
+    return null;
+  }
 
-    return 'easytier-pro-installer';
+  String _joinPath(String base, String segment1, [String? segment2]) {
+    final buffer = StringBuffer(base);
+    if (!base.endsWith(Platform.pathSeparator)) {
+      buffer.write(Platform.pathSeparator);
+    }
+    buffer.write(segment1);
+    if (segment2 != null && segment2.isNotEmpty) {
+      if (!segment1.endsWith(Platform.pathSeparator)) {
+        buffer.write(Platform.pathSeparator);
+      }
+      buffer.write(segment2);
+    }
+    return buffer.toString();
   }
 
   String _fingerprintForToken(String token) {
