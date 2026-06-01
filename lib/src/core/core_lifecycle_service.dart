@@ -14,11 +14,15 @@ class CoreRunStatus {
     required this.phase,
     required this.message,
     this.lastError,
+    this.machineId,
+    this.details,
   });
 
   final CoreRunPhase phase;
   final String message;
   final String? lastError;
+  final String? machineId;
+  final String? details;
 
   bool get isRunning => phase == CoreRunPhase.running;
 
@@ -172,18 +176,22 @@ class CoreLifecycleService {
         'version': bootstrap.version,
         'config_server': bootstrap.configServer,
       });
+      final machineId = parseMachineIdFromDesktopEvent(installEvent);
       _logger.info(
         'core',
         'Desktop install completed',
         context: {
           'force_reinstall': forceReinstall,
+          'machine_id': machineId ?? '',
           'event': installEvent['data']?.toString() ?? '',
         },
       );
 
-      status.value = const CoreRunStatus(
+      status.value = CoreRunStatus(
         phase: CoreRunPhase.running,
-        message: '连接引擎运行中',
+        message: machineId == null || machineId.isEmpty ? '连接引擎运行中' : '本机设备已就绪',
+        machineId: machineId,
+        details: 'EasyTier ${bootstrap.version}',
       );
     } catch (error) {
       _logger.error(
@@ -305,6 +313,16 @@ class CoreLifecycleService {
     }
 
     throw StateError('desktop 命令没有返回 finished 事件');
+  }
+
+  @visibleForTesting
+  static String? parseMachineIdFromDesktopEvent(Map<String, dynamic> event) {
+    final data = event['data'];
+    if (data is! Map<String, dynamic>) {
+      return null;
+    }
+    final machineId = data['machine_id']?.toString().trim() ?? '';
+    return machineId.isEmpty ? null : machineId;
   }
 
   String _resolveInstallerExecutable() {

@@ -112,10 +112,33 @@ class ConsoleWorkspace {
 }
 
 class ConsoleNetwork {
-  const ConsoleNetwork({required this.id, required this.name});
+  const ConsoleNetwork({
+    required this.id,
+    required this.name,
+    this.regions = const <String>[],
+    this.lifecycleState = '',
+  });
 
   final String id;
   final String name;
+  final List<String> regions;
+  final String lifecycleState;
+}
+
+class ConsoleRegion {
+  const ConsoleRegion({
+    required this.id,
+    required this.code,
+    required this.displayName,
+    required this.status,
+  });
+
+  final String id;
+  final String code;
+  final String displayName;
+  final String status;
+
+  bool get active => status.toLowerCase() == 'active';
 }
 
 class NetworkDevice {
@@ -124,12 +147,44 @@ class NetworkDevice {
     required this.name,
     required this.online,
     this.ipv4,
+    this.deviceId,
+    this.machineId,
+    this.connectivityState = '',
   });
 
   final String id;
   final String name;
   final bool online;
   final String? ipv4;
+  final String? deviceId;
+  final String? machineId;
+  final String connectivityState;
+}
+
+class ManagedDevice {
+  const ManagedDevice({
+    required this.id,
+    required this.machineId,
+    required this.hostname,
+    required this.approvalState,
+    required this.connectivityState,
+  });
+
+  final String id;
+  final String machineId;
+  final String hostname;
+  final String approvalState;
+  final String connectivityState;
+
+  bool get approved => approvalState.toLowerCase() == 'approved';
+  bool get online => connectivityState.toLowerCase() == 'online';
+}
+
+class AttachNetworkResult {
+  const AttachNetworkResult({required this.nodeId, this.operationId});
+
+  final String nodeId;
+  final String? operationId;
 }
 
 class CoreBootstrapConfig {
@@ -163,10 +218,31 @@ abstract class AuthService {
     required String workspaceId,
   });
 
+  Future<List<ConsoleRegion>> fetchRegions({required String accessToken});
+
+  Future<ConsoleNetwork> createNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String name,
+    required List<String> regions,
+  });
+
   Future<List<NetworkDevice>> fetchNetworkDevices({
     required String accessToken,
     required String workspaceId,
     required String networkId,
+  });
+
+  Future<List<ManagedDevice>> fetchManagedDevices({
+    required String accessToken,
+    required String workspaceId,
+  });
+
+  Future<AttachNetworkResult> attachDeviceToNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+    required String deviceId,
   });
 
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
@@ -358,18 +434,131 @@ class ConsoleAuthService implements AuthService {
 
     final items = _decodeObjectOrList(response.body);
     return items
+        .map(_networkFromJson)
+        .whereType<ConsoleNetwork>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<ConsoleRegion>> fetchRegions({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$consoleBaseUrl/api/v1/regions'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('读取区域列表失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final items = _decodeObjectOrList(response.body);
+    return items
         .map((item) {
-          final id = item['id']?.toString() ?? '';
-          final name =
+          final id = item['id']?.toString() ?? item['code']?.toString() ?? '';
+          final code = item['code']?.toString() ?? '';
+          final displayName =
+              item['display_name']?.toString() ??
               item['name']?.toString() ??
-              item['network_name']?.toString() ??
-              '';
-          if (id.isEmpty || name.isEmpty) {
+              code;
+          final status =
+              item['status']?.toString() ??
+              (item['active'] == true ? 'active' : '');
+          if (id.isEmpty || code.isEmpty) {
             return null;
           }
-          return ConsoleNetwork(id: id, name: name);
+          return ConsoleRegion(
+            id: id,
+            code: code,
+            displayName: displayName,
+            status: status,
+          );
         })
-        .whereType<ConsoleNetwork>()
+        .whereType<ConsoleRegion>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ConsoleNetwork> createNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String name,
+    required List<String> regions,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/networks'),
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'name': name, 'regions': regions}),
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('创建网络失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final network = _networkFromJson(_decodeObject(response.body));
+    if (network == null) {
+      throw const AuthException('创建网络后服务端返回了无法识别的数据格式。');
+    }
+    return network;
+  }
+
+  static ConsoleNetwork? _networkFromJson(Map<String, dynamic> item) {
+    final id = item['id']?.toString() ?? '';
+    final name =
+        item['name']?.toString() ?? item['network_name']?.toString() ?? '';
+    if (id.isEmpty || name.isEmpty) {
+      return null;
+    }
+    final rawRegions = item['regions'];
+    final regions = rawRegions is List<dynamic>
+        ? rawRegions.map((region) => region.toString()).toList(growable: false)
+        : const <String>[];
+    return ConsoleNetwork(
+      id: id,
+      name: name,
+      regions: regions,
+      lifecycleState: item['lifecycle_state']?.toString() ?? '',
+    );
+  }
+
+  @override
+  Future<List<ManagedDevice>> fetchManagedDevices({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/devices'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('读取设备列表失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final items = _decodeObjectOrList(response.body);
+    return items
+        .map((item) {
+          final id = item['id']?.toString() ?? '';
+          final machineId = item['machine_id']?.toString() ?? '';
+          if (id.isEmpty || machineId.isEmpty) {
+            return null;
+          }
+          final hostname =
+              item['hostname']?.toString() ??
+              item['display_name']?.toString() ??
+              machineId;
+          return ManagedDevice(
+            id: id,
+            machineId: machineId,
+            hostname: hostname,
+            approvalState: item['approval_state']?.toString() ?? '',
+            connectivityState: item['connectivity_state']?.toString() ?? '',
+          );
+        })
+        .whereType<ManagedDevice>()
         .toList(growable: false);
   }
 
@@ -397,12 +586,16 @@ class ConsoleAuthService implements AuthService {
           if (id.isEmpty) {
             return null;
           }
+          final device = item['device'] as Map<String, dynamic>?;
           final rawName =
               item['hostname']?.toString() ??
               item['name']?.toString() ??
-              item['device_name']?.toString();
+              item['device_name']?.toString() ??
+              device?['hostname']?.toString() ??
+              device?['display_name']?.toString();
           final status =
               item['connectivity_state']?.toString() ??
+              device?['connectivity_state']?.toString() ??
               item['status']?.toString() ??
               item['state']?.toString() ??
               '';
@@ -413,16 +606,64 @@ class ConsoleAuthService implements AuthService {
               item['ipv4_addr']?.toString() ??
               item['ipv4']?.toString() ??
               item['ip']?.toString();
+          final deviceId =
+              item['device_id']?.toString() ?? device?['id']?.toString();
+          final machineId =
+              item['machine_id']?.toString() ??
+              device?['machine_id']?.toString();
 
           return NetworkDevice(
             id: id,
             name: (rawName == null || rawName.isEmpty) ? id : rawName,
             online: online,
             ipv4: ipv4,
+            deviceId: deviceId == null || deviceId.isEmpty ? null : deviceId,
+            machineId: machineId == null || machineId.isEmpty
+                ? null
+                : machineId,
+            connectivityState: status,
           );
         })
         .whereType<NetworkDevice>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<AttachNetworkResult> attachDeviceToNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+    required String deviceId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId/nodes',
+      ),
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'device_id': deviceId}),
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('加入网络失败：${_extractErrorMessage(response.body)}');
+    }
+
+    final body = _decodeObject(response.body);
+    final resource =
+        (body['resource'] as Map<String, dynamic>?) ??
+        (body['node'] as Map<String, dynamic>?) ??
+        body;
+    final nodeId = resource['id']?.toString() ?? '';
+    if (nodeId.isEmpty) {
+      throw const AuthException('加入网络后服务端返回了无法识别的数据格式。');
+    }
+    final operation = body['operation'] as Map<String, dynamic>?;
+    return AttachNetworkResult(
+      nodeId: nodeId,
+      operationId: operation?['id']?.toString(),
+    );
   }
 
   @override
@@ -616,6 +857,11 @@ class ConsoleAuthService implements AuthService {
       }
       if (decoded['devices'] is List<dynamic>) {
         return (decoded['devices'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+      if (decoded['regions'] is List<dynamic>) {
+        return (decoded['regions'] as List<dynamic>)
             .whereType<Map<String, dynamic>>()
             .toList(growable: false);
       }
