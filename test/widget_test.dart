@@ -56,12 +56,14 @@ void main() {
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
     expect(find.text('已加入'), findsWidgets);
+    expect(find.text('本机 IP 10.144.0.2'), findsOneWidget);
     expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FButton, '加入').first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
+    expect(find.text('本机 IP 10.145.0.2'), findsOneWidget);
   });
 
   testWidgets('shows create network flow when workspace has no networks', (
@@ -390,6 +392,7 @@ class _FakeAuthService implements AuthService {
         id: 'node-${networkId.substring(networkId.length - 1)}',
         name: device.hostname,
         online: true,
+        ipv4: networkId == 'net-1' ? '10.144.0.2' : '10.145.0.2',
         deviceId: device.id,
         machineId: device.machineId,
       ),

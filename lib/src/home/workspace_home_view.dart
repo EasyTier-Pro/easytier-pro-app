@@ -23,14 +23,22 @@ enum _UserMenuAction { settings, logout }
 enum _JoinPhase { idle, joining, joined, error }
 
 class _JoinNetworkState {
-  const _JoinNetworkState({required this.phase, this.message});
+  const _JoinNetworkState({required this.phase, this.message, this.localIpv4});
 
   final _JoinPhase phase;
   final String? message;
+  final String? localIpv4;
 
   static const idle = _JoinNetworkState(phase: _JoinPhase.idle);
   static const joining = _JoinNetworkState(phase: _JoinPhase.joining);
-  static const joined = _JoinNetworkState(phase: _JoinPhase.joined);
+
+  static _JoinNetworkState joinedWithIp(String? localIpv4) {
+    final value = localIpv4?.trim();
+    return _JoinNetworkState(
+      phase: _JoinPhase.joined,
+      localIpv4: value == null || value.isEmpty ? null : value,
+    );
+  }
 
   static _JoinNetworkState error(String message) {
     return _JoinNetworkState(phase: _JoinPhase.error, message: message);
@@ -336,8 +344,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _setJoinError(network.id, '请等待本机设备准备完成后再加入网络。');
       return;
     }
-    if (_isLocalDeviceInNetwork(network.id, machineId)) {
-      _setJoinState(network.id, _JoinNetworkState.joined);
+    final existingLocalDevice = _localDeviceInNetwork(network.id, machineId);
+    if (existingLocalDevice != null) {
+      _setJoinState(
+        network.id,
+        _JoinNetworkState.joinedWithIp(existingLocalDevice.ipv4),
+      );
       return;
     }
 
@@ -355,8 +367,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       }
 
       await _loadSingleNetworkDevices(network.id);
-      if (_isLocalDeviceInNetwork(network.id, machineId)) {
-        _setJoinState(network.id, _JoinNetworkState.joined);
+      final refreshedLocalDevice = _localDeviceInNetwork(network.id, machineId);
+      if (refreshedLocalDevice != null) {
+        _setJoinState(
+          network.id,
+          _JoinNetworkState.joinedWithIp(refreshedLocalDevice.ipv4),
+        );
         return;
       }
 
@@ -366,8 +382,15 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         networkId: network.id,
         deviceId: device.id,
       );
-      await _loadSingleNetworkDevices(network.id);
-      _setJoinState(network.id, _JoinNetworkState.joined);
+      final joinedLocalDevice = await _loadLocalNetworkDevice(
+        network.id,
+        machineId,
+        waitForIpv4: true,
+      );
+      _setJoinState(
+        network.id,
+        _JoinNetworkState.joinedWithIp(joinedLocalDevice?.ipv4),
+      );
     } catch (error) {
       _setJoinError(network.id, _normalizeError(error));
     }
@@ -397,8 +420,38 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   bool _isLocalDeviceInNetwork(String networkId, String machineId) {
+    return _localDeviceInNetwork(networkId, machineId) != null;
+  }
+
+  NetworkDevice? _localDeviceInNetwork(String networkId, String machineId) {
     final devices = _networkDevices[networkId] ?? const <NetworkDevice>[];
-    return devices.any((device) => device.machineId == machineId);
+    for (final device in devices) {
+      if (device.machineId == machineId) {
+        return device;
+      }
+    }
+    return null;
+  }
+
+  Future<NetworkDevice?> _loadLocalNetworkDevice(
+    String networkId,
+    String machineId, {
+    bool waitForIpv4 = false,
+  }) async {
+    final attempts = waitForIpv4 ? 5 : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      await _loadSingleNetworkDevices(networkId);
+      final localDevice = _localDeviceInNetwork(networkId, machineId);
+      final ipv4 = localDevice?.ipv4?.trim();
+      if (localDevice != null &&
+          (!waitForIpv4 || (ipv4 != null && ipv4.isNotEmpty))) {
+        return localDevice;
+      }
+      if (attempt < attempts - 1) {
+        await Future<void>.delayed(_devicePollDelay);
+      }
+    }
+    return _localDeviceInNetwork(networkId, machineId);
   }
 
   _JoinNetworkState _joinStateFor(ConsoleNetwork network) {
@@ -406,7 +459,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     if (machineId != null &&
         machineId.isNotEmpty &&
         _isLocalDeviceInNetwork(network.id, machineId)) {
-      return _JoinNetworkState.joined;
+      final localDevice = _localDeviceInNetwork(network.id, machineId);
+      return _JoinNetworkState.joinedWithIp(localDevice?.ipv4);
     }
     return _joinStates[network.id] ?? _JoinNetworkState.idle;
   }
@@ -1208,6 +1262,7 @@ class _NetworkJoinCard extends StatelessWidget {
     final joined = state.phase == _JoinPhase.joined;
     final joining = state.phase == _JoinPhase.joining;
     final failed = state.phase == _JoinPhase.error;
+    final localIpv4 = state.localIpv4?.trim();
 
     final statusLabel = joined
         ? '已加入'
@@ -1259,6 +1314,18 @@ class _NetworkJoinCard extends StatelessWidget {
                       color: const Color(0xFF737373),
                     ),
                   ),
+                  if (joined) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      localIpv4 == null || localIpv4.isEmpty
+                          ? '本机 IP 分配中'
+                          : '本机 IP $localIpv4',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   if (network.regions.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
