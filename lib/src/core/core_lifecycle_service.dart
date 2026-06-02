@@ -9,6 +9,52 @@ import '../logging/app_logger.dart';
 
 enum CoreRunPhase { signedOut, checking, repairing, running, error }
 
+class _DesktopCoreStatus {
+  const _DesktopCoreStatus({
+    required this.ready,
+    required this.installed,
+    required this.running,
+    this.machineId,
+    this.version,
+    this.serviceState,
+  });
+
+  final bool ready;
+  final bool installed;
+  final bool running;
+  final String? machineId;
+  final String? version;
+  final String? serviceState;
+
+  static _DesktopCoreStatus fromEvent(Map<String, dynamic> event) {
+    final data = event['data'];
+    final values = data is Map<String, dynamic>
+        ? data
+        : const <String, dynamic>{};
+    return _DesktopCoreStatus(
+      ready: _readBool(values['ready']),
+      installed: _readBool(values['installed']),
+      running: _readBool(values['running']),
+      machineId: _readString(values['machine_id']),
+      version: _readString(values['version']),
+      serviceState: _readString(values['service_state']),
+    );
+  }
+
+  static bool _readBool(Object? value) {
+    if (value is bool) {
+      return value;
+    }
+    final text = value?.toString().toLowerCase().trim();
+    return text == 'true' || text == '1';
+  }
+
+  static String? _readString(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+}
+
 class CoreRunStatus {
   const CoreRunStatus({
     required this.phase,
@@ -150,6 +196,30 @@ class CoreLifecycleService {
         accessToken: session.tokenSet.accessToken,
         workspaceId: workspace.id,
       );
+      if (!forceReinstall) {
+        final desktopStatus = await _tryReadDesktopStatus(bootstrap);
+        final machineId = desktopStatus?.machineId;
+        if (desktopStatus?.ready == true &&
+            machineId != null &&
+            machineId.isNotEmpty) {
+          _logger.info(
+            'core',
+            'Existing desktop service is ready',
+            context: {
+              'machine_id': machineId,
+              'version': desktopStatus?.version ?? '',
+              'service_state': desktopStatus?.serviceState ?? '',
+            },
+          );
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.running,
+            message: '本机设备已就绪',
+            machineId: machineId,
+            details: 'EasyTier ${desktopStatus?.version ?? bootstrap.version}',
+          );
+          return;
+        }
+      }
       if (forceReinstall) {
         status.value = CoreRunStatus(
           phase: CoreRunPhase.repairing,
@@ -204,6 +274,38 @@ class CoreLifecycleService {
         message: '连接引擎启动失败',
         lastError: _normalizeError(error),
       );
+    }
+  }
+
+  Future<_DesktopCoreStatus?> _tryReadDesktopStatus(
+    CoreBootstrapConfig bootstrap,
+  ) async {
+    try {
+      final event = await _desktopCommand('status', {
+        'bootstrap_token': bootstrap.bootstrapToken,
+        'version': bootstrap.version,
+        'config_server': bootstrap.configServer,
+      });
+      final desktopStatus = _DesktopCoreStatus.fromEvent(event);
+      _logger.info(
+        'core.desktop',
+        'Desktop status loaded',
+        context: {
+          'ready': desktopStatus.ready,
+          'installed': desktopStatus.installed,
+          'running': desktopStatus.running,
+          'machine_id': desktopStatus.machineId ?? '',
+          'version': desktopStatus.version ?? '',
+        },
+      );
+      return desktopStatus;
+    } catch (error) {
+      _logger.warn(
+        'core.desktop',
+        'Desktop status unavailable, falling back to install',
+        context: {'error': error.toString()},
+      );
+      return null;
     }
   }
 
