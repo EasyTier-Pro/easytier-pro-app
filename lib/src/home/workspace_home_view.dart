@@ -20,7 +20,7 @@ enum _DashboardView {
 
 enum _UserMenuAction { settings, logout }
 
-enum _JoinPhase { idle, joining, joined, error }
+enum _JoinPhase { idle, joining, joined, leaving, error }
 
 class _JoinNetworkState {
   const _JoinNetworkState({required this.phase, this.message, this.localIpv4});
@@ -31,11 +31,13 @@ class _JoinNetworkState {
 
   static const idle = _JoinNetworkState(phase: _JoinPhase.idle);
   static const joining = _JoinNetworkState(phase: _JoinPhase.joining);
+  static const leaving = _JoinNetworkState(phase: _JoinPhase.leaving);
 
-  static _JoinNetworkState joinedWithIp(String? localIpv4) {
+  static _JoinNetworkState joinedWithIp(String? localIpv4, {String? message}) {
     final value = localIpv4?.trim();
     return _JoinNetworkState(
       phase: _JoinPhase.joined,
+      message: message,
       localIpv4: value == null || value.isEmpty ? null : value,
     );
   }
@@ -105,6 +107,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final seen = <String>{};
     for (final devices in _networkDevices.values) {
       for (final device in devices) {
+        if (!device.attached) {
+          continue;
+        }
         seen.add(device.deviceId ?? device.id);
       }
     }
@@ -115,6 +120,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final seen = <String>{};
     for (final devices in _networkDevices.values) {
       for (final device in devices) {
+        if (!device.attached) {
+          continue;
+        }
         if (device.online) {
           seen.add(device.deviceId ?? device.id);
         }
@@ -396,6 +404,45 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     }
   }
 
+  Future<void> _leaveNetwork(ConsoleNetwork network) async {
+    final workspace = _workspace;
+    final machineId = widget.coreLifecycleService.status.value.machineId
+        ?.trim();
+
+    if (workspace == null) {
+      _setJoinError(network.id, '当前账号未关联工作区。');
+      return;
+    }
+    if (machineId == null || machineId.isEmpty) {
+      _setJoinError(network.id, '未找到本机设备标识，请等待本机设备准备完成。');
+      return;
+    }
+
+    final localDevice = _localDeviceInNetwork(network.id, machineId);
+    if (localDevice == null) {
+      _setJoinState(network.id, _JoinNetworkState.idle);
+      return;
+    }
+
+    _setJoinState(network.id, _JoinNetworkState.leaving);
+    try {
+      await widget.authService.removeNetworkNode(
+        accessToken: widget.session.tokenSet.accessToken,
+        workspaceId: workspace.id,
+        nodeId: localDevice.id,
+      );
+      _markNetworkLeft(network.id, localDevice.id, machineId);
+    } catch (error) {
+      _setJoinState(
+        network.id,
+        _JoinNetworkState.joinedWithIp(
+          localDevice.ipv4,
+          message: '退出网络失败：${_normalizeError(error)}',
+        ),
+      );
+    }
+  }
+
   Future<ManagedDevice?> _waitForLocalManagedDevice(String machineId) async {
     final workspace = _workspace;
     if (workspace == null) {
@@ -426,7 +473,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   NetworkDevice? _localDeviceInNetwork(String networkId, String machineId) {
     final devices = _networkDevices[networkId] ?? const <NetworkDevice>[];
     for (final device in devices) {
-      if (device.machineId == machineId) {
+      if (device.machineId == machineId && device.attached) {
         return device;
       }
     }
@@ -455,6 +502,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   _JoinNetworkState _joinStateFor(ConsoleNetwork network) {
+    final explicit = _joinStates[network.id];
+    if (explicit != null && explicit.phase != _JoinPhase.idle) {
+      return explicit;
+    }
+
     final machineId = widget.coreLifecycleService.status.value.machineId;
     if (machineId != null &&
         machineId.isNotEmpty &&
@@ -462,7 +514,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       final localDevice = _localDeviceInNetwork(network.id, machineId);
       return _JoinNetworkState.joinedWithIp(localDevice?.ipv4);
     }
-    return _joinStates[network.id] ?? _JoinNetworkState.idle;
+    return explicit ?? _JoinNetworkState.idle;
   }
 
   void _setJoinState(String networkId, _JoinNetworkState state) {
@@ -476,6 +528,24 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   void _setJoinError(String networkId, String message) {
     _setJoinState(networkId, _JoinNetworkState.error(message));
+  }
+
+  void _markNetworkLeft(String networkId, String nodeId, String machineId) {
+    if (!mounted) {
+      return;
+    }
+    final devices = _networkDevices[networkId] ?? const <NetworkDevice>[];
+    setState(() {
+      _networkDevices = {
+        ..._networkDevices,
+        networkId: devices
+            .where(
+              (device) => device.id != nodeId && device.machineId != machineId,
+            )
+            .toList(growable: false),
+      };
+      _joinStates = {..._joinStates, networkId: _JoinNetworkState.idle};
+    });
   }
 
   void _openNetworkDetail(ConsoleNetwork network) {
@@ -637,6 +707,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             networkDevices: _networkDevices,
             joinStateFor: _joinStateFor,
             onJoin: _joinNetwork,
+            onLeave: _leaveNetwork,
             onOpen: _openNetworkDetail,
             onRefresh: _loadNetworks,
           ),
@@ -681,6 +752,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       networkDevices: _networkDevices,
       joinStateFor: _joinStateFor,
       onJoin: _joinNetwork,
+      onLeave: _leaveNetwork,
       onOpen: _openNetworkDetail,
       onRefresh: _loadNetworks,
     );
@@ -694,7 +766,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         action: FButton(onPress: _showNetwork, child: const Text('返回网络列表')),
       );
     }
-    final devices = _networkDevices[network.id] ?? const <NetworkDevice>[];
+    final devices = (_networkDevices[network.id] ?? const <NetworkDevice>[])
+        .where((device) => device.attached)
+        .toList(growable: false);
     final onlineCount = devices.where((device) => device.online).length;
 
     return Column(
@@ -750,7 +824,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       );
     }
 
-    final devices = _networkDevices[network.id] ?? const <NetworkDevice>[];
+    final devices = (_networkDevices[network.id] ?? const <NetworkDevice>[])
+        .where((device) => device.attached)
+        .toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1193,6 +1269,7 @@ class _NetworkJoinList extends StatelessWidget {
     required this.networkDevices,
     required this.joinStateFor,
     required this.onJoin,
+    required this.onLeave,
     required this.onOpen,
     required this.onRefresh,
   });
@@ -1203,6 +1280,7 @@ class _NetworkJoinList extends StatelessWidget {
   final Map<String, List<NetworkDevice>> networkDevices;
   final _JoinNetworkState Function(ConsoleNetwork network) joinStateFor;
   final Future<void> Function(ConsoleNetwork network) onJoin;
+  final Future<void> Function(ConsoleNetwork network) onLeave;
   final void Function(ConsoleNetwork network) onOpen;
   final Future<void> Function() onRefresh;
 
@@ -1230,6 +1308,7 @@ class _NetworkJoinList extends StatelessWidget {
                 devices: networkDevices[network.id] ?? const <NetworkDevice>[],
                 state: joinStateFor(network),
                 onJoin: () => unawaited(onJoin(network)),
+                onLeave: () => unawaited(onLeave(network)),
                 onOpen: () => onOpen(network),
               ),
               const SizedBox(height: 12),
@@ -1247,6 +1326,7 @@ class _NetworkJoinCard extends StatelessWidget {
     required this.devices,
     required this.state,
     required this.onJoin,
+    required this.onLeave,
     required this.onOpen,
   });
 
@@ -1254,13 +1334,16 @@ class _NetworkJoinCard extends StatelessWidget {
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
   final VoidCallback onJoin;
+  final VoidCallback onLeave;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final online = devices.where((device) => device.online).length;
+    final attachedDevices = devices.where((device) => device.attached).toList();
+    final online = attachedDevices.where((device) => device.online).length;
     final joined = state.phase == _JoinPhase.joined;
     final joining = state.phase == _JoinPhase.joining;
+    final leaving = state.phase == _JoinPhase.leaving;
     final failed = state.phase == _JoinPhase.error;
     final localIpv4 = state.localIpv4?.trim();
 
@@ -1268,13 +1351,17 @@ class _NetworkJoinCard extends StatelessWidget {
         ? '已加入'
         : joining
         ? '正在加入'
+        : leaving
+        ? '正在退出'
         : failed
-        ? '加入失败'
+        ? '操作失败'
         : '未加入';
     final statusColor = joined
         ? const Color(0xFF16A34A)
         : joining
         ? const Color(0xFF2563EB)
+        : leaving
+        ? const Color(0xFFF59E0B)
         : failed
         ? const Color(0xFFDC2626)
         : Colors.grey;
@@ -1309,7 +1396,7 @@ class _NetworkJoinCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '$online / ${devices.length} 台设备在线',
+                    '$online / ${attachedDevices.length} 台设备在线',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: const Color(0xFF737373),
                     ),
@@ -1340,7 +1427,8 @@ class _NetworkJoinCard extends StatelessWidget {
                     Text(
                       state.message!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: failed
+                        color:
+                            failed || (joined && state.message!.contains('失败'))
                             ? const Color(0xFFDC2626)
                             : const Color(0xFF737373),
                       ),
@@ -1360,19 +1448,25 @@ class _NetworkJoinCard extends StatelessWidget {
                   onPress: onOpen,
                   child: const Text('详情'),
                 ),
-                FButton(
-                  size: .sm,
-                  onPress: joined || joining ? null : onJoin,
-                  child: Text(
-                    joined
-                        ? '已加入'
-                        : joining
-                        ? '加入中'
-                        : failed
-                        ? '重试'
-                        : '加入',
+                if (joined || leaving)
+                  FButton(
+                    variant: .outline,
+                    size: .sm,
+                    onPress: leaving ? null : onLeave,
+                    child: Text(leaving ? '退出中' : '退出'),
+                  )
+                else
+                  FButton(
+                    size: .sm,
+                    onPress: joining ? null : onJoin,
+                    child: Text(
+                      joining
+                          ? '加入中'
+                          : failed
+                          ? '重试'
+                          : '加入',
+                    ),
                   ),
-                ),
               ],
             ),
           ],

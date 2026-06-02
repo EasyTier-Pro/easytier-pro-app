@@ -64,6 +64,14 @@ void main() {
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
     expect(find.text('本机 IP 10.145.0.2'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '退出').first);
+    await tester.pumpAndSettle();
+
+    expect(authService.removedNodeIds, <String>['node-1']);
+    expect(find.text('本机 IP 10.144.0.2'), findsNothing);
+    expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '退出'), findsOneWidget);
   });
 
   testWidgets('shows create network flow when workspace has no networks', (
@@ -217,6 +225,13 @@ void main() {
               'operation': {'id': 'op-1'},
             }, 201);
           }
+          if (request.url.path ==
+              '/api/v1/tenants/tenant-1/nodes/node-1/remove') {
+            return _jsonResponse({
+              'resource': {'id': 'node-1'},
+              'operation': {'id': 'op-2'},
+            });
+          }
           return http.Response('{}', 404);
         }),
       );
@@ -232,6 +247,11 @@ void main() {
         workspaceId: 'tenant-1',
         networkId: 'net-1',
         deviceId: 'device-1',
+      );
+      await service.removeNetworkNode(
+        accessToken: 'token',
+        workspaceId: 'tenant-1',
+        nodeId: 'node-1',
       );
 
       expect(network.id, 'net-1');
@@ -250,6 +270,11 @@ void main() {
       expect(jsonDecode(requests[1].body), <String, Object>{
         'device_id': 'device-1',
       });
+      expect(requests[2].method, 'POST');
+      expect(
+        requests[2].url.path,
+        '/api/v1/tenants/tenant-1/nodes/node-1/remove',
+      );
     },
   );
 }
@@ -284,6 +309,7 @@ class _FakeAuthService implements AuthService {
   final List<ManagedDevice> managedDevices;
   final Map<String, List<NetworkDevice>> networkDevices;
   final List<String> attachedNetworkIds = <String>[];
+  final List<String> removedNodeIds = <String>[];
   final List<String> createdNetworkNames = <String>[];
 
   @override
@@ -398,6 +424,20 @@ class _FakeAuthService implements AuthService {
       ),
     ];
     return AttachNetworkResult(nodeId: 'node-$networkId');
+  }
+
+  @override
+  Future<void> removeNetworkNode({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    removedNodeIds.add(nodeId);
+    for (final entry in networkDevices.entries.toList()) {
+      networkDevices[entry.key] = entry.value
+          .where((device) => device.id != nodeId)
+          .toList(growable: false);
+    }
   }
 
   @override

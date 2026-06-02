@@ -150,6 +150,8 @@ class NetworkDevice {
     this.deviceId,
     this.machineId,
     this.connectivityState = '',
+    this.desiredState = '',
+    this.lifecycleState = '',
   });
 
   final String id;
@@ -159,6 +161,18 @@ class NetworkDevice {
   final String? deviceId;
   final String? machineId;
   final String connectivityState;
+  final String desiredState;
+  final String lifecycleState;
+
+  bool get attached {
+    final desired = desiredState.toLowerCase();
+    final lifecycle = lifecycleState.toLowerCase();
+    final connectivity = connectivityState.toLowerCase();
+    return desired != 'absent' &&
+        lifecycle != 'delete_pending' &&
+        lifecycle != 'deleted' &&
+        connectivity != 'removed';
+  }
 }
 
 class ManagedDevice {
@@ -243,6 +257,12 @@ abstract class AuthService {
     required String workspaceId,
     required String networkId,
     required String deviceId,
+  });
+
+  Future<void> removeNetworkNode({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
   });
 
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
@@ -611,6 +631,8 @@ class ConsoleAuthService implements AuthService {
           final machineId =
               item['machine_id']?.toString() ??
               device?['machine_id']?.toString();
+          final desiredState = item['desired_state']?.toString() ?? '';
+          final lifecycleState = item['lifecycle_state']?.toString() ?? '';
 
           return NetworkDevice(
             id: id,
@@ -622,6 +644,8 @@ class ConsoleAuthService implements AuthService {
                 ? null
                 : machineId,
             connectivityState: status,
+            desiredState: desiredState,
+            lifecycleState: lifecycleState,
           );
         })
         .whereType<NetworkDevice>()
@@ -664,6 +688,24 @@ class ConsoleAuthService implements AuthService {
       nodeId: nodeId,
       operationId: operation?['id']?.toString(),
     );
+  }
+
+  @override
+  Future<void> removeNetworkNode({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/nodes/$nodeId/remove',
+      ),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('退出网络失败：${_extractErrorMessage(response.body)}');
+    }
   }
 
   @override
