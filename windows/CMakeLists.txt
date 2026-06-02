@@ -87,6 +87,16 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+set(EASYTIER_INSTALLER_EXE
+  "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/easytier-pro-installer.exe")
+if(NOT EXISTS "${EASYTIER_INSTALLER_EXE}")
+  message(FATAL_ERROR
+    "Missing bundled EasyTier installer: ${EASYTIER_INSTALLER_EXE}")
+endif()
+install(FILES "${EASYTIER_INSTALLER_EXE}"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+  COMPONENT Runtime)
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
