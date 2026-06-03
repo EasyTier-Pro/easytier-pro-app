@@ -187,17 +187,14 @@ class _NodeCardState extends State<_NodeCard> {
         duration: appMotionMedium,
         curve: appMotionCurve,
         alignment: Alignment.topCenter,
-        child: Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
+        child: GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
               child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -285,8 +282,7 @@ class _NodeCardState extends State<_NodeCard> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

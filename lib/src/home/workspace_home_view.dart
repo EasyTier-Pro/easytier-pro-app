@@ -1275,23 +1275,25 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
             ),
             const SizedBox(width: 8),
-            _TextButton(
-              icon: Icons.refresh,
-              label: '刷新',
-              onTap: () => unawaited(_refreshNetworkNodes(network)),
+            FButton(
+              variant: .outline,
+              size: .sm,
+              onPress: () => unawaited(_refreshNetworkNodes(network)),
+              child: const Text('刷新'),
             ),
             const SizedBox(width: 8),
             if (joined)
-              _TextButton(
-                icon: Icons.logout,
-                label: '退出',
-                onTap: () => unawaited(_leaveNetwork(network)),
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: () => unawaited(_leaveNetwork(network)),
+                child: const Text('退出'),
               )
             else
-              _TextButton(
-                icon: Icons.login,
-                label: '加入',
-                onTap: () => unawaited(_joinNetwork(network)),
+              FButton(
+                size: .sm,
+                onPress: () => unawaited(_joinNetwork(network)),
+                child: const Text('加入'),
               ),
           ],
         ),
@@ -2375,43 +2377,6 @@ class _NetworkSummaryBar extends StatelessWidget {
           text: _formatTotalTraffic(traffic),
         ),
       ],
-    );
-  }
-}
-
-class _TextButton extends StatelessWidget {
-  const _TextButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: const Color(0xFF64748B)),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF64748B),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
