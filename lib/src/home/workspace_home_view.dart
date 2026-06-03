@@ -1146,7 +1146,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _DeviceListPanel(devices: devices),
+                    Expanded(
+                      child: _NetworkDeviceListViewport(devices: devices),
+                    ),
                   ],
                 ),
               ),
@@ -2138,6 +2140,45 @@ class _NetworkSidebar extends StatelessWidget {
             child: const Text('刷新设备'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NetworkDeviceListViewport extends StatefulWidget {
+  const _NetworkDeviceListViewport({required this.devices});
+
+  final List<NetworkDevice> devices;
+
+  @override
+  State<_NetworkDeviceListViewport> createState() =>
+      _NetworkDeviceListViewportState();
+}
+
+class _NetworkDeviceListViewportState
+    extends State<_NetworkDeviceListViewport> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.devices.isEmpty) {
+      return _DeviceListPanel(devices: widget.devices);
+    }
+
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        key: const ValueKey<String>('network-device-list-scroll'),
+        controller: _scrollController,
+        primary: false,
+        child: _DeviceListPanel(devices: widget.devices),
       ),
     );
   }

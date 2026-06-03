@@ -206,6 +206,60 @@ void main() {
     expect(sidebarSize.height, greaterThan(800));
   });
 
+  testWidgets('network detail device list scrolls when content overflows', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final networkDevices = List<NetworkDevice>.generate(24, (index) {
+      final number = index + 1;
+      return NetworkDevice(
+        id: 'node-$number',
+        name: 'desktop-$number',
+        online: index.isEven,
+        ipv4: '10.144.0.${number + 1}',
+        deviceId: 'device-$number',
+        machineId: 'machine-$number',
+      );
+    });
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: <ManagedDevice>[
+        for (var index = 0; index < networkDevices.length; index++)
+          ManagedDevice(
+            id: 'device-${index + 1}',
+            machineId: 'machine-${index + 1}',
+            hostname: 'desktop-${index + 1}',
+            approvalState: 'approved',
+            connectivityState: index.isEven ? 'online' : 'offline',
+          ),
+      ],
+      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '办公网'));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey<String>('network-device-list-scroll')),
+    );
+    expect(scrollView.controller?.position.maxScrollExtent, greaterThan(0));
+  });
+
   testWidgets('shows create network flow when workspace has no networks', (
     WidgetTester tester,
   ) async {
