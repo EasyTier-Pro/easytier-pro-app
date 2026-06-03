@@ -13,7 +13,9 @@ enum _DashboardView { overview, network, devices, settings }
 
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
-const double _networkDetailStackBreakpoint = 720;
+const double _networkDetailStackBreakpoint = 560;
+const double _dashboardHeaderCompactBreakpoint = 560;
+const double _dashboardHeaderDenseBreakpoint = 400;
 const double _networkSidebarWidth = 260;
 const double _itemListMinWidth = 360;
 
@@ -1373,8 +1375,9 @@ class _DashboardHeader extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < _networkDetailStackBreakpoint;
-          final dense = constraints.maxWidth < 400;
+          final compact =
+              constraints.maxWidth < _dashboardHeaderCompactBreakpoint;
+          final dense = constraints.maxWidth < _dashboardHeaderDenseBreakpoint;
 
           return Row(
             children: [
