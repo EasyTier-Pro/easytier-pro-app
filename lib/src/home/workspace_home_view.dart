@@ -1511,8 +1511,8 @@ class _NetworkTabButton extends StatelessWidget {
     required this.onOpenMenu,
   });
 
-  static const double _labelMinWidth = 88;
-  static const double _labelMaxWidth = 132;
+  static const double _labelMinWidth = 44;
+  static const double _labelMaxWidth = 112;
 
   final bool active;
   final String label;

@@ -374,15 +374,16 @@ void main() {
     var labelSize = tester.getSize(
       find.byKey(const ValueKey<String>('network-tab-label')),
     );
-    expect(labelSize.width, greaterThanOrEqualTo(88));
+    expect(labelSize.width, greaterThanOrEqualTo(44));
+    expect(labelSize.width, lessThan(72));
 
     await _selectNetworkFromHeader(tester, longNetworkName);
 
     labelSize = tester.getSize(
       find.byKey(const ValueKey<String>('network-tab-label')),
     );
-    expect(labelSize.width, greaterThanOrEqualTo(88));
-    expect(labelSize.width, lessThanOrEqualTo(132.1));
+    expect(labelSize.width, greaterThanOrEqualTo(44));
+    expect(labelSize.width, lessThanOrEqualTo(112.1));
   });
 
   testWidgets('shows approval blocker before attaching a device', (
