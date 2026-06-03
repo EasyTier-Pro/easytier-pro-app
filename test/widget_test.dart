@@ -47,7 +47,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已在线'), findsOneWidget);
-    expect(find.text('尚未加入任何网络'), findsOneWidget);
+    expect(find.textContaining('尚未加入网络'), findsOneWidget);
     expect(find.text('办公网'), findsOneWidget);
     expect(find.text('研发网'), findsOneWidget);
     expect(find.byType(Switch), findsNWidgets(2));
@@ -185,7 +185,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.createdNetworkNames, <String>['我的网络']);
-    expect(find.text('尚未加入任何网络'), findsOneWidget);
+    expect(find.textContaining('尚未加入网络'), findsOneWidget);
 
     // 进入网络页查看新创建的网络
     await tester.tap(find.widgetWithText(FButton, '网络'));

@@ -950,7 +950,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StatusBar(
+        _StatusBadge(
           statusListenable: widget.coreLifecycleService.status,
           joinedCount: joinedNetworks.length,
           downloadRate: totalDownloadRate,
@@ -1391,8 +1391,8 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({
     required this.statusListenable,
     required this.joinedCount,
     required this.downloadRate,
@@ -1414,6 +1414,14 @@ class _StatusBar extends StatelessWidget {
         final checking = status.phase == CoreRunPhase.checking;
         final signedOut = status.phase == CoreRunPhase.signedOut;
 
+        final ringColor = error
+            ? const Color(0xFFDC2626)
+            : checking || signedOut
+                ? const Color(0xFF9CA3AF)
+                : running
+                    ? const Color(0xFF16A34A)
+                    : const Color(0xFF2563EB);
+
         final bgColor = error
             ? const Color(0xFFFEE2E2)
             : checking || signedOut
@@ -1422,15 +1430,23 @@ class _StatusBar extends StatelessWidget {
                     ? const Color(0xFFF0FDF4)
                     : const Color(0xFFDBEAFE);
 
-        final dotColor = error
-            ? const Color(0xFFDC2626)
+        final borderColor = error
+            ? const Color(0xFFFECACA)
             : checking || signedOut
-                ? const Color(0xFF9CA3AF)
+                ? const Color(0xFFE5E7EB)
                 : running
-                    ? const Color(0xFF16A34A)
-                    : const Color(0xFF2563EB);
+                    ? const Color(0xFFBBF7D0)
+                    : const Color(0xFFBFDBFE);
 
-        final statusText = error
+        final icon = error
+            ? Icons.error_outline
+            : checking
+                ? Icons.sync
+                : running
+                    ? Icons.check
+                    : Icons.power_settings_new;
+
+        final title = error
             ? '引擎异常'
             : checking
                 ? '正在检查'
@@ -1438,55 +1454,62 @@ class _StatusBar extends StatelessWidget {
                     ? '已在线'
                     : '准备中';
 
+        final machineId = status.machineId;
+        final String subtitle;
+        if (error) {
+          subtitle = status.lastError?.isNotEmpty == true
+              ? status.lastError!
+              : '连接引擎遇到问题';
+        } else if (joinedCount > 0) {
+          subtitle = '已加入 $joinedCount 个网络 · ↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}';
+        } else {
+          subtitle = machineId?.isNotEmpty == true
+              ? '设备 ${_shortId(machineId!)} · 尚未加入网络'
+              : '正在初始化设备...';
+        }
+
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: error
-                  ? const Color(0xFFFECACA)
-                  : checking || signedOut
-                      ? const Color(0xFFE5E7EB)
-                      : running
-                          ? const Color(0xFFBBF7D0)
-                          : const Color(0xFFBFDBFE),
-            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor),
           ),
           child: Row(
             children: [
               Container(
-                width: 8,
-                height: 8,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: dotColor,
+                  color: Colors.white,
                   shape: BoxShape.circle,
+                  border: Border.all(color: ringColor, width: 3),
+                ),
+                child: Center(
+                  child: Icon(icon, color: ringColor, size: 22),
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                statusText,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0F172A),
-                    ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 1,
-                height: 14,
-                color: const Color(0xFFD1D5DB),
-              ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  joinedCount > 0
-                      ? '已加入 $joinedCount 个网络 · ↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}'
-                      : '尚未加入任何网络',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF64748B),
-                      ),
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0F172A),
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF64748B),
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
             ],
