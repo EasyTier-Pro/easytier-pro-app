@@ -173,12 +173,17 @@ void main() {
 
     expect(find.text('创建第一个网络'), findsOneWidget);
     expect(find.text('网络名称'), findsOneWidget);
+    expect(find.text('网络地址范围'), findsOneWidget);
     expect(find.text('区域'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(1), '10.200.0.0/16');
+    await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FButton, '创建网络'));
     await tester.pumpAndSettle();
 
     expect(authService.createdNetworkNames, <String>['我的网络']);
+    expect(authService.createdNetworkIPv4Cidrs, <String?>['10.200.0.0/16']);
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
 
     expect(find.text('我的网络'), findsNWidgets(2));
@@ -427,6 +432,7 @@ void main() {
               'id': 'net-1',
               'name': '我的网络',
               'network_name': 'nt-runtime',
+              'ipv4_cidr': '10.200.0.0/16',
               'regions': ['ap-east'],
             }, 201);
           }
@@ -453,6 +459,7 @@ void main() {
         workspaceId: 'tenant-1',
         name: '我的网络',
         regions: const ['ap-east'],
+        ipv4Cidr: '10.200.0.0/16',
       );
       final attach = await service.attachDeviceToNetwork(
         accessToken: 'token',
@@ -468,6 +475,7 @@ void main() {
 
       expect(network.id, 'net-1');
       expect(network.runtimeNetworkName, 'nt-runtime');
+      expect(network.ipv4Cidr, '10.200.0.0/16');
       expect(attach.nodeId, 'node-1');
       expect(attach.operationId, 'op-1');
       expect(requests[0].method, 'POST');
@@ -475,6 +483,7 @@ void main() {
       expect(jsonDecode(requests[0].body), <String, Object>{
         'name': '我的网络',
         'regions': ['ap-east'],
+        'ipv4_cidr': '10.200.0.0/16',
       });
       expect(
         requests[1].url.path,
@@ -524,6 +533,7 @@ class _FakeAuthService implements AuthService {
   final List<String> attachedNetworkIds = <String>[];
   final List<String> removedNodeIds = <String>[];
   final List<String> createdNetworkNames = <String>[];
+  final List<String?> createdNetworkIPv4Cidrs = <String?>[];
 
   @override
   Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) {
@@ -585,12 +595,15 @@ class _FakeAuthService implements AuthService {
     required String workspaceId,
     required String name,
     required List<String> regions,
+    String? ipv4Cidr,
   }) async {
     createdNetworkNames.add(name);
+    createdNetworkIPv4Cidrs.add(ipv4Cidr);
     final network = ConsoleNetwork(
       id: 'net-${networks.length + 1}',
       name: name,
       regions: regions,
+      ipv4Cidr: ipv4Cidr ?? '',
     );
     networks.add(network);
     networkDevices[network.id] = const <NetworkDevice>[];

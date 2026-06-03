@@ -116,6 +116,7 @@ class ConsoleNetwork {
     required this.id,
     required this.name,
     this.regions = const <String>[],
+    this.ipv4Cidr = '',
     this.runtimeNetworkName = '',
     this.lifecycleState = '',
   });
@@ -123,6 +124,7 @@ class ConsoleNetwork {
   final String id;
   final String name;
   final List<String> regions;
+  final String ipv4Cidr;
   final String runtimeNetworkName;
   final String lifecycleState;
 }
@@ -255,6 +257,7 @@ abstract class AuthService {
     required String workspaceId,
     required String name,
     required List<String> regions,
+    String? ipv4Cidr,
   });
 
   Future<List<NetworkDevice>> fetchNetworkDevices({
@@ -520,14 +523,21 @@ class ConsoleAuthService implements AuthService {
     required String workspaceId,
     required String name,
     required List<String> regions,
+    String? ipv4Cidr,
   }) async {
+    final body = <String, Object?>{'name': name, 'regions': regions};
+    final trimmedIPv4Cidr = ipv4Cidr?.trim();
+    if (trimmedIPv4Cidr != null && trimmedIPv4Cidr.isNotEmpty) {
+      body['ipv4_cidr'] = trimmedIPv4Cidr;
+    }
+
     final response = await _httpClient.post(
       Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/networks'),
       headers: {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'name': name, 'regions': regions}),
+      body: jsonEncode(body),
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
@@ -556,6 +566,7 @@ class ConsoleAuthService implements AuthService {
       id: id,
       name: name,
       regions: regions,
+      ipv4Cidr: item['ipv4_cidr']?.toString() ?? '',
       runtimeNetworkName: runtimeNetworkName,
       lifecycleState: item['lifecycle_state']?.toString() ?? '',
     );

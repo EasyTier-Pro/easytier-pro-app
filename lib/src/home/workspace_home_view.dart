@@ -9,12 +9,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 
-enum _DashboardView {
-  overview,
-  network,
-  devices,
-  settings,
-}
+enum _DashboardView { overview, network, devices, settings }
 
 enum _UserMenuAction { settings, logout }
 
@@ -128,13 +123,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool _isCreatingNetwork = false;
   _DashboardView _activeView = _DashboardView.overview;
   String _newNetworkName = '我的网络';
+  String _newNetworkIPv4Cidr = '';
   String? _selectedRegionCode;
   int _networkRequestId = 0;
   int _deviceRequestId = 0;
   int _regionRequestId = 0;
   Timer? _trafficPollTimer;
   bool _isTrafficPollInFlight = false;
-  bool _showCreateFormOnNetworkPage = false;
   Set<String> _trafficPollNetworkIds = const <String>{};
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
@@ -370,10 +365,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _refreshTrafficPolling();
   }
 
-  Future<void> _createNetwork() async {
+  Future<void> _createNetwork({VoidCallback? onSuccess}) async {
     final workspace = _workspace;
     final regionCode = _selectedRegionCode;
     final name = _newNetworkName.trim();
+    final ipv4Cidr = _newNetworkIPv4Cidr.trim();
     if (workspace == null || regionCode == null || regionCode.isEmpty) {
       setState(() {
         _createError = '请选择可用区域后再创建网络。';
@@ -398,6 +394,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         workspaceId: workspace.id,
         name: name,
         regions: [regionCode],
+        ipv4Cidr: ipv4Cidr.isEmpty ? null : ipv4Cidr,
       );
       if (!mounted) {
         return;
@@ -406,12 +403,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _networks = [..._networks, network];
         _selectedNetworkId = network.id;
         _newNetworkName = '我的网络';
+        _newNetworkIPv4Cidr = '';
         _isCreatingNetwork = false;
-        _showCreateFormOnNetworkPage = false;
         _activeView = _DashboardView.overview;
       });
       await _loadSingleNetworkDevices(network.id);
       unawaited(_loadNetworks());
+      onSuccess?.call();
     } catch (error) {
       if (!mounted) {
         return;
@@ -421,6 +419,44 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _createError = _normalizeError(error);
       });
     }
+  }
+
+  Future<void> _showCreateNetworkDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('创建网络'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: _CreateNetworkForm(
+              name: _newNetworkName,
+              ipv4Cidr: _newNetworkIPv4Cidr,
+              selectedRegionCode: _selectedRegionCode,
+              regions: _activeRegions,
+              loadingRegions: _isLoadingRegions,
+              creating: _isCreatingNetwork,
+              error: _createError ?? _regionError,
+              onNameChanged: (value) => setState(() => _newNetworkName = value),
+              onIPv4CidrChanged: (value) =>
+                  setState(() => _newNetworkIPv4Cidr = value),
+              onRegionChanged: (value) =>
+                  setState(() => _selectedRegionCode = value),
+              onCreate: () async {
+                await _createNetwork(
+                  onSuccess: () {
+                    if (Navigator.of(dialogContext).canPop()) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                );
+              },
+              onRetryRegions: _loadRegions,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _joinNetwork(ConsoleNetwork network) async {
@@ -872,15 +908,25 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           Expanded(
             child: DecoratedBox(
               decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1040),
-                    child: _buildContent(context),
-                  ),
-                ),
-              ),
+              child: _activeView == _DashboardView.network
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1040),
+                          child: _buildContent(context),
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1040),
+                          child: _buildContent(context),
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -903,9 +949,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   Widget _buildConnectionWorkspace(BuildContext context) {
-    final joinedNetworks = _networks.where((network) {
-      return _joinStateFor(network).phase == _JoinPhase.joined;
-    }).toList(growable: false);
+    final joinedNetworks = _networks
+        .where((network) {
+          return _joinStateFor(network).phase == _JoinPhase.joined;
+        })
+        .toList(growable: false);
 
     var totalDownloadRate = 0.0;
     var totalUploadRate = 0.0;
@@ -946,12 +994,15 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         else if (_networks.isEmpty)
           _CreateNetworkPanel(
             name: _newNetworkName,
+            ipv4Cidr: _newNetworkIPv4Cidr,
             selectedRegionCode: _selectedRegionCode,
             regions: _activeRegions,
             loadingRegions: _isLoadingRegions,
             creating: _isCreatingNetwork,
             error: _createError ?? _regionError,
             onNameChanged: (value) => setState(() => _newNetworkName = value),
+            onIPv4CidrChanged: (value) =>
+                setState(() => _newNetworkIPv4Cidr = value),
             onRegionChanged: (value) =>
                 setState(() => _selectedRegionCode = value),
             onCreate: _createNetwork,
@@ -966,6 +1017,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onJoin: _joinNetwork,
             onLeave: _leaveNetwork,
             onOpen: _openNetworkDetail,
+            onCreate: _showCreateNetworkDialog,
           ),
       ],
     );
@@ -989,14 +1041,16 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     if (_networks.isEmpty) {
       return _CreateNetworkPanel(
         name: _newNetworkName,
+        ipv4Cidr: _newNetworkIPv4Cidr,
         selectedRegionCode: _selectedRegionCode,
         regions: _activeRegions,
         loadingRegions: _isLoadingRegions,
         creating: _isCreatingNetwork,
         error: _createError ?? _regionError,
         onNameChanged: (value) => setState(() => _newNetworkName = value),
-        onRegionChanged: (value) =>
-            setState(() => _selectedRegionCode = value),
+        onIPv4CidrChanged: (value) =>
+            setState(() => _newNetworkIPv4Cidr = value),
+        onRegionChanged: (value) => setState(() => _selectedRegionCode = value),
         onCreate: _createNetwork,
         onRetryRegions: _loadRegions,
       );
@@ -1010,7 +1064,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final state = _joinStateFor(network);
     final joined = state.phase == _JoinPhase.joined;
 
-    final regionText = network.regions.isEmpty ? '-' : network.regions.join(', ');
+    final regionText = network.regions.isEmpty
+        ? '-'
+        : network.regions.join(', ');
+    final cidrText = network.ipv4Cidr.trim().isEmpty
+        ? '-'
+        : network.ipv4Cidr.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1018,18 +1077,25 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              network.name,
-              style: Theme.of(context).textTheme.headlineSmall,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_workspace?.name ?? '未关联工作区'} · $regionText · CIDR $cidrText · ID ${network.id}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(width: 12),
-            Text(
-              '${_workspace?.name ?? '未关联工作区'} · $regionText · ID ${network.id}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF94A3B8),
-                  ),
-            ),
-            const Spacer(),
             if (joined)
               FButton(
                 variant: .outline,
@@ -1065,9 +1131,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                       Text(
                         '设备',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF0F172A),
-                            ),
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
                       ),
                       const Spacer(),
                       FBadge(
@@ -1083,40 +1149,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        if (_showCreateFormOnNetworkPage) ...[
-          _CreateNetworkPanel(
-            name: _newNetworkName,
-            selectedRegionCode: _selectedRegionCode,
-            regions: _activeRegions,
-            loadingRegions: _isLoadingRegions,
-            creating: _isCreatingNetwork,
-            error: _createError ?? _regionError,
-            onNameChanged: (value) => setState(() => _newNetworkName = value),
-            onRegionChanged: (value) =>
-                setState(() => _selectedRegionCode = value),
-            onCreate: _createNetwork,
-            onRetryRegions: _loadRegions,
-          ),
-          const SizedBox(height: 12),
-          FButton(
-            variant: .ghost,
-            size: .sm,
-            onPress: () => setState(() => _showCreateFormOnNetworkPage = false),
-            child: const Text('收起创建面板'),
-          ),
-        ] else ...[
-          Row(
-            children: [
-              const Spacer(),
-              FButton(
-                size: .sm,
-                onPress: () => setState(() => _showCreateFormOnNetworkPage = true),
-                child: const Text('创建网络'),
-              ),
-            ],
-          ),
-        ],
       ],
     );
   }
@@ -1313,7 +1345,8 @@ class _DashboardHeader extends StatelessWidget {
                   for (final network in networks) ...[
                     const SizedBox(width: 6),
                     FButton(
-                      variant: activeView == _DashboardView.network &&
+                      variant:
+                          activeView == _DashboardView.network &&
                               selectedNetworkId == network.id
                           ? .secondary
                           : .ghost,
@@ -1429,9 +1462,9 @@ class _TrafficPill extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: textColor,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: textColor,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -1465,42 +1498,42 @@ class _StatusBadge extends StatelessWidget {
         final ringColor = error
             ? const Color(0xFFDC2626)
             : checking || signedOut
-                ? const Color(0xFF9CA3AF)
-                : running
-                    ? const Color(0xFF16A34A)
-                    : const Color(0xFF2563EB);
+            ? const Color(0xFF9CA3AF)
+            : running
+            ? const Color(0xFF16A34A)
+            : const Color(0xFF2563EB);
 
         final bgColor = error
             ? const Color(0xFFFEE2E2)
             : checking || signedOut
-                ? const Color(0xFFF3F4F6)
-                : running
-                    ? const Color(0xFFF0FDF4)
-                    : const Color(0xFFDBEAFE);
+            ? const Color(0xFFF3F4F6)
+            : running
+            ? const Color(0xFFF0FDF4)
+            : const Color(0xFFDBEAFE);
 
         final borderColor = error
             ? const Color(0xFFFECACA)
             : checking || signedOut
-                ? const Color(0xFFE5E7EB)
-                : running
-                    ? const Color(0xFFBBF7D0)
-                    : const Color(0xFFBFDBFE);
+            ? const Color(0xFFE5E7EB)
+            : running
+            ? const Color(0xFFBBF7D0)
+            : const Color(0xFFBFDBFE);
 
         final icon = error
             ? Icons.error_outline
             : checking
-                ? Icons.sync
-                : running
-                    ? Icons.check
-                    : Icons.power_settings_new;
+            ? Icons.sync
+            : running
+            ? Icons.check
+            : Icons.power_settings_new;
 
         final title = error
             ? '引擎异常'
             : checking
-                ? '正在检查'
-                : running
-                    ? '已在线'
-                    : '准备中';
+            ? '正在检查'
+            : running
+            ? '已在线'
+            : '准备中';
 
         final machineId = status.machineId;
         final String subtitle;
@@ -1533,9 +1566,7 @@ class _StatusBadge extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: ringColor, width: 3),
                 ),
-                child: Center(
-                  child: Icon(icon, color: ringColor, size: 22),
-                ),
+                child: Center(child: Icon(icon, color: ringColor, size: 22)),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1545,16 +1576,16 @@ class _StatusBadge extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
-                          ),
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF64748B),
-                          ),
+                        color: const Color(0xFF64748B),
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -1584,27 +1615,31 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _CreateNetworkPanel extends StatelessWidget {
-  const _CreateNetworkPanel({
+class _CreateNetworkForm extends StatelessWidget {
+  const _CreateNetworkForm({
     required this.name,
+    required this.ipv4Cidr,
     required this.selectedRegionCode,
     required this.regions,
     required this.loadingRegions,
     required this.creating,
     required this.error,
     required this.onNameChanged,
+    required this.onIPv4CidrChanged,
     required this.onRegionChanged,
     required this.onCreate,
     required this.onRetryRegions,
   });
 
   final String name;
+  final String ipv4Cidr;
   final String? selectedRegionCode;
   final List<ConsoleRegion> regions;
   final bool loadingRegions;
   final bool creating;
   final String? error;
   final ValueChanged<String> onNameChanged;
+  final ValueChanged<String> onIPv4CidrChanged;
   final ValueChanged<String?> onRegionChanged;
   final Future<void> Function() onCreate;
   final Future<void> Function() onRetryRegions;
@@ -1613,6 +1648,158 @@ class _CreateNetworkPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final canCreate = regions.isNotEmpty && !loadingRegions && !creating;
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 480;
+            final nameField = TextFormField(
+              key: ValueKey<String>(name),
+              initialValue: name,
+              decoration: const InputDecoration(
+                labelText: '网络名称',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: onNameChanged,
+            );
+            final cidrField = TextFormField(
+              key: ValueKey<String>('cidr:$ipv4Cidr'),
+              initialValue: ipv4Cidr,
+              decoration: const InputDecoration(
+                labelText: '网络地址范围',
+                hintText: '10.144.0.0/16',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              keyboardType: TextInputType.text,
+              onChanged: onIPv4CidrChanged,
+            );
+            final regionField = DropdownButtonFormField<String>(
+              key: ValueKey<String?>(selectedRegionCode),
+              initialValue: selectedRegionCode,
+              decoration: const InputDecoration(
+                labelText: '区域',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                for (final region in regions)
+                  DropdownMenuItem<String>(
+                    value: region.code,
+                    child: Text(region.displayName),
+                  ),
+              ],
+              onChanged: loadingRegions || regions.isEmpty
+                  ? null
+                  : onRegionChanged,
+            );
+            if (!wide) {
+              return Column(
+                children: [
+                  nameField,
+                  const SizedBox(height: 12),
+                  cidrField,
+                  const SizedBox(height: 12),
+                  regionField,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: nameField),
+                const SizedBox(width: 12),
+                Expanded(child: cidrField),
+                const SizedBox(width: 12),
+                Expanded(child: regionField),
+              ],
+            );
+          },
+        ),
+        if (loadingRegions) ...[
+          const SizedBox(height: 12),
+          const Row(
+            children: [
+              FCircularProgress(size: .sm),
+              SizedBox(width: 8),
+              Text('正在读取可用区域...'),
+            ],
+          ),
+        ],
+        if (!loadingRegions && regions.isEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            '当前没有可用区域，暂时无法创建网络。',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFFDC2626)),
+          ),
+        ],
+        if (error != null && error!.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            error!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFFDC2626)),
+          ),
+        ],
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FButton(
+              onPress: canCreate ? () => unawaited(onCreate()) : null,
+              child: Text(creating ? '正在创建...' : '创建网络'),
+            ),
+            FButton(
+              variant: .outline,
+              onPress: loadingRegions
+                  ? null
+                  : () => unawaited(onRetryRegions()),
+              child: const Text('刷新区域'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CreateNetworkPanel extends StatelessWidget {
+  const _CreateNetworkPanel({
+    required this.name,
+    required this.ipv4Cidr,
+    required this.selectedRegionCode,
+    required this.regions,
+    required this.loadingRegions,
+    required this.creating,
+    required this.error,
+    required this.onNameChanged,
+    required this.onIPv4CidrChanged,
+    required this.onRegionChanged,
+    required this.onCreate,
+    required this.onRetryRegions,
+  });
+
+  final String name;
+  final String ipv4Cidr;
+  final String? selectedRegionCode;
+  final List<ConsoleRegion> regions;
+  final bool loadingRegions;
+  final bool creating;
+  final String? error;
+  final ValueChanged<String> onNameChanged;
+  final ValueChanged<String> onIPv4CidrChanged;
+  final ValueChanged<String?> onRegionChanged;
+  final Future<void> Function() onCreate;
+  final Future<void> Function() onRetryRegions;
+
+  @override
+  Widget build(BuildContext context) {
     return FCard.raw(
       child: Material(
         color: Colors.transparent,
@@ -1630,101 +1817,19 @@ class _CreateNetworkPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth >= 680;
-                  final nameField = TextFormField(
-                    key: ValueKey<String>(name),
-                    initialValue: name,
-                    decoration: const InputDecoration(
-                      labelText: '网络名称',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: onNameChanged,
-                  );
-                  final regionField = DropdownButtonFormField<String>(
-                    key: ValueKey<String?>(selectedRegionCode),
-                    initialValue: selectedRegionCode,
-                    decoration: const InputDecoration(
-                      labelText: '区域',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    items: [
-                      for (final region in regions)
-                        DropdownMenuItem<String>(
-                          value: region.code,
-                          child: Text(region.displayName),
-                        ),
-                    ],
-                    onChanged: loadingRegions || regions.isEmpty
-                        ? null
-                        : onRegionChanged,
-                  );
-                  if (!wide) {
-                    return Column(
-                      children: [
-                        nameField,
-                        const SizedBox(height: 12),
-                        regionField,
-                      ],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      Expanded(child: nameField),
-                      const SizedBox(width: 12),
-                      Expanded(child: regionField),
-                    ],
-                  );
-                },
-              ),
-              if (loadingRegions) ...[
-                const SizedBox(height: 12),
-                const Row(
-                  children: [
-                    FCircularProgress(size: .sm),
-                    SizedBox(width: 8),
-                    Text('正在读取可用区域...'),
-                  ],
-                ),
-              ],
-              if (!loadingRegions && regions.isEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '当前没有可用区域，暂时无法创建网络。',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFFDC2626),
-                  ),
-                ),
-              ],
-              if (error != null && error!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  error!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFFDC2626),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FButton(
-                    onPress: canCreate ? () => unawaited(onCreate()) : null,
-                    child: Text(creating ? '正在创建...' : '创建网络'),
-                  ),
-                  FButton(
-                    variant: .outline,
-                    onPress: loadingRegions
-                        ? null
-                        : () => unawaited(onRetryRegions()),
-                    child: const Text('刷新区域'),
-                  ),
-                ],
+              _CreateNetworkForm(
+                name: name,
+                ipv4Cidr: ipv4Cidr,
+                selectedRegionCode: selectedRegionCode,
+                regions: regions,
+                loadingRegions: loadingRegions,
+                creating: creating,
+                error: error,
+                onNameChanged: onNameChanged,
+                onIPv4CidrChanged: onIPv4CidrChanged,
+                onRegionChanged: onRegionChanged,
+                onCreate: onCreate,
+                onRetryRegions: onRetryRegions,
               ),
             ],
           ),
@@ -1935,10 +2040,10 @@ class _MetricRow extends StatelessWidget {
         Text(
           value,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
         ),
       ],
     );
@@ -1970,29 +2075,28 @@ class _NetworkSidebar extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             '$onlineDevices / $totalDevices',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0F172A),
-                ),
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF0F172A),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             '台设备在线',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF64748B),
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
           ),
           const Divider(height: 32),
           Text(
             '实时流量',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF64748B),
-                  fontWeight: FontWeight.w600,
-                ),
+              color: const Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 10),
           _MetricRow(
@@ -2010,16 +2114,16 @@ class _NetworkSidebar extends StatelessWidget {
           Text(
             '累计流量',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF64748B),
-                  fontWeight: FontWeight.w600,
-                ),
+              color: const Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             _formatTotalTraffic(traffic),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF374151),
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF374151)),
           ),
           const SizedBox(height: 20),
           FButton(
@@ -2042,15 +2146,11 @@ class _DeviceListPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (devices.isEmpty) {
-      return const SizedBox(
-        height: 200,
-        child: _StateMessage(message: '该网络暂无设备'),
-      );
+      return const Center(child: _StateMessage(message: '该网络暂无设备'));
     }
     return FCard.raw(
       child: FItemGroup(
         divider: .full,
-        physics: const NeverScrollableScrollPhysics(),
         children: [
           for (final device in devices)
             FItem(
@@ -2304,6 +2404,7 @@ class _NetworkSwitchList extends StatelessWidget {
     required this.onJoin,
     required this.onLeave,
     required this.onOpen,
+    required this.onCreate,
   });
 
   final List<ConsoleNetwork> networks;
@@ -2313,6 +2414,7 @@ class _NetworkSwitchList extends StatelessWidget {
   final Future<void> Function(ConsoleNetwork) onJoin;
   final Future<void> Function(ConsoleNetwork) onLeave;
   final void Function(ConsoleNetwork) onOpen;
+  final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -2324,16 +2426,30 @@ class _NetworkSwitchList extends StatelessWidget {
             Text(
               '网络',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
-                  ),
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
             ),
             const Spacer(),
+            FButton(
+              variant: .ghost,
+              size: .sm,
+              onPress: onCreate,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 16),
+                  SizedBox(width: 4),
+                  Text('新建网络'),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
             Text(
               '${networks.length} 个',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF94A3B8),
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
             ),
           ],
         ),
@@ -2345,7 +2461,8 @@ class _NetworkSwitchList extends StatelessWidget {
                 if (i > 0) const Divider(height: 1),
                 _NetworkSwitchTile(
                   network: networks[i],
-                  devices: networkDevices[networks[i].id] ?? const <NetworkDevice>[],
+                  devices:
+                      networkDevices[networks[i].id] ?? const <NetworkDevice>[],
                   state: joinStateFor(networks[i]),
                   traffic: trafficByNetworkId[networks[i].id],
                   onJoin: () => unawaited(onJoin(networks[i])),
@@ -2389,6 +2506,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     final leaving = state.phase == _JoinPhase.leaving;
     final failed = state.phase == _JoinPhase.error;
     final localIpv4 = state.localIpv4?.trim();
+    final cidrText = network.ipv4Cidr.trim();
 
     final switchValue = joined || joining;
     final isLoading = joining || leaving;
@@ -2416,9 +2534,9 @@ class _NetworkSwitchTile extends StatelessWidget {
                   Text(
                     network.name,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF0F172A),
-                        ),
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   if (joined && localIpv4 != null && localIpv4.isNotEmpty)
@@ -2432,15 +2550,11 @@ class _NetworkSwitchTile extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: const Color(0xFFF0FDF4),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: const Color(0xFFBBF7D0),
-                            ),
+                            border: Border.all(color: const Color(0xFFBBF7D0)),
                           ),
                           child: Text(
                             localIpv4,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   fontFamily: 'monospace',
                                   fontWeight: FontWeight.w600,
@@ -2458,9 +2572,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                           const SizedBox(width: 2),
                           Text(
                             _formatTrafficRate(traffic!.downloadBytesPerSecond),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: const Color(0xFF16A34A),
                                   fontWeight: FontWeight.w500,
@@ -2475,9 +2587,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                           const SizedBox(width: 2),
                           Text(
                             _formatTrafficRate(traffic!.uploadBytesPerSecond),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: const Color(0xFF2563EB),
                                   fontWeight: FontWeight.w500,
@@ -2488,18 +2598,21 @@ class _NetworkSwitchTile extends StatelessWidget {
                     )
                   else
                     Text(
-                      '$onlineCount / ${attachedDevices.length} 台设备在线',
+                      [
+                        if (cidrText.isNotEmpty) 'CIDR $cidrText',
+                        '$onlineCount / ${attachedDevices.length} 台设备在线',
+                      ].join(' · '),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF94A3B8),
-                          ),
+                        color: const Color(0xFF94A3B8),
+                      ),
                     ),
                   if (failed && state.message != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       state.message!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFDC2626),
-                          ),
+                        color: const Color(0xFFDC2626),
+                      ),
                     ),
                   ],
                 ],
