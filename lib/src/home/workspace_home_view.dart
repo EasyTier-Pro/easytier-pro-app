@@ -11,8 +11,6 @@ import '../logging/app_logger.dart';
 
 enum _DashboardView { overview, network, devices, settings }
 
-enum _UserMenuAction { settings, logout }
-
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
 class _JoinNetworkState {
@@ -422,36 +420,46 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   Future<void> _showCreateNetworkDialog() async {
-    await showDialog<void>(
+    await showFDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('创建网络'),
-        content: SizedBox(
-          width: 400,
+      builder: (dialogContext, _, animation) => FDialog.raw(
+        animation: animation,
+        constraints: const BoxConstraints(minWidth: 420, maxWidth: 560),
+        builder: (context, _) => Padding(
+          padding: const EdgeInsets.all(24),
           child: SingleChildScrollView(
-            child: _CreateNetworkForm(
-              name: _newNetworkName,
-              ipv4Cidr: _newNetworkIPv4Cidr,
-              selectedRegionCode: _selectedRegionCode,
-              regions: _activeRegions,
-              loadingRegions: _isLoadingRegions,
-              creating: _isCreatingNetwork,
-              error: _createError ?? _regionError,
-              onNameChanged: (value) => setState(() => _newNetworkName = value),
-              onIPv4CidrChanged: (value) =>
-                  setState(() => _newNetworkIPv4Cidr = value),
-              onRegionChanged: (value) =>
-                  setState(() => _selectedRegionCode = value),
-              onCreate: () async {
-                await _createNetwork(
-                  onSuccess: () {
-                    if (Navigator.of(dialogContext).canPop()) {
-                      Navigator.of(dialogContext).pop();
-                    }
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('创建网络', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 18),
+                _CreateNetworkForm(
+                  name: _newNetworkName,
+                  ipv4Cidr: _newNetworkIPv4Cidr,
+                  selectedRegionCode: _selectedRegionCode,
+                  regions: _activeRegions,
+                  loadingRegions: _isLoadingRegions,
+                  creating: _isCreatingNetwork,
+                  error: _createError ?? _regionError,
+                  onNameChanged: (value) =>
+                      setState(() => _newNetworkName = value),
+                  onIPv4CidrChanged: (value) =>
+                      setState(() => _newNetworkIPv4Cidr = value),
+                  onRegionChanged: (value) =>
+                      setState(() => _selectedRegionCode = value),
+                  onCreate: () async {
+                    await _createNetwork(
+                      onSuccess: () {
+                        if (Navigator.of(dialogContext).canPop()) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                      },
+                    );
                   },
-                );
-              },
-              onRetryRegions: _loadRegions,
+                  onRetryRegions: _loadRegions,
+                ),
+              ],
             ),
           ),
         ),
@@ -1724,46 +1732,38 @@ class _CreateNetworkForm extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 480;
-            final nameField = TextFormField(
+            final nameField = FTextField(
               key: ValueKey<String>(name),
-              initialValue: name,
-              decoration: const InputDecoration(
-                labelText: '网络名称',
-                border: OutlineInputBorder(),
-                isDense: true,
+              control: FTextFieldControl.managed(
+                initial: TextEditingValue(text: name),
+                onChange: (value) => onNameChanged(value.text),
               ),
-              onChanged: onNameChanged,
+              size: .sm,
+              label: const Text('网络名称'),
             );
-            final cidrField = TextFormField(
+            final cidrField = FTextField(
               key: ValueKey<String>('cidr:$ipv4Cidr'),
-              initialValue: ipv4Cidr,
-              decoration: const InputDecoration(
-                labelText: '网络地址范围',
-                hintText: '10.144.0.0/16',
-                border: OutlineInputBorder(),
-                isDense: true,
+              control: FTextFieldControl.managed(
+                initial: TextEditingValue(text: ipv4Cidr),
+                onChange: (value) => onIPv4CidrChanged(value.text),
               ),
+              size: .sm,
+              label: const Text('网络地址范围'),
+              hint: '10.144.0.0/16',
               keyboardType: TextInputType.text,
-              onChanged: onIPv4CidrChanged,
             );
-            final regionField = DropdownButtonFormField<String>(
+            final regionField = FSelect<String>(
               key: ValueKey<String?>(selectedRegionCode),
-              initialValue: selectedRegionCode,
-              decoration: const InputDecoration(
-                labelText: '区域',
-                border: OutlineInputBorder(),
-                isDense: true,
+              control: FSelectControl.lifted(
+                value: selectedRegionCode,
+                onChange: onRegionChanged,
               ),
-              items: [
-                for (final region in regions)
-                  DropdownMenuItem<String>(
-                    value: region.code,
-                    child: Text(region.displayName),
-                  ),
-              ],
-              onChanged: loadingRegions || regions.isEmpty
-                  ? null
-                  : onRegionChanged,
+              size: .sm,
+              label: const Text('区域'),
+              items: {
+                for (final region in regions) region.displayName: region.code,
+              },
+              enabled: !loadingRegions && regions.isNotEmpty,
             );
             if (!wide) {
               return Column(
@@ -1870,38 +1870,35 @@ class _CreateNetworkPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FCard.raw(
-      child: Material(
-        color: Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('创建第一个网络', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 6),
-              Text(
-                '当前工作区还没有网络。先创建网络，然后把本机设备加入进去。',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF737373),
-                ),
-              ),
-              const SizedBox(height: 18),
-              _CreateNetworkForm(
-                name: name,
-                ipv4Cidr: ipv4Cidr,
-                selectedRegionCode: selectedRegionCode,
-                regions: regions,
-                loadingRegions: loadingRegions,
-                creating: creating,
-                error: error,
-                onNameChanged: onNameChanged,
-                onIPv4CidrChanged: onIPv4CidrChanged,
-                onRegionChanged: onRegionChanged,
-                onCreate: onCreate,
-                onRetryRegions: onRetryRegions,
-              ),
-            ],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('创建第一个网络', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            Text(
+              '当前工作区还没有网络。先创建网络，然后把本机设备加入进去。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF737373)),
+            ),
+            const SizedBox(height: 18),
+            _CreateNetworkForm(
+              name: name,
+              ipv4Cidr: ipv4Cidr,
+              selectedRegionCode: selectedRegionCode,
+              regions: regions,
+              loadingRegions: loadingRegions,
+              creating: creating,
+              error: error,
+              onNameChanged: onNameChanged,
+              onIPv4CidrChanged: onIPv4CidrChanged,
+              onRegionChanged: onRegionChanged,
+              onCreate: onCreate,
+              onRetryRegions: onRetryRegions,
+            ),
+          ],
         ),
       ),
     );
@@ -1927,80 +1924,67 @@ class _UserMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = userName.isEmpty ? '用户' : userName;
 
-    return Material(
-      color: Colors.transparent,
-      child: PopupMenuButton<_UserMenuAction>(
-        tooltip: '账户菜单',
-        position: PopupMenuPosition.under,
-        onSelected: (action) {
-          switch (action) {
-            case _UserMenuAction.settings:
-              onShowSettings();
-            case _UserMenuAction.logout:
-              unawaited(onLogout());
-          }
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem<_UserMenuAction>(
-            enabled: false,
-            child: SizedBox(
-              width: 200,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF0A0A0A),
-                      fontWeight: FontWeight.w700,
+    return FPopoverMenu(
+      menuAnchor: Alignment.topRight,
+      childAnchor: Alignment.bottomRight,
+      divider: FItemDivider.full,
+      menuBuilder: (context, controller, menu) => [
+        FItemGroup(
+          divider: FItemDivider.full,
+          children: [
+            FItem.raw(
+              enabled: false,
+              child: SizedBox(
+                width: 200,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF0A0A0A),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    workspaceName,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
+                    const SizedBox(height: 2),
+                    Text(
+                      workspaceName,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const PopupMenuDivider(),
-          const PopupMenuItem<_UserMenuAction>(
-            value: _UserMenuAction.settings,
-            child: Row(
-              children: [
-                Icon(Icons.settings_outlined, size: 18),
-                SizedBox(width: 10),
-                Text('设置'),
-              ],
+            FItem(
+              prefix: const Icon(Icons.settings_outlined, size: 18),
+              title: const Text('设置'),
+              onPress: () {
+                unawaited(controller.hide());
+                onShowSettings();
+              },
             ),
-          ),
-          const PopupMenuItem<_UserMenuAction>(
-            value: _UserMenuAction.logout,
-            child: Row(
-              children: [
-                Icon(Icons.logout_outlined, size: 18),
-                SizedBox(width: 10),
-                Text('退出登录'),
-              ],
+            FItem(
+              prefix: const Icon(Icons.logout_outlined, size: 18),
+              title: const Text('退出登录'),
+              onPress: () {
+                unawaited(controller.hide());
+                unawaited(onLogout());
+              },
             ),
-          ),
-        ],
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
-          child: Row(
-            children: [
-              FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            ],
-          ),
+          ],
         ),
+      ],
+      builder: (context, controller, child) => FButton(
+        variant: .ghost,
+        size: .sm,
+        onPress: () => unawaited(controller.toggle()),
+        mainAxisSize: MainAxisSize.min,
+        suffix: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+        child: FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
       ),
     );
   }
@@ -2294,6 +2278,18 @@ class _SettingsPanel extends StatelessWidget {
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
 
+  void _showToast(
+    BuildContext context,
+    String message, {
+    bool destructive = false,
+  }) {
+    showFToast(
+      context: context,
+      variant: destructive ? .destructive : .primary,
+      title: Text(message),
+    );
+  }
+
   Future<void> _exportLogs(BuildContext context) async {
     try {
       final file = await AppLogger.instance.exportDiagnostics();
@@ -2303,9 +2299,7 @@ class _SettingsPanel extends StatelessWidget {
         context: {'file': file.path},
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('诊断日志已导出: ${file.path}')));
+        _showToast(context, '诊断日志已导出: ${file.path}');
       }
     } catch (error) {
       AppLogger.instance.error(
@@ -2314,9 +2308,7 @@ class _SettingsPanel extends StatelessWidget {
         context: {'error': error.toString()},
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('导出诊断日志失败')));
+        _showToast(context, '导出诊断日志失败', destructive: true);
       }
     }
   }
@@ -2325,17 +2317,13 @@ class _SettingsPanel extends StatelessWidget {
     final path = AppLogger.instance.logDirectoryPath;
     if (path == null || path.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('日志目录尚未初始化')));
+        _showToast(context, '日志目录尚未初始化', destructive: true);
       }
       return;
     }
     await Clipboard.setData(ClipboardData(text: path));
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('日志目录已复制: $path')));
+      _showToast(context, '日志目录已复制: $path');
     }
   }
 
@@ -2733,15 +2721,13 @@ class _NetworkSwitchTile extends StatelessWidget {
             const SizedBox(
               width: 20,
               height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: FCircularProgress(size: .sm),
             )
           else
-            Material(
-              color: Colors.transparent,
-              child: Switch(
-                value: switchValue,
-                onChanged: (_) => onToggle?.call(),
-              ),
+            FSwitch(
+              value: switchValue,
+              enabled: onToggle != null,
+              onChange: (_) => onToggle?.call(),
             ),
         ],
       ),

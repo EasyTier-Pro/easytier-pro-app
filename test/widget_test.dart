@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -50,28 +50,28 @@ void main() {
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
     expect(find.text('办公网'), findsNWidgets(2));
     expect(find.text('研发网'), findsOneWidget);
-    expect(find.byType(Switch), findsNWidgets(2));
+    expect(find.byType(FSwitch), findsNWidgets(2));
 
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
     expect(find.textContaining('1 个网络'), findsOneWidget);
     expect(find.textContaining('10.144.0.2'), findsOneWidget);
-    expect(find.byType(Switch), findsNWidgets(2));
+    expect(find.byType(FSwitch), findsNWidgets(2));
 
-    await tester.tap(find.byType(Switch).at(1));
+    await tester.tap(find.byType(FSwitch).at(1));
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
     expect(find.textContaining('10.145.0.2'), findsOneWidget);
 
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
     expect(authService.removedNodeIds, <String>['node-1']);
     expect(find.textContaining('10.144.0.2'), findsNothing);
-    expect(find.byType(Switch), findsNWidgets(2));
+    expect(find.byType(FSwitch), findsNWidgets(2));
   });
 
   testWidgets('shows realtime traffic after joining a network', (
@@ -130,7 +130,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('计算中'), findsNWidgets(2));
@@ -280,7 +280,7 @@ void main() {
     expect(find.text('网络地址范围'), findsOneWidget);
     expect(find.text('区域'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).at(1), '10.200.0.0/16');
+    await tester.enterText(find.byType(FTextField).at(1), '10.200.0.0/16');
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FButton, '创建网络'));
@@ -291,7 +291,7 @@ void main() {
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
 
     expect(find.text('我的网络'), findsNWidgets(2));
-    expect(find.byType(Switch), findsOneWidget);
+    expect(find.byType(FSwitch), findsOneWidget);
   });
 
   testWidgets('switches active network from header dropdown', (
@@ -361,7 +361,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('尚未批准'), findsOneWidget);

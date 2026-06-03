@@ -131,47 +131,13 @@ class _MyAppState extends State<MyApp> {
       title: 'EasyTier Pro',
       builder: (context, child) => FTheme(
         data: _foruiThemeData,
-        child: child ?? const SizedBox.shrink(),
+        child: FToaster(child: child ?? const SizedBox.shrink()),
       ),
       theme: ThemeData(
         colorScheme: colorScheme,
         scaffoldBackgroundColor: _appBackground,
         fontFamily: _appFontFamily,
         fontFamilyFallback: _appFontFamilyFallback,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: _cardBackground,
-          foregroundColor: _foreground,
-          elevation: 0,
-          centerTitle: false,
-          surfaceTintColor: Colors.transparent,
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            backgroundColor: _foreground,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 38),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _foreground,
-            minimumSize: const Size(0, 38),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            side: const BorderSide(color: _border),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(foregroundColor: _foreground),
-        ),
         textTheme: _materialTextTheme,
         useMaterial3: true,
       ),
