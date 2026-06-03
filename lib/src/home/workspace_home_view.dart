@@ -1253,52 +1253,60 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    network.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF94A3B8),
+                  Expanded(
+                    child: Text(
+                      network.name,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(_refreshNetworkNodes(network)),
+                    child: const Text('刷新节点'),
+                  ),
+                  const SizedBox(width: 8),
+                  if (joined)
+                    FButton(
+                      variant: .outline,
+                      onPress: () => unawaited(_leaveNetwork(network)),
+                      child: const Text('退出网络'),
+                    )
+                  else
+                    FButton(
+                      onPress: () => unawaited(_joinNetwork(network)),
+                      child: const Text('加入网络'),
+                    ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            FButton(
-              variant: .outline,
-              onPress: () => unawaited(_refreshNetworkNodes(network)),
-              child: const Text('刷新节点'),
-            ),
-            const SizedBox(width: 8),
-            if (joined)
-              FButton(
-                variant: .outline,
-                onPress: () => unawaited(_leaveNetwork(network)),
-                child: const Text('退出网络'),
-              )
-            else
-              FButton(
-                onPress: () => unawaited(_joinNetwork(network)),
-                child: const Text('加入网络'),
+              const SizedBox(height: 4),
+              Text(
+                '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF94A3B8),
+                ),
               ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _NetworkSummaryBar(
-          totalDevices: devices.length,
-          onlineDevices: onlineCount,
-          traffic: _networkTraffic[network.id],
+              const SizedBox(height: 12),
+              _NetworkSummaryBar(
+                totalDevices: devices.length,
+                onlineDevices: onlineCount,
+                traffic: _networkTraffic[network.id],
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         Expanded(
