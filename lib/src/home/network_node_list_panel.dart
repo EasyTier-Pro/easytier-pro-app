@@ -259,22 +259,12 @@ class _NodeCardState extends State<_NodeCard> {
                               ],
                             ),
                             const SizedBox(height: 4),
-                            // IPv4 地址 + 本机标记
-                            Text(
-                              '${isLocal ? '本机 · ' : ''}${widget.node.ipv4?.isNotEmpty == true ? widget.node.ipv4! : '未分配 IPv4'}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: const Color(0xFF64748B),
-                                    fontFamily: 'Inter',
-                                  ),
+                            // 技术信息行：IPv4 + 本机 + 快捷指标
+                            _NodeMetaLine(
+                              ipv4: widget.node.ipv4,
+                              isLocal: isLocal,
+                              peer: peer,
                             ),
-                            // 快捷指标行（纯文本，灰色）
-                            if (peer != null) ...[
-                              const SizedBox(height: 4),
-                              _QuickMetrics(peer: peer),
-                            ],
                             // 展开详情
                             AnimatedCrossFade(
                               firstChild: const SizedBox.shrink(),
@@ -433,39 +423,55 @@ class _DetailChip extends StatelessWidget {
   }
 }
 
-class _QuickMetrics extends StatelessWidget {
-  const _QuickMetrics({required this.peer});
+class _NodeMetaLine extends StatelessWidget {
+  const _NodeMetaLine({
+    required this.ipv4,
+    required this.isLocal,
+    required this.peer,
+  });
 
-  final CorePeerStatus peer;
+  final String? ipv4;
+  final bool isLocal;
+  final CorePeerStatus? peer;
 
   @override
   Widget build(BuildContext context) {
     final parts = <String>[];
 
-    final latency = peer.latencyText.trim();
-    if (latency.isNotEmpty && latency != '-' && latency != '*') {
-      parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
+    if (isLocal) parts.add('本机');
+
+    if (ipv4?.isNotEmpty == true) {
+      parts.add(ipv4!);
+    } else {
+      parts.add('未分配 IPv4');
     }
 
-    if (peer.tunnelProto.isNotEmpty && peer.tunnelProto != '-') {
-      parts.add(peer.tunnelProto);
-    }
+    if (peer != null) {
+      final p = peer!;
 
-    if (peer.lossText.isNotEmpty && peer.lossText != '-') {
-      parts.add('丢包 ${peer.lossText}');
-    }
+      final latency = p.latencyText.trim();
+      if (latency.isNotEmpty && latency != '-' && latency != '*') {
+        parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
+      }
 
-    final rx = (peer.rxBytes.isNotEmpty && peer.rxBytes != '-')
-        ? '↓${peer.rxBytes}'
-        : '';
-    final tx = (peer.txBytes.isNotEmpty && peer.txBytes != '-')
-        ? '↑${peer.txBytes}'
-        : '';
-    if (rx.isNotEmpty || tx.isNotEmpty) {
-      parts.add('$rx $tx'.trim());
-    }
+      if (p.tunnelProto.isNotEmpty && p.tunnelProto != '-') {
+        parts.add(p.tunnelProto);
+      }
 
-    if (parts.isEmpty) return const SizedBox.shrink();
+      if (p.lossText.isNotEmpty && p.lossText != '-') {
+        parts.add('丢包 ${p.lossText}');
+      }
+
+      final rx = (p.rxBytes.isNotEmpty && p.rxBytes != '-')
+          ? '↓${p.rxBytes}'
+          : '';
+      final tx = (p.txBytes.isNotEmpty && p.txBytes != '-')
+          ? '↑${p.txBytes}'
+          : '';
+      if (rx.isNotEmpty || tx.isNotEmpty) {
+        parts.add('$rx $tx'.trim());
+      }
+    }
 
     return Text(
       parts.join('  ·  '),
