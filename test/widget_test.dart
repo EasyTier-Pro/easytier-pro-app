@@ -130,31 +130,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FButton, '加入'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('计算中'), findsOneWidget);
-    expect(find.textContaining('累计 下载 1.00 KiB / 上传 2.00 KiB'), findsOneWidget);
+    expect(find.textContaining('计算中'), findsNWidgets(2));
 
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
-    expect(
-      find.textContaining('下载 1.00 KiB/s / 上传 2.00 KiB/s'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('累计 下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
+    expect(find.textContaining('1.00 KiB/s'), findsNWidgets(2));
+    expect(find.textContaining('2.00 KiB/s'), findsNWidgets(2));
 
-    await tester.tap(find.widgetWithText(FButton, '详情'));
+    await tester.tap(find.widgetWithText(FButton, '网络'));
     await tester.pumpAndSettle();
 
     expect(find.text('实时流量'), findsOneWidget);
     expect(find.text('累计流量'), findsOneWidget);
-    expect(find.text('下载 1.00 KiB/s / 上传 2.00 KiB/s'), findsOneWidget);
-    expect(find.text('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
+    expect(find.textContaining('下载 1.00 KiB/s / 上传 2.00 KiB/s'), findsOneWidget);
+    expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -187,12 +180,8 @@ void main() {
     expect(authService.createdNetworkNames, <String>['我的网络']);
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
 
-    // 进入网络页查看新创建的网络
-    await tester.tap(find.widgetWithText(FButton, '网络'));
-    await tester.pumpAndSettle();
-
     expect(find.text('我的网络'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
+    expect(find.byType(Switch), findsOneWidget);
   });
 
   testWidgets('shows approval blocker before attaching a device', (
@@ -226,10 +215,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FButton, '网络'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(FButton, '加入'));
+    await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('尚未批准'), findsOneWidget);

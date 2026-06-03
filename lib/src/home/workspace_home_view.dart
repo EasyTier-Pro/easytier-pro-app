@@ -12,7 +12,6 @@ import '../logging/app_logger.dart';
 enum _DashboardView {
   overview,
   network,
-  networkDetail,
   devices,
   settings,
 }
@@ -813,7 +812,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void _openNetworkDetail(ConsoleNetwork network) {
     setState(() {
       _selectedNetworkId = network.id;
-      _activeView = _DashboardView.networkDetail;
+      _activeView = _DashboardView.network;
     });
     unawaited(_loadSingleNetworkDevices(network.id));
   }
@@ -882,6 +881,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             networkCount: _networks.length,
             deviceCount: _totalDeviceCount,
             onlineDeviceCount: _onlineDeviceCount,
+            selectedNetworkName: _selectedNetwork?.name,
             onShowOverview: _showOverview,
             onShowNetwork: _showNetwork,
             onShowDevices: _showDevices,
@@ -911,8 +911,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Widget _buildContent(BuildContext context) {
     return switch (_activeView) {
       _DashboardView.overview => _buildConnectionWorkspace(context),
-      _DashboardView.network => _buildNetworkListPage(context),
-      _DashboardView.networkDetail => _buildNetworkDetail(context),
+      _DashboardView.network => _buildNetworkPage(context),
       _DashboardView.devices => _buildDevicesPage(context),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
@@ -992,7 +991,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     );
   }
 
-  Widget _buildNetworkListPage(BuildContext context) {
+  Widget _buildNetworkPage(BuildContext context) {
     if (_isLoadingNetworks) {
       return const SizedBox(
         height: 360,
@@ -1007,10 +1006,71 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       );
     }
 
+    if (_networks.isEmpty) {
+      return _CreateNetworkPanel(
+        name: _newNetworkName,
+        selectedRegionCode: _selectedRegionCode,
+        regions: _activeRegions,
+        loadingRegions: _isLoadingRegions,
+        creating: _isCreatingNetwork,
+        error: _createError ?? _regionError,
+        onNameChanged: (value) => setState(() => _newNetworkName = value),
+        onRegionChanged: (value) =>
+            setState(() => _selectedRegionCode = value),
+        onCreate: _createNetwork,
+        onRetryRegions: _loadRegions,
+      );
+    }
+
+    final network = _selectedNetwork ?? _networks.first;
+    final devices = (_networkDevices[network.id] ?? const <NetworkDevice>[])
+        .where((device) => device.attached)
+        .toList(growable: false);
+    final onlineCount = devices.where((device) => device.online).length;
+    final state = _joinStateFor(network);
+    final joined = state.phase == _JoinPhase.joined;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_showCreateFormOnNetworkPage || _networks.isEmpty) ...[
+        Row(
+          children: [
+            _NetworkSelector(
+              networks: _networks,
+              selectedId: network.id,
+              onSelected: (id) {
+                setState(() => _selectedNetworkId = id);
+                unawaited(_loadSingleNetworkDevices(id));
+              },
+            ),
+            const Spacer(),
+            if (joined)
+              FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: () => unawaited(_leaveNetwork(network)),
+                child: const Text('退出网络'),
+              )
+            else
+              FButton(
+                size: .sm,
+                onPress: () => unawaited(_joinNetwork(network)),
+                child: const Text('加入网络'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _NetworkInfoPanel(
+          network: network,
+          workspaceName: _workspace?.name ?? '未关联工作区',
+          totalDevices: devices.length,
+          onlineDevices: onlineCount,
+          traffic: _networkTraffic[network.id],
+        ),
+        const SizedBox(height: 16),
+        _DeviceListPanel(deviceCount: devices.length, devices: devices),
+        const SizedBox(height: 24),
+        if (_showCreateFormOnNetworkPage) ...[
           _CreateNetworkPanel(
             name: _newNetworkName,
             selectedRegionCode: _selectedRegionCode,
@@ -1024,16 +1084,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onCreate: _createNetwork,
             onRetryRegions: _loadRegions,
           ),
-          if (_networks.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            FButton(
-              variant: .ghost,
-              size: .sm,
-              onPress: () => setState(() => _showCreateFormOnNetworkPage = false),
-              child: const Text('收起创建面板'),
-            ),
-            const SizedBox(height: 24),
-          ],
+          const SizedBox(height: 12),
+          FButton(
+            variant: .ghost,
+            size: .sm,
+            onPress: () => setState(() => _showCreateFormOnNetworkPage = false),
+            child: const Text('收起创建面板'),
+          ),
         ] else ...[
           Row(
             children: [
@@ -1045,73 +1102,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
         ],
-        if (_networks.isNotEmpty)
-          _NetworkJoinList(
-            title: '所有网络',
-            subtitle: '管理工作区中的所有网络，每个网络都可以单独加入或退出。',
-            networks: _networks,
-            networkDevices: _networkDevices,
-            trafficByNetworkId: _networkTraffic,
-            joinStateFor: _joinStateFor,
-            onJoin: _joinNetwork,
-            onLeave: _leaveNetwork,
-            onOpen: _openNetworkDetail,
-            onRefresh: _loadNetworks,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildNetworkDetail(BuildContext context) {
-    final network = _selectedNetwork;
-    if (network == null) {
-      return _StateMessage(
-        message: '请选择一个网络。',
-        action: FButton(onPress: _showNetwork, child: const Text('返回网络列表')),
-      );
-    }
-    final devices = (_networkDevices[network.id] ?? const <NetworkDevice>[])
-        .where((device) => device.attached)
-        .toList(growable: false);
-    final onlineCount = devices.where((device) => device.online).length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionTitle(
-          title: network.name,
-          subtitle: '网络详情与设备列表',
-          trailing: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FButton(
-                variant: .outline,
-                size: .sm,
-                onPress: _showNetwork,
-                child: const Text('返回网络列表'),
-              ),
-              FButton(
-                variant: .outline,
-                size: .sm,
-                onPress: () => unawaited(_loadSingleNetworkDevices(network.id)),
-                child: const Text('刷新设备'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        _NetworkInfoPanel(
-          network: network,
-          workspaceName: _workspace?.name ?? '未关联工作区',
-          totalDevices: devices.length,
-          onlineDevices: onlineCount,
-          traffic: _networkTraffic[network.id],
-        ),
-        const SizedBox(height: 16),
-        _DeviceListPanel(deviceCount: devices.length, devices: devices),
       ],
     );
   }
@@ -1265,6 +1256,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.networkCount,
     required this.deviceCount,
     required this.onlineDeviceCount,
+    required this.selectedNetworkName,
     required this.onShowOverview,
     required this.onShowNetwork,
     required this.onShowDevices,
@@ -1279,6 +1271,7 @@ class _DashboardHeader extends StatelessWidget {
   final int networkCount;
   final int deviceCount;
   final int onlineDeviceCount;
+  final String? selectedNetworkName;
   final VoidCallback onShowOverview;
   final VoidCallback onShowNetwork;
   final VoidCallback onShowDevices;
@@ -1314,14 +1307,16 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           FButton(
-            variant:
-                activeView == _DashboardView.network ||
-                    activeView == _DashboardView.networkDetail
-                ? .secondary
-                : .ghost,
+            variant: activeView == _DashboardView.network ? .secondary : .ghost,
             size: .sm,
             onPress: onShowNetwork,
-            child: const Text('网络'),
+            child: Text(
+              activeView == _DashboardView.network &&
+                      selectedNetworkName != null &&
+                      selectedNetworkName!.isNotEmpty
+                  ? selectedNetworkName!
+                  : '网络',
+            ),
           ),
           const SizedBox(width: 6),
           FButton(
@@ -1572,6 +1567,66 @@ class _StatusBadge extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _NetworkSelector extends StatelessWidget {
+  const _NetworkSelector({
+    required this.networks,
+    required this.selectedId,
+    required this.onSelected,
+  });
+
+  final List<ConsoleNetwork> networks;
+  final String selectedId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = networks.firstWhere((n) => n.id == selectedId);
+
+    return Material(
+      color: Colors.transparent,
+      child: PopupMenuButton<String>(
+        offset: const Offset(0, 40),
+        onSelected: onSelected,
+        itemBuilder: (context) => [
+          for (final network in networks)
+            PopupMenuItem<String>(
+              value: network.id,
+              child: Text(network.name),
+            ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.hub_outlined, size: 16, color: Color(0xFF64748B)),
+              const SizedBox(width: 8),
+              Text(
+                selected.name,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.expand_more,
+                size: 18,
+                color: Color(0xFF64748B),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
