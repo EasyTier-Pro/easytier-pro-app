@@ -191,90 +191,79 @@ class _NodeCardState extends State<_NodeCard> {
           onTap: () => setState(() => _expanded = !_expanded),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isOnline
+                  ? const Color(0xFFF0FDF4)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              border: Border.all(
+                color: isOnline
+                    ? const Color(0xFFBBF7D0)
+                    : const Color(0xFFE5E7EB),
+              ),
             ),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 左侧状态条
-                    Container(
-                      width: 4,
-                      decoration: BoxDecoration(
-                        color: isOnline
-                            ? const Color(0xFF16A34A)
-                            : const Color(0xFF9CA3AF),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // 首行：名称 + 状态文字 + 展开箭头
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    widget.node.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF0F172A),
-                                        ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                    // 首行：名称 + 状态文字 + 展开箭头
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.node.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0F172A),
                                 ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  isOnline ? '在线' : '离线',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: isOnline
-                                            ? const Color(0xFF16A34A)
-                                            : const Color(0xFF9CA3AF),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  _expanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  size: 18,
-                                  color: const Color(0xFF94A3B8),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            // 技术信息行：IPv4 + 本机 + 快捷指标
-                            _NodeMetaLine(
-                              ipv4: widget.node.ipv4,
-                              isLocal: isLocal,
-                              peer: peer,
-                            ),
-                            // 展开详情
-                            AnimatedCrossFade(
-                              firstChild: const SizedBox.shrink(),
-                              secondChild: _NodeDetailPanel(peer: peer),
-                              crossFadeState: _expanded
-                                  ? CrossFadeState.showSecond
-                                  : CrossFadeState.showFirst,
-                              duration: appMotionMedium,
-                              sizeCurve: appMotionCurve,
-                            ),
-                          ],
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Text(
+                          isOnline ? '在线' : '离线',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: isOnline
+                                    ? const Color(0xFF16A34A)
+                                    : const Color(0xFF9CA3AF),
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          _expanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 18,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // 技术信息行：IPv4 + 本机 + 快捷指标
+                    _NodeMetaLine(
+                      ipv4: widget.node.ipv4,
+                      isLocal: isLocal,
+                      peer: peer,
+                    ),
+                    // 展开详情
+                    AnimatedCrossFade(
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: _NodeDetailPanel(peer: peer),
+                      crossFadeState: _expanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      duration: appMotionMedium,
+                      sizeCurve: appMotionCurve,
                     ),
                   ],
                 ),
@@ -282,7 +271,8 @@ class _NodeCardState extends State<_NodeCard> {
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
