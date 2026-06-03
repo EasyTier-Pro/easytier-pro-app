@@ -165,6 +165,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return _managedDevices.where((device) => device.online).length;
   }
 
+  List<ManagedDevice> _visibleManagedDevices(Iterable<ManagedDevice> devices) {
+    return devices.where((device) => !device.removed).toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -217,7 +221,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         return;
       }
       setState(() {
-        _managedDevices = devices;
+        _managedDevices = _visibleManagedDevices(devices);
         _isLoadingDevices = false;
       });
     } catch (error) {
@@ -537,12 +541,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       );
       if (mounted) {
         setState(() {
-          _managedDevices = devices;
+          _managedDevices = _visibleManagedDevices(devices);
           _deviceError = null;
           _isLoadingDevices = false;
         });
       }
-      for (final device in devices) {
+      for (final device in _visibleManagedDevices(devices)) {
         if (device.machineId == machineId) {
           return device;
         }
@@ -2802,6 +2806,7 @@ String _approvalLabel(ManagedDevice device) {
     'approved' => '已批准',
     'pending' => '待批准',
     'rejected' => '已拒绝',
+    'removed' => '已移除',
     '' => '未知',
     _ => device.approvalState,
   };
@@ -2813,6 +2818,7 @@ String _connectivityLabel(ManagedDevice device) {
     'connected' => '在线',
     'offline' => '离线',
     'disconnected' => '离线',
+    'removed' => '已移除',
     '' => '未知',
     _ => device.connectivityState,
   };

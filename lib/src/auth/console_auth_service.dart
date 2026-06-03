@@ -184,6 +184,8 @@ class ManagedDevice {
     required this.hostname,
     required this.approvalState,
     required this.connectivityState,
+    this.lifecycleState = '',
+    this.desiredState = '',
   });
 
   final String id;
@@ -191,9 +193,21 @@ class ManagedDevice {
   final String hostname;
   final String approvalState;
   final String connectivityState;
+  final String lifecycleState;
+  final String desiredState;
 
   bool get approved => approvalState.toLowerCase() == 'approved';
   bool get online => connectivityState.toLowerCase() == 'online';
+  bool get removed {
+    final approval = approvalState.toLowerCase();
+    final connectivity = connectivityState.toLowerCase();
+    final lifecycle = lifecycleState.toLowerCase();
+    final desired = desiredState.toLowerCase();
+    return approval == 'removed' ||
+        connectivity == 'removed' ||
+        lifecycle == 'deleted' ||
+        desired == 'absent';
+  }
 }
 
 class AttachNetworkResult {
@@ -579,9 +593,12 @@ class ConsoleAuthService implements AuthService {
             hostname: hostname,
             approvalState: item['approval_state']?.toString() ?? '',
             connectivityState: item['connectivity_state']?.toString() ?? '',
+            lifecycleState: item['lifecycle_state']?.toString() ?? '',
+            desiredState: item['desired_state']?.toString() ?? '',
           );
         })
         .whereType<ManagedDevice>()
+        .where((device) => !device.removed)
         .toList(growable: false);
   }
 

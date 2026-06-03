@@ -261,6 +261,15 @@ void main() {
           approvalState: 'pending',
           connectivityState: 'offline',
         ),
+        ManagedDevice(
+          id: 'device-removed',
+          machineId: 'machine-removed',
+          hostname: 'old-desktop',
+          approvalState: 'removed',
+          connectivityState: 'offline',
+          lifecycleState: 'deleted',
+          desiredState: 'absent',
+        ),
       ],
       networkDevices: const <String, List<NetworkDevice>>{
         'net-1': <NetworkDevice>[
@@ -292,6 +301,7 @@ void main() {
 
     expect(find.text('desktop-1'), findsOneWidget);
     expect(find.text('laptop-2'), findsOneWidget);
+    expect(find.text('old-desktop'), findsNothing);
     expect(find.text('node-alias'), findsNothing);
     expect(find.text('1 / 2 台在线'), findsOneWidget);
   });
@@ -374,6 +384,26 @@ void main() {
               'hostname': 'desktop-1',
               'approval_state': 'approved',
               'connectivity_state': 'online',
+              'lifecycle_state': 'active',
+              'desired_state': 'present',
+            },
+            {
+              'id': 'device-removed',
+              'machine_id': 'machine-removed',
+              'hostname': 'old-desktop',
+              'approval_state': 'removed',
+              'connectivity_state': 'offline',
+              'lifecycle_state': 'deleted',
+              'desired_state': 'absent',
+            },
+            {
+              'id': 'device-absent',
+              'machine_id': 'machine-absent',
+              'hostname': 'old-laptop',
+              'approval_state': 'approved',
+              'connectivity_state': 'offline',
+              'lifecycle_state': 'active',
+              'desired_state': 'absent',
             },
           ]);
         }
@@ -392,6 +422,7 @@ void main() {
     expect(devices.single.machineId, 'machine-1');
     expect(devices.single.approved, isTrue);
     expect(devices.single.online, isTrue);
+    expect(devices.single.removed, isFalse);
   });
 
   test(
