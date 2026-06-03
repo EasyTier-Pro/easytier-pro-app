@@ -116,12 +116,14 @@ class ConsoleNetwork {
     required this.id,
     required this.name,
     this.regions = const <String>[],
+    this.runtimeNetworkName = '',
     this.lifecycleState = '',
   });
 
   final String id;
   final String name;
   final List<String> regions;
+  final String runtimeNetworkName;
   final String lifecycleState;
 }
 
@@ -527,8 +529,8 @@ class ConsoleAuthService implements AuthService {
 
   static ConsoleNetwork? _networkFromJson(Map<String, dynamic> item) {
     final id = item['id']?.toString() ?? '';
-    final name =
-        item['name']?.toString() ?? item['network_name']?.toString() ?? '';
+    final runtimeNetworkName = item['network_name']?.toString().trim() ?? '';
+    final name = item['name']?.toString() ?? runtimeNetworkName;
     if (id.isEmpty || name.isEmpty) {
       return null;
     }
@@ -540,6 +542,7 @@ class ConsoleAuthService implements AuthService {
       id: id,
       name: name,
       regions: regions,
+      runtimeNetworkName: runtimeNetworkName,
       lifecycleState: item['lifecycle_state']?.toString() ?? '',
     );
   }

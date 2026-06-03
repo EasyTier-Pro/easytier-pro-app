@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -72,6 +72,88 @@ void main() {
     expect(find.text('本机 IP 10.144.0.2'), findsNothing);
     expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
     expect(find.widgetWithText(FButton, '退出'), findsOneWidget);
+  });
+
+  testWidgets('shows realtime traffic after joining a network', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 3072,
+            uploadBytes: 6144,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '加入'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('计算中'), findsOneWidget);
+    expect(find.textContaining('累计 下载 1.00 KiB / 上传 2.00 KiB'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(
+      find.textContaining('下载 1.00 KiB/s / 上传 2.00 KiB/s'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('累计 下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '详情'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.text('累计流量'), findsOneWidget);
+    expect(find.text('下载 1.00 KiB/s / 上传 2.00 KiB/s'), findsOneWidget);
+    expect(find.text('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('shows create network flow when workspace has no networks', (
@@ -153,6 +235,46 @@ void main() {
     expect(machineId, 'machine-1');
   });
 
+  test('parses self traffic stats by runtime network name', () {
+    final sampledAt = DateTime.utc(2026, 1, 1);
+    final totals = CoreLifecycleService.parseNetworkTrafficTotalsFromJson(
+      jsonEncode([
+        {
+          'name': 'traffic_bytes_self_rx',
+          'value': 1024,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_self_tx',
+          'value': 2048,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_control_bytes_rx',
+          'value': 9999,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_rx',
+          'value': 9999,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_self_rx',
+          'value': 9999,
+          'labels': {'network_name': '__access__'},
+        },
+      ]),
+      sampledAt: sampledAt,
+    );
+
+    expect(totals.length, 1);
+    expect(totals.containsKey('__access__'), isFalse);
+    expect(totals['nt-office']?.downloadBytes, 1024);
+    expect(totals['nt-office']?.uploadBytes, 2048);
+    expect(totals['nt-office']?.sampledAt, sampledAt);
+  });
+
   test('console service decodes regions and managed devices', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -215,6 +337,7 @@ void main() {
             return _jsonResponse({
               'id': 'net-1',
               'name': '我的网络',
+              'network_name': 'nt-runtime',
               'regions': ['ap-east'],
             }, 201);
           }
@@ -255,6 +378,7 @@ void main() {
       );
 
       expect(network.id, 'net-1');
+      expect(network.runtimeNetworkName, 'nt-runtime');
       expect(attach.nodeId, 'node-1');
       expect(attach.operationId, 'op-1');
       expect(requests[0].method, 'POST');
@@ -457,9 +581,12 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   _NoopCoreLifecycleService({
     required super.authService,
     required this.machineId,
+    this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
   });
 
   final String? machineId;
+  final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
+  int _trafficReadCount = 0;
 
   @override
   Future<void> bindSession(AuthSession session) async {
@@ -482,5 +609,18 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
       message: '本机设备已就绪',
       machineId: machineId,
     );
+  }
+
+  @override
+  Future<Map<String, CoreNetworkTrafficTotals>>
+  readNetworkTrafficTotals() async {
+    if (trafficSamples.isEmpty) {
+      return const <String, CoreNetworkTrafficTotals>{};
+    }
+    final sampleIndex = _trafficReadCount < trafficSamples.length
+        ? _trafficReadCount
+        : trafficSamples.length - 1;
+    _trafficReadCount++;
+    return trafficSamples[sampleIndex];
   }
 }

@@ -47,6 +47,48 @@ class _JoinNetworkState {
   }
 }
 
+class _NetworkTrafficSnapshot {
+  const _NetworkTrafficSnapshot({
+    required this.downloadBytes,
+    required this.uploadBytes,
+    required this.sampledAt,
+    this.downloadBytesPerSecond,
+    this.uploadBytesPerSecond,
+  });
+
+  final int downloadBytes;
+  final int uploadBytes;
+  final DateTime sampledAt;
+  final double? downloadBytesPerSecond;
+  final double? uploadBytesPerSecond;
+
+  static _NetworkTrafficSnapshot fromTotals(
+    CoreNetworkTrafficTotals totals, {
+    CoreNetworkTrafficTotals? previous,
+  }) {
+    double? downloadRate;
+    double? uploadRate;
+    final elapsedMilliseconds = previous == null
+        ? 0
+        : totals.sampledAt.difference(previous.sampledAt).inMilliseconds;
+    if (previous != null && elapsedMilliseconds > 0) {
+      final elapsedSeconds = elapsedMilliseconds / 1000;
+      final downloadDelta = totals.downloadBytes - previous.downloadBytes;
+      final uploadDelta = totals.uploadBytes - previous.uploadBytes;
+      downloadRate = (downloadDelta < 0 ? 0 : downloadDelta) / elapsedSeconds;
+      uploadRate = (uploadDelta < 0 ? 0 : uploadDelta) / elapsedSeconds;
+    }
+
+    return _NetworkTrafficSnapshot(
+      downloadBytes: totals.downloadBytes,
+      uploadBytes: totals.uploadBytes,
+      sampledAt: totals.sampledAt,
+      downloadBytesPerSecond: downloadRate,
+      uploadBytesPerSecond: uploadRate,
+    );
+  }
+}
+
 class WorkspaceHomeView extends StatefulWidget {
   const WorkspaceHomeView({
     super.key,
@@ -68,6 +110,7 @@ class WorkspaceHomeView extends StatefulWidget {
 class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   static const Duration _devicePollDelay = Duration(seconds: 1);
   static const int _devicePollAttempts = 60;
+  static const Duration _trafficPollInterval = Duration(seconds: 2);
 
   List<ConsoleNetwork> _networks = const <ConsoleNetwork>[];
   List<ConsoleRegion> _regions = const <ConsoleRegion>[];
@@ -87,6 +130,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   String? _selectedRegionCode;
   int _networkRequestId = 0;
   int _regionRequestId = 0;
+  Timer? _trafficPollTimer;
+  bool _isTrafficPollInFlight = false;
+  Set<String> _trafficPollNetworkIds = const <String>{};
+  Map<String, _NetworkTrafficSnapshot> _networkTraffic =
+      const <String, _NetworkTrafficSnapshot>{};
+  Map<String, CoreNetworkTrafficTotals> _previousTrafficTotals =
+      const <String, CoreNetworkTrafficTotals>{};
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -140,6 +190,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   @override
   void dispose() {
+    _trafficPollTimer?.cancel();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     super.dispose();
   }
@@ -149,6 +200,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return;
     }
     setState(() {});
+    _refreshTrafficPolling();
   }
 
   Future<void> _loadInitialData() async {
@@ -194,6 +246,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _networks = const <ConsoleNetwork>[];
         _selectedNetworkId = null;
       });
+      _refreshTrafficPolling();
       return;
     }
 
@@ -224,6 +277,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _selectedNetworkId = selectedId;
         _isLoadingNetworks = false;
       });
+      _refreshTrafficPolling();
       unawaited(_loadNetworkDevices(networks));
     } catch (error) {
       if (!mounted || requestId != _networkRequestId) {
@@ -267,6 +321,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _networkDevices = Map<String, List<NetworkDevice>>.fromEntries(results);
     });
+    _refreshTrafficPolling();
   }
 
   Future<void> _loadSingleNetworkDevices(String networkId) async {
@@ -285,6 +340,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _networkDevices = {..._networkDevices, networkId: devices};
     });
+    _refreshTrafficPolling();
   }
 
   Future<void> _createNetwork() async {
@@ -524,6 +580,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _joinStates = {..._joinStates, networkId: state};
     });
+    _refreshTrafficPolling();
   }
 
   void _setJoinError(String networkId, String message) {
@@ -546,6 +603,175 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       };
       _joinStates = {..._joinStates, networkId: _JoinNetworkState.idle};
     });
+    _refreshTrafficPolling();
+  }
+
+  List<ConsoleNetwork> _trafficPollNetworks() {
+    if (!widget.coreLifecycleService.status.value.isRunning) {
+      return const <ConsoleNetwork>[];
+    }
+    return _networks
+        .where((network) {
+          if (network.runtimeNetworkName.trim().isEmpty) {
+            return false;
+          }
+          return _joinStateFor(network).phase == _JoinPhase.joined;
+        })
+        .toList(growable: false);
+  }
+
+  void _refreshTrafficPolling() {
+    if (!mounted) {
+      return;
+    }
+
+    final networks = _trafficPollNetworks();
+    if (networks.isEmpty) {
+      _stopTrafficPolling(clearSnapshots: true);
+      return;
+    }
+
+    final nextNetworkIds = networks.map((network) => network.id).toSet();
+    final nextRuntimeNames = networks
+        .map((network) => network.runtimeNetworkName.trim())
+        .toSet();
+    final pollTargetsChanged = !setEquals(
+      _trafficPollNetworkIds,
+      nextNetworkIds,
+    );
+    _trafficPollNetworkIds = nextNetworkIds;
+    _pruneTrafficState(nextNetworkIds, nextRuntimeNames);
+
+    if (_trafficPollTimer == null) {
+      _trafficPollTimer = Timer.periodic(
+        _trafficPollInterval,
+        (_) => unawaited(_pollNetworkTraffic()),
+      );
+      unawaited(_pollNetworkTraffic());
+    } else if (pollTargetsChanged) {
+      unawaited(_pollNetworkTraffic());
+    }
+  }
+
+  void _stopTrafficPolling({required bool clearSnapshots}) {
+    _trafficPollTimer?.cancel();
+    _trafficPollTimer = null;
+    _trafficPollNetworkIds = const <String>{};
+    _previousTrafficTotals = const <String, CoreNetworkTrafficTotals>{};
+    if (!clearSnapshots || _networkTraffic.isEmpty || !mounted) {
+      return;
+    }
+    setState(() {
+      _networkTraffic = const <String, _NetworkTrafficSnapshot>{};
+    });
+  }
+
+  void _pruneTrafficState(
+    Set<String> activeNetworkIds,
+    Set<String> activeRuntimeNames,
+  ) {
+    var changed = false;
+    final nextTraffic = Map<String, _NetworkTrafficSnapshot>.from(
+      _networkTraffic,
+    );
+    nextTraffic.removeWhere((networkId, _) {
+      final remove = !activeNetworkIds.contains(networkId);
+      changed = changed || remove;
+      return remove;
+    });
+
+    final nextPrevious = Map<String, CoreNetworkTrafficTotals>.from(
+      _previousTrafficTotals,
+    );
+    nextPrevious.removeWhere((runtimeName, _) {
+      final remove = !activeRuntimeNames.contains(runtimeName);
+      changed = changed || remove;
+      return remove;
+    });
+
+    if (!changed || !mounted) {
+      return;
+    }
+    setState(() {
+      _networkTraffic = nextTraffic;
+      _previousTrafficTotals = nextPrevious;
+    });
+  }
+
+  Future<void> _pollNetworkTraffic() async {
+    if (_isTrafficPollInFlight || !mounted) {
+      return;
+    }
+    var networks = _trafficPollNetworks();
+    if (networks.isEmpty) {
+      _refreshTrafficPolling();
+      return;
+    }
+
+    _isTrafficPollInFlight = true;
+    try {
+      final totalsByRuntimeName = await widget.coreLifecycleService
+          .readNetworkTrafficTotals();
+      if (!mounted) {
+        return;
+      }
+
+      networks = _trafficPollNetworks();
+      if (networks.isEmpty) {
+        _refreshTrafficPolling();
+        return;
+      }
+
+      final activeNetworkIds = networks.map((network) => network.id).toSet();
+      final activeRuntimeNames = networks
+          .map((network) => network.runtimeNetworkName.trim())
+          .toSet();
+      final nextTraffic = Map<String, _NetworkTrafficSnapshot>.from(
+        _networkTraffic,
+      );
+      final nextPrevious = Map<String, CoreNetworkTrafficTotals>.from(
+        _previousTrafficTotals,
+      );
+
+      for (final network in networks) {
+        final runtimeName = network.runtimeNetworkName.trim();
+        final totals = totalsByRuntimeName[runtimeName];
+        if (totals == null) {
+          nextTraffic.remove(network.id);
+          nextPrevious.remove(runtimeName);
+          continue;
+        }
+
+        final previous = nextPrevious[runtimeName];
+        nextTraffic[network.id] = _NetworkTrafficSnapshot.fromTotals(
+          totals,
+          previous: previous,
+        );
+        nextPrevious[runtimeName] = totals;
+      }
+
+      nextTraffic.removeWhere(
+        (networkId, _) => !activeNetworkIds.contains(networkId),
+      );
+      nextPrevious.removeWhere(
+        (runtimeName, _) => !activeRuntimeNames.contains(runtimeName),
+      );
+
+      setState(() {
+        _networkTraffic = nextTraffic;
+        _previousTrafficTotals = nextPrevious;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _networkTraffic = const <String, _NetworkTrafficSnapshot>{};
+        _previousTrafficTotals = const <String, CoreNetworkTrafficTotals>{};
+      });
+    } finally {
+      _isTrafficPollInFlight = false;
+    }
   }
 
   void _openNetworkDetail(ConsoleNetwork network) {
@@ -705,6 +931,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             subtitle: '选择要让本机设备加入的网络。',
             networks: _networks,
             networkDevices: _networkDevices,
+            trafficByNetworkId: _networkTraffic,
             joinStateFor: _joinStateFor,
             onJoin: _joinNetwork,
             onLeave: _leaveNetwork,
@@ -750,6 +977,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       subtitle: '每个网络都可以单独加入。',
       networks: _networks,
       networkDevices: _networkDevices,
+      trafficByNetworkId: _networkTraffic,
       joinStateFor: _joinStateFor,
       onJoin: _joinNetwork,
       onLeave: _leaveNetwork,
@@ -802,6 +1030,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           workspaceName: _workspace?.name ?? '未关联工作区',
           totalDevices: devices.length,
           onlineDevices: onlineCount,
+          traffic: _networkTraffic[network.id],
         ),
         const SizedBox(height: 16),
         _DeviceListPanel(deviceCount: devices.length, devices: devices),
@@ -861,6 +1090,49 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
   }
+}
+
+String _formatTrafficSummary(_NetworkTrafficSnapshot? traffic) {
+  if (traffic == null) {
+    return '流量统计暂不可用';
+  }
+  return '实时 ${_formatRealtimeTraffic(traffic)} | 累计 ${_formatTotalTraffic(traffic)}';
+}
+
+String _formatRealtimeTraffic(_NetworkTrafficSnapshot? traffic) {
+  if (traffic == null) {
+    return '流量统计暂不可用';
+  }
+  return '下载 ${_formatTrafficRate(traffic.downloadBytesPerSecond)} / 上传 ${_formatTrafficRate(traffic.uploadBytesPerSecond)}';
+}
+
+String _formatTotalTraffic(_NetworkTrafficSnapshot? traffic) {
+  if (traffic == null) {
+    return '流量统计暂不可用';
+  }
+  return '下载 ${_formatBytes(traffic.downloadBytes)} / 上传 ${_formatBytes(traffic.uploadBytes)}';
+}
+
+String _formatTrafficRate(double? bytesPerSecond) {
+  if (bytesPerSecond == null) {
+    return '计算中';
+  }
+  return '${_formatBytes(bytesPerSecond)}/s';
+}
+
+String _formatBytes(num bytes) {
+  const units = <String>['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  var value = bytes.toDouble();
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value = value / 1024;
+    unitIndex++;
+  }
+  if (unitIndex == 0) {
+    return '${value.round()} ${units[unitIndex]}';
+  }
+  final decimals = value >= 10 ? 1 : 2;
+  return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
 }
 
 class _DashboardHeader extends StatelessWidget {
@@ -1267,6 +1539,7 @@ class _NetworkJoinList extends StatelessWidget {
     required this.subtitle,
     required this.networks,
     required this.networkDevices,
+    required this.trafficByNetworkId,
     required this.joinStateFor,
     required this.onJoin,
     required this.onLeave,
@@ -1278,6 +1551,7 @@ class _NetworkJoinList extends StatelessWidget {
   final String subtitle;
   final List<ConsoleNetwork> networks;
   final Map<String, List<NetworkDevice>> networkDevices;
+  final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
   final _JoinNetworkState Function(ConsoleNetwork network) joinStateFor;
   final Future<void> Function(ConsoleNetwork network) onJoin;
   final Future<void> Function(ConsoleNetwork network) onLeave;
@@ -1307,6 +1581,7 @@ class _NetworkJoinList extends StatelessWidget {
                 network: network,
                 devices: networkDevices[network.id] ?? const <NetworkDevice>[],
                 state: joinStateFor(network),
+                traffic: trafficByNetworkId[network.id],
                 onJoin: () => unawaited(onJoin(network)),
                 onLeave: () => unawaited(onLeave(network)),
                 onOpen: () => onOpen(network),
@@ -1325,6 +1600,7 @@ class _NetworkJoinCard extends StatelessWidget {
     required this.network,
     required this.devices,
     required this.state,
+    required this.traffic,
     required this.onJoin,
     required this.onLeave,
     required this.onOpen,
@@ -1333,6 +1609,7 @@ class _NetworkJoinCard extends StatelessWidget {
   final ConsoleNetwork network;
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
+  final _NetworkTrafficSnapshot? traffic;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onOpen;
@@ -1410,6 +1687,13 @@ class _NetworkJoinCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFF0F172A),
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTrafficSummary(traffic),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF0F172A),
                       ),
                     ),
                   ],
@@ -1663,12 +1947,14 @@ class _NetworkInfoPanel extends StatelessWidget {
     required this.workspaceName,
     required this.totalDevices,
     required this.onlineDevices,
+    required this.traffic,
   });
 
   final ConsoleNetwork network;
   final String workspaceName;
   final int totalDevices;
   final int onlineDevices;
+  final _NetworkTrafficSnapshot? traffic;
 
   @override
   Widget build(BuildContext context) {
@@ -1703,6 +1989,16 @@ class _NetworkInfoPanel extends StatelessWidget {
                 prefix: const Icon(Icons.devices_other_outlined),
                 title: const Text('设备'),
                 details: Text('$onlineDevices / $totalDevices 在线'),
+              ),
+              FItem(
+                prefix: const Icon(Icons.speed_outlined),
+                title: const Text('实时流量'),
+                details: Text(_formatRealtimeTraffic(traffic)),
+              ),
+              FItem(
+                prefix: const Icon(Icons.swap_vert_outlined),
+                title: const Text('累计流量'),
+                details: Text(_formatTotalTraffic(traffic)),
               ),
             ],
           ),

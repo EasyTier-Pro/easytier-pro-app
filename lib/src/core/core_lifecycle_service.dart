@@ -17,6 +17,7 @@ class _DesktopCoreStatus {
     this.machineId,
     this.version,
     this.serviceState,
+    this.cliPath,
   });
 
   final bool ready;
@@ -25,6 +26,7 @@ class _DesktopCoreStatus {
   final String? machineId;
   final String? version;
   final String? serviceState;
+  final String? cliPath;
 
   static _DesktopCoreStatus fromEvent(Map<String, dynamic> event) {
     final data = event['data'];
@@ -38,6 +40,7 @@ class _DesktopCoreStatus {
       machineId: _readString(values['machine_id']),
       version: _readString(values['version']),
       serviceState: _readString(values['service_state']),
+      cliPath: _readString(values['cli_path']),
     );
   }
 
@@ -53,6 +56,27 @@ class _DesktopCoreStatus {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
   }
+}
+
+class CoreNetworkTrafficTotals {
+  const CoreNetworkTrafficTotals({
+    required this.runtimeNetworkName,
+    required this.downloadBytes,
+    required this.uploadBytes,
+    required this.sampledAt,
+  });
+
+  final String runtimeNetworkName;
+  final int downloadBytes;
+  final int uploadBytes;
+  final DateTime sampledAt;
+}
+
+class _MutableNetworkTrafficTotals {
+  int downloadBytes = 0;
+  int uploadBytes = 0;
+  bool hasDownloadBytes = false;
+  bool hasUploadBytes = false;
 }
 
 class CoreRunStatus {
@@ -88,6 +112,7 @@ class CoreLifecycleService {
 
   AuthSession? _session;
   Future<void> _serial = Future<void>.value();
+  String? _cliPath;
 
   Future<void> bindSession(AuthSession session) {
     return _enqueue(() async {
@@ -128,6 +153,7 @@ class CoreLifecycleService {
       );
       try {
         await _desktopCommand('uninstall', const {'purge': false});
+        _cliPath = null;
         _logger.info(
           'core',
           'Logout cleanup completed',
@@ -160,6 +186,40 @@ class CoreLifecycleService {
       _logger.info('core', 'Manual repair requested');
       await _ensureRunning(forceReinstall: true);
     });
+  }
+
+  Future<Map<String, CoreNetworkTrafficTotals>>
+  readNetworkTrafficTotals() async {
+    final cliExecutable = _resolveCliExecutable();
+    _logger.debug(
+      'core.stats',
+      'Reading EasyTier traffic stats',
+      context: {'executable': cliExecutable},
+    );
+
+    final process = await Process.start(cliExecutable, ['-o', 'json', 'stats']);
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill();
+        throw TimeoutException('easytier-cli stats 执行超时');
+      },
+    );
+    final stdoutText = await stdoutFuture;
+    final stderrText = (await stderrFuture).trim();
+
+    if (exitCode != 0) {
+      throw StateError(
+        stderrText.isEmpty
+            ? 'easytier-cli stats 执行失败 (exit=$exitCode)'
+            : stderrText,
+      );
+    }
+
+    return parseNetworkTrafficTotalsFromJson(stdoutText);
   }
 
   Future<void> _ensureRunning({required bool forceReinstall}) async {
@@ -247,6 +307,7 @@ class CoreLifecycleService {
         'config_server': bootstrap.configServer,
       });
       final machineId = parseMachineIdFromDesktopEvent(installEvent);
+      _rememberCliPath(parseCliPathFromDesktopEvent(installEvent));
       _logger.info(
         'core',
         'Desktop install completed',
@@ -287,6 +348,7 @@ class CoreLifecycleService {
         'config_server': bootstrap.configServer,
       });
       final desktopStatus = _DesktopCoreStatus.fromEvent(event);
+      _rememberCliPath(desktopStatus.cliPath);
       _logger.info(
         'core.desktop',
         'Desktop status loaded',
@@ -427,6 +489,99 @@ class CoreLifecycleService {
     return machineId.isEmpty ? null : machineId;
   }
 
+  @visibleForTesting
+  static String? parseCliPathFromDesktopEvent(Map<String, dynamic> event) {
+    final data = event['data'];
+    if (data is! Map<String, dynamic>) {
+      return null;
+    }
+    final cliPath = data['cli_path']?.toString().trim() ?? '';
+    return cliPath.isEmpty ? null : cliPath;
+  }
+
+  @visibleForTesting
+  static Map<String, CoreNetworkTrafficTotals>
+  parseNetworkTrafficTotalsFromJson(String output, {DateTime? sampledAt}) {
+    final decoded = jsonDecode(output);
+    if (decoded is! List<dynamic>) {
+      throw const FormatException('easytier-cli stats JSON 必须是数组');
+    }
+
+    final collected = <String, _MutableNetworkTrafficTotals>{};
+    for (final item in decoded) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      final metricName = item['name']?.toString().trim() ?? '';
+      if (metricName != 'traffic_bytes_self_rx' &&
+          metricName != 'traffic_bytes_self_tx') {
+        continue;
+      }
+
+      final labels = item['labels'];
+      if (labels is! Map<String, dynamic>) {
+        continue;
+      }
+      final runtimeNetworkName =
+          labels['network_name']?.toString().trim() ?? '';
+      if (runtimeNetworkName.isEmpty || runtimeNetworkName == '__access__') {
+        continue;
+      }
+
+      final value = _readInt(item['value']);
+      if (value == null) {
+        continue;
+      }
+
+      final totals = collected.putIfAbsent(
+        runtimeNetworkName,
+        _MutableNetworkTrafficTotals.new,
+      );
+      if (metricName == 'traffic_bytes_self_rx') {
+        totals.downloadBytes = value;
+        totals.hasDownloadBytes = true;
+      } else {
+        totals.uploadBytes = value;
+        totals.hasUploadBytes = true;
+      }
+    }
+
+    final sampleTime = sampledAt ?? DateTime.now();
+    return collected.map((runtimeNetworkName, totals) {
+      return MapEntry(
+        runtimeNetworkName,
+        CoreNetworkTrafficTotals(
+          runtimeNetworkName: runtimeNetworkName,
+          downloadBytes: totals.hasDownloadBytes ? totals.downloadBytes : 0,
+          uploadBytes: totals.hasUploadBytes ? totals.uploadBytes : 0,
+          sampledAt: sampleTime,
+        ),
+      );
+    });
+  }
+
+  static int? _readInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+    return num.tryParse(text)?.toInt();
+  }
+
+  void _rememberCliPath(String? cliPath) {
+    final value = cliPath?.trim();
+    if (value == null || value.isEmpty) {
+      return;
+    }
+    _cliPath = value;
+  }
+
   String _resolveInstallerExecutable() {
     final bundledCandidates = _bundledInstallerCandidates();
     final bundled = _firstExistingFile(bundledCandidates);
@@ -464,6 +619,18 @@ class CoreLifecycleService {
     return 'easytier-pro-installer';
   }
 
+  String _resolveCliExecutable() {
+    final override = Platform.environment['EASYTIER_CLI_PATH'];
+    final candidates = <String>[
+      if (_cliPath != null && _cliPath!.trim().isNotEmpty) _cliPath!.trim(),
+      if (override != null && override.trim().isNotEmpty) override.trim(),
+      ..._bundledCliCandidates(),
+      Platform.isWindows ? 'easytier-cli.exe' : 'easytier-cli',
+    ];
+    return _firstExistingFile(candidates) ??
+        (Platform.isWindows ? 'easytier-cli.exe' : 'easytier-cli');
+  }
+
   List<String> _bundledInstallerCandidates() {
     final executableFile = File(Platform.resolvedExecutable);
     final executableDir = executableFile.parent;
@@ -491,6 +658,32 @@ class CoreLifecycleService {
     return <String>[
       _joinPath(executableDir.path, 'easytier-pro-installer'),
       _joinPath(executableDir.path, 'lib', 'easytier-pro-installer'),
+    ];
+  }
+
+  List<String> _bundledCliCandidates() {
+    final executableFile = File(Platform.resolvedExecutable);
+    final executableDir = executableFile.parent;
+
+    if (Platform.isWindows) {
+      return <String>[
+        _joinPath(executableDir.path, 'easytier-cli.exe'),
+        _joinPath(executableDir.path, 'resources', 'easytier-cli.exe'),
+      ];
+    }
+
+    if (Platform.isMacOS) {
+      final macOsDir = executableDir;
+      final contentsDir = macOsDir.parent;
+      return <String>[
+        _joinPath(macOsDir.path, 'easytier-cli'),
+        _joinPath(contentsDir.path, 'Resources', 'easytier-cli'),
+      ];
+    }
+
+    return <String>[
+      _joinPath(executableDir.path, 'easytier-cli'),
+      _joinPath(executableDir.path, 'lib', 'easytier-cli'),
     ];
   }
 
