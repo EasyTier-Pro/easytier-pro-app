@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 
 const Duration appMotionShort = Duration(milliseconds: 160);
 const Duration appMotionMedium = Duration(milliseconds: 240);
+const Duration appSmoothScrollDuration = Duration(milliseconds: 420);
 const Curve appMotionCurve = Curves.easeOutCubic;
 const Curve appMotionReverseCurve = Curves.easeInCubic;
 const ScrollPhysics appScrollPhysics = BouncingScrollPhysics(
+  parent: RangeMaintainingScrollPhysics(),
+);
+const ScrollPhysics appSmoothScrollPhysics = ClampingScrollPhysics(
   parent: RangeMaintainingScrollPhysics(),
 );
 

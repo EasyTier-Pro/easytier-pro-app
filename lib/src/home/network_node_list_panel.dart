@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../shared/app_motion.dart';
+import '../shared/app_smooth_scroll_view.dart';
 
 const double _nodeListMinWidth = 360;
 
@@ -44,11 +45,10 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
             key: const ValueKey<String>('network-node-list-scrollbar'),
             controller: _scrollController,
             thumbVisibility: false,
-            child: SingleChildScrollView(
-              key: const ValueKey<String>('network-node-list-scroll'),
+            child: AppSmoothScrollView(
+              scrollViewKey: const ValueKey<String>('network-node-list-scroll'),
               controller: _scrollController,
               primary: false,
-              physics: appScrollPhysics,
               child: NetworkNodeListPanel(
                 nodes: widget.nodes,
                 peerStatusesByIpv4: widget.peerStatusesByIpv4,
@@ -209,9 +209,7 @@ class _NodeCardState extends State<_NodeCard> {
                         Expanded(
                           child: Text(
                             widget.node.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
+                            style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF0F172A),
@@ -222,9 +220,7 @@ class _NodeCardState extends State<_NodeCard> {
                         const SizedBox(width: 12),
                         Text(
                           isOnline ? '在线' : '离线',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: isOnline
                                     ? const Color(0xFF16A34A)
@@ -234,9 +230,7 @@ class _NodeCardState extends State<_NodeCard> {
                         ),
                         const SizedBox(width: 4),
                         Icon(
-                          _expanded
-                              ? Icons.expand_less
-                              : Icons.expand_more,
+                          _expanded ? Icons.expand_less : Icons.expand_more,
                           size: 18,
                           color: const Color(0xFF94A3B8),
                         ),
@@ -436,7 +430,14 @@ class _NodeMetaLine extends StatelessWidget {
 
       final latency = p.latencyText.trim();
       if (latency.isNotEmpty && latency != '-' && latency != '*') {
-        parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
+        parts.add(
+          latency.toLowerCase().endsWith('ms') ? latency : '$latency ms',
+        );
+      }
+
+      final peerId = p.peerId.trim();
+      if (peerId.isNotEmpty) {
+        parts.add('Peer: $peerId');
       }
 
       final loss = p.lossText.trim();
@@ -455,6 +456,8 @@ class _NodeMetaLine extends StatelessWidget {
       if (rx.isNotEmpty || tx.isNotEmpty) {
         parts.add('$rx $tx'.trim());
       }
+    } else {
+      parts.add('运行态未知');
     }
 
     return Text(

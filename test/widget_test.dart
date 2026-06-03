@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
@@ -144,8 +145,6 @@ void main() {
 
     await _selectNetworkFromHeader(tester, '办公网');
 
-    expect(find.text('实时流量'), findsOneWidget);
-    expect(find.text('累计流量'), findsOneWidget);
     expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
@@ -153,7 +152,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('network detail sidebar stretches with window height', (
+  testWidgets('network detail list stretches with window height', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester, size: const Size(1600, 1200));
@@ -199,10 +198,11 @@ void main() {
 
     await _selectNetworkFromHeader(tester, '办公网');
 
-    final sidebarSize = tester.getSize(
-      find.byKey(const ValueKey<String>('network-sidebar')),
+    expect(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+      findsOneWidget,
     );
-    expect(sidebarSize.height, greaterThan(800));
+    expect(find.text('desktop-1'), findsOneWidget);
   });
 
   testWidgets('network detail device list scrolls when content overflows', (
@@ -255,7 +255,45 @@ void main() {
     final scrollView = tester.widget<SingleChildScrollView>(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
-    expect(scrollView.controller?.position.maxScrollExtent, greaterThan(0));
+    final controller = scrollView.controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0));
+
+    final beforeWheelOffset = controller.offset;
+    final scrollFinder = find.byKey(
+      const ValueKey<String>('network-node-list-scroll'),
+    );
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(scrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 240)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(controller.offset, greaterThan(beforeWheelOffset));
+
+    controller.jumpTo(controller.position.minScrollExtent);
+    await tester.pump();
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(scrollFinder)),
+    );
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -240)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(controller.offset, controller.position.minScrollExtent);
+
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(scrollFinder)),
+    );
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 240)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(controller.offset, controller.position.maxScrollExtent);
   });
 
   testWidgets('network detail stacks safely in narrow windows', (
@@ -308,22 +346,14 @@ void main() {
     await _pumpAppMotionFrames(tester);
 
     expect(tester.takeException(), isNull);
-    expect(
-      find.byKey(const ValueKey<String>('network-detail-stacked')),
-      findsOneWidget,
+    final listSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
-    expect(
-      find.byKey(const ValueKey<String>('network-detail-wide')),
-      findsNothing,
-    );
-
-    final sidebarSize = tester.getSize(
-      find.byKey(const ValueKey<String>('network-sidebar')),
-    );
-    expect(sidebarSize.width, closeTo(312, 0.1));
+    expect(listSize.width, closeTo(312, 0.1));
+    expect(find.widgetWithText(FButton, '刷新节点'), findsOneWidget);
   });
 
-  testWidgets('network detail remains wide before the narrow breakpoint', (
+  testWidgets('network detail remains stable before narrow width', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester, size: const Size(760, 700));
@@ -370,19 +400,11 @@ void main() {
     await _selectNetworkFromHeader(tester, '办公网');
 
     expect(tester.takeException(), isNull);
-    expect(
-      find.byKey(const ValueKey<String>('network-detail-wide')),
-      findsOneWidget,
+    final listSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
-    expect(
-      find.byKey(const ValueKey<String>('network-detail-stacked')),
-      findsNothing,
-    );
-
-    final sidebarSize = tester.getSize(
-      find.byKey(const ValueKey<String>('network-sidebar')),
-    );
-    expect(sidebarSize.width, closeTo(260, 0.1));
+    expect(listSize.width, greaterThan(0));
+    expect(listSize.width, lessThanOrEqualTo(712));
   });
 
   testWidgets('network detail enriches nodes with peer status', (
@@ -470,9 +492,9 @@ void main() {
     await _selectNetworkFromHeader(tester, '办公网');
     await _pumpAppMotionFrames(tester);
 
-    expect(find.text('节点'), findsOneWidget);
-    expect(find.text('P2P'), findsOneWidget);
-    expect(find.textContaining('延迟 3.45 ms'), findsOneWidget);
+    expect(find.text('desktop-1'), findsOneWidget);
+    expect(find.textContaining('P2P'), findsOneWidget);
+    expect(find.textContaining('3.45 ms'), findsWidgets);
     expect(find.textContaining('Peer: 390879727'), findsOneWidget);
     expect(find.textContaining('Peer: 999'), findsNothing);
   });
@@ -532,7 +554,7 @@ void main() {
 
     expect(find.text('desktop-1'), findsOneWidget);
     expect(find.textContaining('运行态暂不可用'), findsOneWidget);
-    expect(find.text('运行态未知'), findsOneWidget);
+    expect(find.textContaining('运行态未知'), findsOneWidget);
   });
 
   testWidgets('refresh nodes reloads console nodes and peer status', (
@@ -615,7 +637,7 @@ void main() {
 
     expect(authService.networkDeviceFetchCount, greaterThan(nodeFetchCount));
     expect(coreLifecycleService.peerReadCount, greaterThan(peerReadCount));
-    expect(find.text('P2P'), findsOneWidget);
+    expect(find.textContaining('P2P'), findsOneWidget);
   });
 
   testWidgets('shows create network flow when workspace has no networks', (

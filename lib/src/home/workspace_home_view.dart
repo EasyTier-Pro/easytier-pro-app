@@ -10,6 +10,7 @@ import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
+import '../shared/app_smooth_scroll_view.dart';
 import 'network_node_list_panel.dart';
 
 enum _DashboardView { overview, network, devices, settings }
@@ -454,8 +455,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         constraints: const BoxConstraints(minWidth: 420, maxWidth: 560),
         builder: (context, _) => Padding(
           padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            physics: appScrollPhysics,
+          child: AppSmoothScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1091,9 +1091,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                             ),
                           ),
                         )
-                      : SingleChildScrollView(
+                      : AppSmoothScrollView(
                           padding: const EdgeInsets.all(24),
-                          physics: appScrollPhysics,
                           child: Center(
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 1040),
@@ -1263,41 +1262,59 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
-                      network.name,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FButton(
-                    variant: .outline,
-                    onPress: () => unawaited(_refreshNetworkNodes(network)),
-                    child: const Text('刷新节点'),
-                  ),
-                  const SizedBox(width: 8),
-                  if (joined)
-                    FButton(
-                      variant: .outline,
-                      onPress: () => unawaited(_leaveNetwork(network)),
-                      child: const Text('退出网络'),
-                    )
-                  else
-                    FButton(
-                      onPress: () => unawaited(_joinNetwork(network)),
-                      child: const Text('加入网络'),
-                    ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final title = Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                  final actions = Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FButton(
+                        variant: .outline,
+                        onPress: () => unawaited(_refreshNetworkNodes(network)),
+                        child: const Text('刷新节点'),
+                      ),
+                      if (joined)
+                        FButton(
+                          variant: .outline,
+                          onPress: () => unawaited(_leaveNetwork(network)),
+                          child: const Text('退出网络'),
+                        )
+                      else
+                        FButton(
+                          onPress: () => unawaited(_joinNetwork(network)),
+                          child: const Text('加入网络'),
+                        ),
+                    ],
+                  );
+
+                  if (constraints.maxWidth < 520) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [title, const SizedBox(height: 12), actions],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 12),
+                      actions,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 4),
               Text(
                 '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF94A3B8),
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
               ),
               const SizedBox(height: 12),
               _NetworkSummaryBar(
@@ -1422,7 +1439,7 @@ String _formatTotalTraffic(_NetworkTrafficSnapshot? traffic) {
   if (traffic == null) {
     return '流量统计暂不可用';
   }
-  return '↓${_formatBytes(traffic.downloadBytes)} ↑${_formatBytes(traffic.uploadBytes)}';
+  return '下载 ${_formatBytes(traffic.downloadBytes)} / 上传 ${_formatBytes(traffic.uploadBytes)}';
 }
 
 String _formatTrafficRate(double? bytesPerSecond) {
@@ -2358,29 +2375,27 @@ class _NetworkSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _SummaryItem(
           icon: Icons.circle,
           iconColor: const Color(0xFF16A34A),
           text: '$onlineDevices / $totalDevices 在线',
         ),
-        const SizedBox(width: 16),
         _SummaryItem(
           icon: Icons.arrow_downward,
           iconColor: const Color(0xFF16A34A),
           text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
         ),
-        const SizedBox(width: 16),
         _SummaryItem(
           icon: Icons.arrow_upward,
           iconColor: const Color(0xFF2563EB),
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
         ),
-        const SizedBox(width: 16),
-        _SummaryItem(
-          text: _formatTotalTraffic(traffic),
-        ),
+        _SummaryItem(text: _formatTotalTraffic(traffic)),
       ],
     );
   }
