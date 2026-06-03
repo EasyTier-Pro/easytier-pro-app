@@ -1146,7 +1146,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Expanded(child: _DeviceListPanel(devices: devices)),
+                    _DeviceListPanel(devices: devices),
                   ],
                 ),
               ),
