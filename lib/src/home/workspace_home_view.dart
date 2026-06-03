@@ -823,6 +823,14 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     });
   }
 
+  void _selectNetwork(String networkId) {
+    setState(() {
+      _selectedNetworkId = networkId;
+      _activeView = _DashboardView.network;
+    });
+    unawaited(_loadSingleNetworkDevices(networkId));
+  }
+
   void _showNetwork() {
     setState(() {
       _activeView = _DashboardView.network;
@@ -878,12 +886,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             userName: widget.session.user.effectiveName,
             workspaceName: workspaceName,
             activeView: _activeView,
-            networkCount: _networks.length,
+            networks: _networks,
             deviceCount: _totalDeviceCount,
             onlineDeviceCount: _onlineDeviceCount,
-            selectedNetworkName: _selectedNetwork?.name,
+            selectedNetworkId: _selectedNetworkId,
             onShowOverview: _showOverview,
-            onShowNetwork: _showNetwork,
+            onSelectNetwork: _selectNetwork,
             onShowDevices: _showDevices,
             onShowSettings: _showSettings,
             onLogout: widget.onLogout,
@@ -1035,13 +1043,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       children: [
         Row(
           children: [
-            _NetworkSelector(
-              networks: _networks,
-              selectedId: network.id,
-              onSelected: (id) {
-                setState(() => _selectedNetworkId = id);
-                unawaited(_loadSingleNetworkDevices(id));
-              },
+            Text(
+              network.name,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
             const Spacer(),
             if (joined)
@@ -1253,12 +1257,12 @@ class _DashboardHeader extends StatelessWidget {
     required this.userName,
     required this.workspaceName,
     required this.activeView,
-    required this.networkCount,
+    required this.networks,
     required this.deviceCount,
     required this.onlineDeviceCount,
-    required this.selectedNetworkName,
+    required this.selectedNetworkId,
     required this.onShowOverview,
-    required this.onShowNetwork,
+    required this.onSelectNetwork,
     required this.onShowDevices,
     required this.onShowSettings,
     required this.onLogout,
@@ -1268,12 +1272,12 @@ class _DashboardHeader extends StatelessWidget {
   final String userName;
   final String workspaceName;
   final _DashboardView activeView;
-  final int networkCount;
+  final List<ConsoleNetwork> networks;
   final int deviceCount;
   final int onlineDeviceCount;
-  final String? selectedNetworkName;
+  final String? selectedNetworkId;
   final VoidCallback onShowOverview;
-  final VoidCallback onShowNetwork;
+  final ValueChanged<String> onSelectNetwork;
   final VoidCallback onShowDevices;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
@@ -1297,41 +1301,54 @@ class _DashboardHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Text('EasyTier Pro', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(width: 16),
-          FButton(
-            variant: activeView == _DashboardView.overview
-                ? .secondary
-                : .ghost,
-            size: .sm,
-            onPress: onShowOverview,
-            child: const Text('首页'),
-          ),
-          const SizedBox(width: 6),
-          FButton(
-            variant: activeView == _DashboardView.network ? .secondary : .ghost,
-            size: .sm,
-            onPress: onShowNetwork,
-            child: Text(
-              activeView == _DashboardView.network &&
-                      selectedNetworkName != null &&
-                      selectedNetworkName!.isNotEmpty
-                  ? selectedNetworkName!
-                  : '网络',
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  FButton(
+                    variant: activeView == _DashboardView.overview
+                        ? .secondary
+                        : .ghost,
+                    size: .sm,
+                    onPress: onShowOverview,
+                    child: const Text('首页'),
+                  ),
+                  for (final network in networks) ...[
+                    const SizedBox(width: 6),
+                    FButton(
+                      variant: activeView == _DashboardView.network &&
+                              selectedNetworkId == network.id
+                          ? .secondary
+                          : .ghost,
+                      size: .sm,
+                      onPress: () => onSelectNetwork(network.id),
+                      child: Text(network.name),
+                    ),
+                  ],
+                  const SizedBox(width: 6),
+                  FButton(
+                    variant: activeView == _DashboardView.devices
+                        ? .secondary
+                        : .ghost,
+                    size: .sm,
+                    onPress: onShowDevices,
+                    child: const Text('设备'),
+                  ),
+                  const SizedBox(width: 6),
+                  FButton(
+                    variant: activeView == _DashboardView.settings
+                        ? .secondary
+                        : .ghost,
+                    size: .sm,
+                    onPress: onShowSettings,
+                    child: const Text('设置'),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 6),
-          FButton(
-            variant: activeView == _DashboardView.devices ? .secondary : .ghost,
-            size: .sm,
-            onPress: onShowDevices,
-            child: const Text('设备'),
-          ),
-          const Spacer(),
-          _HeaderMetric(
-            label: '网络',
-            value: '$networkCount',
-            icon: Icons.hub_outlined,
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 16),
           _HeaderMetric(
             label: '设备',
             value: '$deviceCount',
@@ -1567,66 +1584,6 @@ class _StatusBadge extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _NetworkSelector extends StatelessWidget {
-  const _NetworkSelector({
-    required this.networks,
-    required this.selectedId,
-    required this.onSelected,
-  });
-
-  final List<ConsoleNetwork> networks;
-  final String selectedId;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = networks.firstWhere((n) => n.id == selectedId);
-
-    return Material(
-      color: Colors.transparent,
-      child: PopupMenuButton<String>(
-        offset: const Offset(0, 40),
-        onSelected: onSelected,
-        itemBuilder: (context) => [
-          for (final network in networks)
-            PopupMenuItem<String>(
-              value: network.id,
-              child: Text(network.name),
-            ),
-        ],
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FB),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.hub_outlined, size: 16, color: Color(0xFF64748B)),
-              const SizedBox(width: 8),
-              Text(
-                selected.name,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0F172A),
-                    ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.expand_more,
-                size: 18,
-                color: Color(0xFF64748B),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

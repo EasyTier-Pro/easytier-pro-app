@@ -48,8 +48,8 @@ void main() {
 
     expect(find.text('已在线'), findsOneWidget);
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
-    expect(find.text('办公网'), findsOneWidget);
-    expect(find.text('研发网'), findsOneWidget);
+    expect(find.text('办公网'), findsNWidgets(2));
+    expect(find.text('研发网'), findsNWidgets(2));
     expect(find.byType(Switch), findsNWidgets(2));
 
     await tester.tap(find.byType(Switch).first);
@@ -141,7 +141,7 @@ void main() {
     expect(find.textContaining('1.00 KiB/s'), findsNWidgets(2));
     expect(find.textContaining('2.00 KiB/s'), findsNWidgets(2));
 
-    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.tap(find.widgetWithText(FButton, '办公网'));
     await tester.pumpAndSettle();
 
     expect(find.text('实时流量'), findsOneWidget);
@@ -180,7 +180,7 @@ void main() {
     expect(authService.createdNetworkNames, <String>['我的网络']);
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
 
-    expect(find.text('我的网络'), findsOneWidget);
+    expect(find.text('我的网络'), findsNWidgets(2));
     expect(find.byType(Switch), findsOneWidget);
   });
 
