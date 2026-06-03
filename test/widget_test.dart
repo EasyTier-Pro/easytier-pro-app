@@ -343,6 +343,48 @@ void main() {
     expect(find.text('办公网'), findsNothing);
   });
 
+  testWidgets('keeps network tab width stable for short and long names', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    const longNetworkName = 'very-long-network-name-that-should-be-truncated';
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-short', name: 'A', regions: ['ap-east']),
+        ConsoleNetwork(
+          id: 'net-long',
+          name: longNetworkName,
+          regions: ['ap-east'],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var labelSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-tab-label')),
+    );
+    expect(labelSize.width, greaterThanOrEqualTo(88));
+
+    await _selectNetworkFromHeader(tester, longNetworkName);
+
+    labelSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-tab-label')),
+    );
+    expect(labelSize.width, greaterThanOrEqualTo(88));
+    expect(labelSize.width, lessThanOrEqualTo(132.1));
+  });
+
   testWidgets('shows approval blocker before attaching a device', (
     WidgetTester tester,
   ) async {

@@ -1511,6 +1511,9 @@ class _NetworkTabButton extends StatelessWidget {
     required this.onOpenMenu,
   });
 
+  static const double _labelMinWidth = 88;
+  static const double _labelMaxWidth = 132;
+
   final bool active;
   final String label;
   final VoidCallback onSelect;
@@ -1532,7 +1535,11 @@ class _NetworkTabButton extends StatelessWidget {
             child: Icon(Icons.expand_more, size: 16),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 132),
+            key: const ValueKey<String>('network-tab-label'),
+            constraints: const BoxConstraints(
+              minWidth: _labelMinWidth,
+              maxWidth: _labelMaxWidth,
+            ),
             child: Text(label, overflow: TextOverflow.ellipsis),
           ),
         ),
