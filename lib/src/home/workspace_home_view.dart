@@ -946,13 +946,16 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CoreStatusPanel(
+        _HeroStatusPanel(
           statusListenable: widget.coreLifecycleService.status,
           workspaceName: _workspace?.name ?? '未关联工作区',
+          joinedCount: joinedNetworks.length,
+          downloadRate: totalDownloadRate,
+          uploadRate: totalUploadRate,
           onRepair: () => unawaited(widget.coreLifecycleService.repair()),
           onExportLogs: () => unawaited(_exportLogs(context)),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 28),
         if (_networkError != null)
           _StateMessage(
             message: _networkError!,
@@ -978,14 +981,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _OverviewSummaryBar(
-                joinedCount: joinedNetworks.length,
-                downloadRate: totalDownloadRate,
-                uploadRate: totalUploadRate,
-              ),
-              const SizedBox(height: 20),
               if (joinedNetworks.isNotEmpty) ...[
-                _OverviewJoinedList(
+                _ActiveConnections(
                   networks: joinedNetworks,
                   networkDevices: _networkDevices,
                   trafficByNetworkId: _networkTraffic,
@@ -993,9 +990,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                   onLeave: _leaveNetwork,
                   onOpen: _openNetworkDetail,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 28),
               ],
-              _OverviewAvailableList(
+              _NetworkDiscovery(
+                key: const ValueKey('network_discovery'),
                 initiallyExpanded: joinedNetworks.isEmpty,
                 networks: availableNetworks,
                 networkDevices: _networkDevices,
@@ -1408,18 +1406,45 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _CoreStatusPanel extends StatelessWidget {
-  const _CoreStatusPanel({
+class _HeroStatusPanel extends StatelessWidget {
+  const _HeroStatusPanel({
     required this.statusListenable,
     required this.workspaceName,
+    required this.joinedCount,
+    required this.downloadRate,
+    required this.uploadRate,
     required this.onRepair,
     required this.onExportLogs,
   });
 
   final ValueListenable<CoreRunStatus> statusListenable;
   final String workspaceName;
+  final int joinedCount;
+  final double downloadRate;
+  final double uploadRate;
   final VoidCallback onRepair;
   final VoidCallback onExportLogs;
+
+  static const _greenGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
+  );
+  static const _blueGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
+  );
+  static const _redGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
+  );
+  static const _greyGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF6B7280), Color(0xFF9CA3AF)],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1428,72 +1453,135 @@ class _CoreStatusPanel extends StatelessWidget {
       builder: (context, status, _) {
         final running = status.phase == CoreRunPhase.running;
         final error = status.phase == CoreRunPhase.error;
-        final title = running
-            ? '本机设备已就绪'
-            : error
+        final checking = status.phase == CoreRunPhase.checking;
+        final signedOut = status.phase == CoreRunPhase.signedOut;
+
+        final gradient = error
+            ? _redGradient
+            : checking || signedOut
+            ? _greyGradient
+            : running
+            ? _greenGradient
+            : _blueGradient;
+
+        final icon = error
+            ? Icons.error_outline
+            : checking
+            ? Icons.sync
+            : running
+            ? Icons.check_circle_outline
+            : Icons.computer_outlined;
+
+        final title = error
             ? '连接引擎异常'
+            : checking
+            ? '正在检查设备状态'
+            : running
+            ? '本机设备已就绪'
             : '正在准备本机设备';
+
         final machineId = status.machineId;
         final subtitle = machineId == null || machineId.isEmpty
             ? '$workspaceName · ${status.message}'
             : '$workspaceName · 设备 ${_shortId(machineId)}';
 
-        return FCard.raw(
+        return Container(
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1A000000),
+                blurRadius: 16,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StatusDot(online: running),
-                    const SizedBox(width: 10),
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(51),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(icon, size: 28, color: Colors.white),
+                    ),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.titleLarge,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
                             subtitle,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: const Color(0xFF737373)),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.white.withAlpha(204),
+                                ),
                           ),
                         ],
                       ),
                     ),
-                    if (!running && !error) const FCircularProgress(size: .sm),
+                    if (!running && !error)
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white.withAlpha(204),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                if (status.details != null && status.details!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    status.details!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
+                if (status.lastError != null && status.lastError!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(31),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  ),
-                ],
-                if (status.lastError != null && status.lastError!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
                     child: Text(
                       status.lastError!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFDC2626),
+                        color: Colors.white.withAlpha(230),
                       ),
                     ),
                   ),
+                ],
                 if (error) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      FButton(onPress: onRepair, child: const Text('修复连接引擎')),
+                      FButton(
+                        variant: .outline,
+                        onPress: onRepair,
+                        child: const Text('修复连接引擎'),
+                      ),
                       FButton(
                         variant: .outline,
                         onPress: onExportLogs,
@@ -1502,6 +1590,73 @@ class _CoreStatusPanel extends StatelessWidget {
                     ],
                   ),
                 ],
+                const SizedBox(height: 20),
+                Container(
+                  height: 1,
+                  color: Colors.white.withAlpha(51),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            joinedCount > 0
+                                ? '已加入 $joinedCount 个网络'
+                                : '尚未加入任何网络',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          if (joinedCount > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.arrow_downward,
+                                  size: 14,
+                                  color: Colors.white.withAlpha(179),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatTrafficRate(downloadRate),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withAlpha(204),
+                                      ),
+                                ),
+                                const SizedBox(width: 16),
+                                Icon(
+                                  Icons.arrow_upward,
+                                  size: 14,
+                                  color: Colors.white.withAlpha(179),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatTrafficRate(uploadRate),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withAlpha(204),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -2408,57 +2563,8 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _OverviewSummaryBar extends StatelessWidget {
-  const _OverviewSummaryBar({
-    required this.joinedCount,
-    required this.downloadRate,
-    required this.uploadRate,
-  });
-
-  final int joinedCount;
-  final double downloadRate;
-  final double uploadRate;
-
-  @override
-  Widget build(BuildContext context) {
-    return FCard.raw(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
-          children: [
-            _StatusDot(online: joinedCount > 0),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    joinedCount > 0
-                        ? '已加入 $joinedCount 个网络'
-                        : '尚未加入任何网络',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (joinedCount > 0) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OverviewJoinedList extends StatelessWidget {
-  const _OverviewJoinedList({
+class _ActiveConnections extends StatelessWidget {
+  const _ActiveConnections({
     required this.networks,
     required this.networkDevices,
     required this.trafficByNetworkId,
@@ -2474,47 +2580,72 @@ class _OverviewJoinedList extends StatelessWidget {
   final Future<void> Function(ConsoleNetwork) onLeave;
   final void Function(ConsoleNetwork) onOpen;
 
+  static const _accentColors = <Color>[
+    Color(0xFF16A34A),
+    Color(0xFF2563EB),
+    Color(0xFF9333EA),
+    Color(0xFFEA580C),
+    Color(0xFF0891B2),
+    Color(0xFFDB2777),
+  ];
+
+  Color _accentColorFor(int index) => _accentColors[index % _accentColors.length];
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '当前连接',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            Text(
+              '我的网络',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const Spacer(),
+            FButton(
+              variant: .ghost,
+              size: .sm,
+              onPress: networks.isNotEmpty
+                  ? () => onOpen(networks.first)
+                  : null,
+              child: const Text('管理'),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        FCard.raw(
-          child: Column(
-            children: [
-              for (var i = 0; i < networks.length; i++) ...[
-                if (i > 0) const Divider(height: 1),
-                _OverviewJoinedRow(
-                  network: networks[i],
-                  devices: networkDevices[networks[i].id] ??
-                      const <NetworkDevice>[],
-                  state: joinStateFor(networks[i]),
-                  traffic: trafficByNetworkId[networks[i].id],
-                  onLeave: () => unawaited(onLeave(networks[i])),
-                  onOpen: () => onOpen(networks[i]),
-                ),
-              ],
+        const SizedBox(height: 16),
+        Column(
+          children: [
+            for (var i = 0; i < networks.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              _ActiveConnectionCard(
+                network: networks[i],
+                devices: networkDevices[networks[i].id] ??
+                    const <NetworkDevice>[],
+                state: joinStateFor(networks[i]),
+                traffic: trafficByNetworkId[networks[i].id],
+                accentColor: _accentColorFor(i),
+                onLeave: () => unawaited(onLeave(networks[i])),
+                onOpen: () => onOpen(networks[i]),
+              ),
             ],
-          ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _OverviewJoinedRow extends StatelessWidget {
-  const _OverviewJoinedRow({
+class _ActiveConnectionCard extends StatelessWidget {
+  const _ActiveConnectionCard({
     required this.network,
     required this.devices,
     required this.state,
     required this.traffic,
+    required this.accentColor,
     required this.onLeave,
     required this.onOpen,
   });
@@ -2523,6 +2654,7 @@ class _OverviewJoinedRow extends StatelessWidget {
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
   final _NetworkTrafficSnapshot? traffic;
+  final Color accentColor;
   final VoidCallback onLeave;
   final VoidCallback onOpen;
 
@@ -2532,58 +2664,185 @@ class _OverviewJoinedRow extends StatelessWidget {
     final attachedDevices = devices.where((d) => d.attached).toList();
     final onlineCount = attachedDevices.where((d) => d.online).length;
 
-    return GestureDetector(
-      onTap: onOpen,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            _StatusDot(online: true),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    network.name,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    [
-                      if (localIpv4 != null && localIpv4.isNotEmpty)
-                        'IP: $localIpv4'
-                      else
-                        'IP 分配中',
-                      '$onlineCount / ${attachedDevices.length} 台在线',
-                      if (traffic != null)
-                        '↓ ${_formatTrafficRate(traffic!.downloadBytesPerSecond)} / ↑ ${_formatTrafficRate(traffic!.uploadBytesPerSecond)}',
-                    ].join('  ·  '),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
-                    ),
-                  ),
-                ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: GestureDetector(
+          onTap: onOpen,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              Container(
+                width: 5,
+                color: accentColor,
               ),
-            ),
-            FButton(
-              variant: .outline,
-              size: .sm,
-              onPress: onLeave,
-              child: const Text('退出'),
-            ),
-          ],
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              network.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                            ),
+                          ),
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.power_settings_new,
+                                size: 18,
+                                color: Color(0xFF64748B),
+                              ),
+                              onPressed: onLeave,
+                              tooltip: '退出网络',
+                              padding: EdgeInsets.zero,
+                              splashRadius: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (localIpv4 != null && localIpv4.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFFBBF7D0),
+                            ),
+                          ),
+                          child: Text(
+                            localIpv4,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF15803D),
+                                ),
+                          ),
+                        )
+                      else
+                        Text(
+                          'IP 分配中',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: const Color(0xFF94A3B8),
+                              ),
+                        ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF22C55E),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$onlineCount / ${attachedDevices.length} 台在线',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: const Color(0xFF64748B),
+                                ),
+                          ),
+                          if (traffic != null) ...[
+                            const SizedBox(width: 16),
+                            Icon(
+                              Icons.arrow_downward,
+                              size: 12,
+                              color: const Color(0xFF16A34A),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              _formatTrafficRate(
+                                traffic!.downloadBytesPerSecond,
+                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFF16A34A),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(
+                              Icons.arrow_upward,
+                              size: 12,
+                              color: const Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              _formatTrafficRate(
+                                traffic!.uploadBytesPerSecond,
+                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFF2563EB),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _OverviewAvailableList extends StatefulWidget {
-  const _OverviewAvailableList({
+class _NetworkDiscovery extends StatefulWidget {
+  const _NetworkDiscovery({
+    super.key,
     required this.initiallyExpanded,
     required this.networks,
     required this.networkDevices,
@@ -2600,12 +2859,19 @@ class _OverviewAvailableList extends StatefulWidget {
   final void Function(ConsoleNetwork) onOpen;
 
   @override
-  State<_OverviewAvailableList> createState() =>
-      _OverviewAvailableListState();
+  State<_NetworkDiscovery> createState() => _NetworkDiscoveryState();
 }
 
-class _OverviewAvailableListState extends State<_OverviewAvailableList> {
+class _NetworkDiscoveryState extends State<_NetworkDiscovery> {
   late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  void didUpdateWidget(covariant _NetworkDiscovery oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initiallyExpanded && !oldWidget.initiallyExpanded) {
+      setState(() => _expanded = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2618,16 +2884,19 @@ class _OverviewAvailableListState extends State<_OverviewAvailableList> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: hasNetworks ? () => setState(() => _expanded = !_expanded) : null,
+          onTap: hasNetworks
+              ? () => setState(() => _expanded = !_expanded)
+              : null,
           behavior: HitTestBehavior.opaque,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
                 Text(
-                  hasNetworks ? '可加入的网络' : '暂无可用网络',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  hasNetworks ? '发现更多网络' : '暂无其他可用网络',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
                   ),
                 ),
                 const Spacer(),
@@ -2635,14 +2904,18 @@ class _OverviewAvailableListState extends State<_OverviewAvailableList> {
                   Text(
                     '${widget.networks.length} 个',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
+                      color: const Color(0xFF94A3B8),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 20,
-                    color: const Color(0xFF737373),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.expand_more,
+                      size: 20,
+                      color: Color(0xFF94A3B8),
+                    ),
                   ),
                 ],
               ],
@@ -2650,18 +2923,25 @@ class _OverviewAvailableListState extends State<_OverviewAvailableList> {
           ),
         ),
         if (_expanded && hasNetworks) ...[
-          const SizedBox(height: 12),
-          FCard.raw(
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
             child: Column(
               children: [
                 for (var i = 0; i < widget.networks.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  _OverviewAvailableRow(
+                  if (i > 0)
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                  _NetworkDiscoveryRow(
                     network: widget.networks[i],
                     devices: widget.networkDevices[widget.networks[i].id] ??
                         const <NetworkDevice>[],
                     state: widget.joinStateFor(widget.networks[i]),
-                    onJoin: () => unawaited(widget.onJoin(widget.networks[i])),
+                    onJoin: () =>
+                        unawaited(widget.onJoin(widget.networks[i])),
                     onOpen: () => widget.onOpen(widget.networks[i]),
                   ),
                 ],
@@ -2672,11 +2952,26 @@ class _OverviewAvailableListState extends State<_OverviewAvailableList> {
         if (joiningCount > 0 && !_expanded)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              '$joiningCount 个网络正在加入中',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF2563EB),
-              ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$joiningCount 个网络正在加入中',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF2563EB),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -2684,8 +2979,8 @@ class _OverviewAvailableListState extends State<_OverviewAvailableList> {
   }
 }
 
-class _OverviewAvailableRow extends StatelessWidget {
-  const _OverviewAvailableRow({
+class _NetworkDiscoveryRow extends StatelessWidget {
+  const _NetworkDiscoveryRow({
     required this.network,
     required this.devices,
     required this.state,
@@ -2713,12 +3008,12 @@ class _OverviewAvailableRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            const Icon(
-              Icons.hub_outlined,
+            Icon(
+              Icons.radio_button_unchecked,
               size: 18,
-              color: Colors.grey,
+              color: const Color(0xFFCBD5E1),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2727,13 +3022,14 @@ class _OverviewAvailableRow extends StatelessWidget {
                     network.name,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: const Color(0xFF334155),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '$onlineCount / ${attachedDevices.length} 台设备在线',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
+                      color: const Color(0xFF94A3B8),
                     ),
                   ),
                   if (failed && state.message != null) ...[
@@ -2751,7 +3047,9 @@ class _OverviewAvailableRow extends StatelessWidget {
             FButton(
               size: .sm,
               onPress: joining ? null : onJoin,
-              child: Text(joining ? '加入中' : failed ? '重试' : '加入'),
+              child: Text(
+                joining ? '加入中' : failed ? '重试' : '加入',
+              ),
             ),
           ],
         ),

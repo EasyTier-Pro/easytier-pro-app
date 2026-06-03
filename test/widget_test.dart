@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -50,29 +50,29 @@ void main() {
     expect(find.text('尚未加入任何网络'), findsOneWidget);
     expect(find.text('办公网'), findsOneWidget);
     expect(find.text('研发网'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '加入'), findsNWidgets(2));
+    expect(find.text('加入'), findsNWidgets(2));
 
-    await tester.tap(find.widgetWithText(FButton, '加入').first);
+    await tester.tap(find.text('加入').first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
     expect(find.text('已加入 1 个网络'), findsOneWidget);
-    expect(find.textContaining('IP: 10.144.0.2'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
+    expect(find.textContaining('10.144.0.2'), findsOneWidget);
+    expect(find.text('加入'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FButton, '加入').first);
+    await tester.tap(find.text('加入').first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
-    expect(find.textContaining('IP: 10.145.0.2'), findsOneWidget);
+    expect(find.textContaining('10.145.0.2'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FButton, '退出').first);
+    await tester.tap(find.byIcon(Icons.power_settings_new).first);
     await tester.pumpAndSettle();
 
     expect(authService.removedNodeIds, <String>['node-1']);
-    expect(find.textContaining('IP: 10.144.0.2'), findsNothing);
-    expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '退出'), findsOneWidget);
+    expect(find.textContaining('10.144.0.2'), findsNothing);
+    expect(find.text('加入'), findsOneWidget);
+    expect(find.byIcon(Icons.power_settings_new), findsOneWidget);
   });
 
   testWidgets('shows realtime traffic after joining a network', (
