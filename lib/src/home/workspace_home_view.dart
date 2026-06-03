@@ -1493,33 +1493,63 @@ class _NetworkTabMenu extends StatelessWidget {
           ],
         ),
       ],
-      builder: (context, controller, child) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FButton(
-            key: const ValueKey<String>('network-tab-current'),
-            variant: active ? .secondary : .ghost,
-            size: .sm,
-            onPress: () => onSelectNetwork(selectedNetwork.id),
-            mainAxisSize: MainAxisSize.min,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 132),
-              child: Text(
-                selectedNetwork.name,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          FButton.icon(
-            key: const ValueKey<String>('network-tab-dropdown'),
-            variant: active ? .secondary : .ghost,
-            size: .sm,
-            onPress: () => unawaited(controller.toggle()),
-            child: const Icon(Icons.expand_more, size: 16),
-          ),
-        ],
+      builder: (context, controller, child) => _NetworkTabButton(
+        active: active,
+        label: selectedNetwork.name,
+        onSelect: () => onSelectNetwork(selectedNetwork.id),
+        onOpenMenu: () => unawaited(controller.toggle()),
       ),
+    );
+  }
+}
+
+class _NetworkTabButton extends StatelessWidget {
+  const _NetworkTabButton({
+    required this.active,
+    required this.label,
+    required this.onSelect,
+    required this.onOpenMenu,
+  });
+
+  final bool active;
+  final String label;
+  final VoidCallback onSelect;
+  final VoidCallback onOpenMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: AlignmentDirectional.centerEnd,
+      children: [
+        FButton(
+          key: const ValueKey<String>('network-tab-current'),
+          variant: active ? .secondary : .ghost,
+          size: .sm,
+          onPress: onSelect,
+          mainAxisSize: MainAxisSize.min,
+          suffix: const Padding(
+            padding: EdgeInsetsDirectional.only(start: 4),
+            child: Icon(Icons.expand_more, size: 16),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 132),
+            child: Text(label, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        PositionedDirectional(
+          top: 0,
+          end: 0,
+          bottom: 0,
+          width: 34,
+          child: FTappable.static(
+            key: const ValueKey<String>('network-tab-dropdown'),
+            behavior: HitTestBehavior.opaque,
+            semanticsLabel: '切换网络',
+            onPress: onOpenMenu,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ],
     );
   }
 }
