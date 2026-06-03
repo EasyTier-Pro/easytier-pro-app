@@ -902,6 +902,21 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return _joinStateFor(network).phase == _JoinPhase.joined;
     }).toList(growable: false);
 
+    final availableNetworks = _networks.where((network) {
+      final phase = _joinStateFor(network).phase;
+      return phase != _JoinPhase.joined && phase != _JoinPhase.joining;
+    }).toList(growable: false);
+
+    var totalDownloadRate = 0.0;
+    var totalUploadRate = 0.0;
+    for (final network in joinedNetworks) {
+      final traffic = _networkTraffic[network.id];
+      if (traffic != null) {
+        totalDownloadRate += traffic.downloadBytesPerSecond ?? 0;
+        totalUploadRate += traffic.uploadBytesPerSecond ?? 0;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -933,28 +948,36 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onCreate: _createNetwork,
             onRetryRegions: _loadRegions,
           )
-        else if (joinedNetworks.isEmpty)
-          _OverviewEmptyGuide(
-            onBrowseNetworks: _showNetwork,
-            onCreateNetwork: () {
-              setState(() {
-                _showCreateFormOnNetworkPage = true;
-                _activeView = _DashboardView.network;
-              });
-            },
-          )
         else
-          _NetworkJoinList(
-            title: '已加入的网络',
-            subtitle: '本机设备当前已加入以下网络。',
-            networks: joinedNetworks,
-            networkDevices: _networkDevices,
-            trafficByNetworkId: _networkTraffic,
-            joinStateFor: _joinStateFor,
-            onJoin: _joinNetwork,
-            onLeave: _leaveNetwork,
-            onOpen: _openNetworkDetail,
-            onRefresh: _loadNetworks,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _OverviewSummaryBar(
+                joinedCount: joinedNetworks.length,
+                downloadRate: totalDownloadRate,
+                uploadRate: totalUploadRate,
+              ),
+              const SizedBox(height: 20),
+              if (joinedNetworks.isNotEmpty) ...[
+                _OverviewJoinedList(
+                  networks: joinedNetworks,
+                  networkDevices: _networkDevices,
+                  trafficByNetworkId: _networkTraffic,
+                  joinStateFor: _joinStateFor,
+                  onLeave: _leaveNetwork,
+                  onOpen: _openNetworkDetail,
+                ),
+                const SizedBox(height: 20),
+              ],
+              _OverviewAvailableList(
+                initiallyExpanded: joinedNetworks.isEmpty,
+                networks: availableNetworks,
+                networkDevices: _networkDevices,
+                joinStateFor: _joinStateFor,
+                onJoin: _joinNetwork,
+                onOpen: _openNetworkDetail,
+              ),
+            ],
           ),
       ],
     );
@@ -2365,58 +2388,350 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _OverviewEmptyGuide extends StatelessWidget {
-  const _OverviewEmptyGuide({
-    required this.onBrowseNetworks,
-    required this.onCreateNetwork,
+class _OverviewSummaryBar extends StatelessWidget {
+  const _OverviewSummaryBar({
+    required this.joinedCount,
+    required this.downloadRate,
+    required this.uploadRate,
   });
 
-  final VoidCallback onBrowseNetworks;
-  final VoidCallback onCreateNetwork;
+  final int joinedCount;
+  final double downloadRate;
+  final double uploadRate;
 
   @override
   Widget build(BuildContext context) {
     return FCard.raw(
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
           children: [
-            Icon(
-              Icons.hub_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary.withAlpha(76),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '尚未加入任何网络',
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '加入一个网络以开始安全组网，或创建一个新网络。',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF737373),
+            _StatusDot(online: joinedCount > 0),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    joinedCount > 0
+                        ? '已加入 $joinedCount 个网络'
+                        : '尚未加入任何网络',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (joinedCount > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: [
-                FButton(
-                  onPress: onBrowseNetworks,
-                  child: const Text('浏览网络'),
-                ),
-                FButton(
-                  variant: .outline,
-                  onPress: onCreateNetwork,
-                  child: const Text('创建网络'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewJoinedList extends StatelessWidget {
+  const _OverviewJoinedList({
+    required this.networks,
+    required this.networkDevices,
+    required this.trafficByNetworkId,
+    required this.joinStateFor,
+    required this.onLeave,
+    required this.onOpen,
+  });
+
+  final List<ConsoleNetwork> networks;
+  final Map<String, List<NetworkDevice>> networkDevices;
+  final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
+  final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
+  final Future<void> Function(ConsoleNetwork) onLeave;
+  final void Function(ConsoleNetwork) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '当前连接',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        FCard.raw(
+          child: Column(
+            children: [
+              for (var i = 0; i < networks.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _OverviewJoinedRow(
+                  network: networks[i],
+                  devices: networkDevices[networks[i].id] ??
+                      const <NetworkDevice>[],
+                  state: joinStateFor(networks[i]),
+                  traffic: trafficByNetworkId[networks[i].id],
+                  onLeave: () => unawaited(onLeave(networks[i])),
+                  onOpen: () => onOpen(networks[i]),
                 ),
               ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OverviewJoinedRow extends StatelessWidget {
+  const _OverviewJoinedRow({
+    required this.network,
+    required this.devices,
+    required this.state,
+    required this.traffic,
+    required this.onLeave,
+    required this.onOpen,
+  });
+
+  final ConsoleNetwork network;
+  final List<NetworkDevice> devices;
+  final _JoinNetworkState state;
+  final _NetworkTrafficSnapshot? traffic;
+  final VoidCallback onLeave;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final localIpv4 = state.localIpv4?.trim();
+    final attachedDevices = devices.where((d) => d.attached).toList();
+    final onlineCount = attachedDevices.where((d) => d.online).length;
+
+    return GestureDetector(
+      onTap: onOpen,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            _StatusDot(online: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      if (localIpv4 != null && localIpv4.isNotEmpty)
+                        'IP: $localIpv4'
+                      else
+                        'IP 分配中',
+                      '$onlineCount / ${attachedDevices.length} 台在线',
+                      if (traffic != null)
+                        '↓ ${_formatTrafficRate(traffic!.downloadBytesPerSecond)} / ↑ ${_formatTrafficRate(traffic!.uploadBytesPerSecond)}',
+                    ].join('  ·  '),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FButton(
+              variant: .outline,
+              size: .sm,
+              onPress: onLeave,
+              child: const Text('退出'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewAvailableList extends StatefulWidget {
+  const _OverviewAvailableList({
+    required this.initiallyExpanded,
+    required this.networks,
+    required this.networkDevices,
+    required this.joinStateFor,
+    required this.onJoin,
+    required this.onOpen,
+  });
+
+  final bool initiallyExpanded;
+  final List<ConsoleNetwork> networks;
+  final Map<String, List<NetworkDevice>> networkDevices;
+  final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
+  final Future<void> Function(ConsoleNetwork) onJoin;
+  final void Function(ConsoleNetwork) onOpen;
+
+  @override
+  State<_OverviewAvailableList> createState() =>
+      _OverviewAvailableListState();
+}
+
+class _OverviewAvailableListState extends State<_OverviewAvailableList> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNetworks = widget.networks.isNotEmpty;
+    final joiningCount = widget.networks.where((n) {
+      return widget.joinStateFor(n).phase == _JoinPhase.joining;
+    }).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: hasNetworks ? () => setState(() => _expanded = !_expanded) : null,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  hasNetworks ? '可加入的网络' : '暂无可用网络',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                if (hasNetworks) ...[
+                  Text(
+                    '${widget.networks.length} 个',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 20,
+                    color: const Color(0xFF737373),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (_expanded && hasNetworks) ...[
+          const SizedBox(height: 12),
+          FCard.raw(
+            child: Column(
+              children: [
+                for (var i = 0; i < widget.networks.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _OverviewAvailableRow(
+                    network: widget.networks[i],
+                    devices: widget.networkDevices[widget.networks[i].id] ??
+                        const <NetworkDevice>[],
+                    state: widget.joinStateFor(widget.networks[i]),
+                    onJoin: () => unawaited(widget.onJoin(widget.networks[i])),
+                    onOpen: () => widget.onOpen(widget.networks[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        if (joiningCount > 0 && !_expanded)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '$joiningCount 个网络正在加入中',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF2563EB),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _OverviewAvailableRow extends StatelessWidget {
+  const _OverviewAvailableRow({
+    required this.network,
+    required this.devices,
+    required this.state,
+    required this.onJoin,
+    required this.onOpen,
+  });
+
+  final ConsoleNetwork network;
+  final List<NetworkDevice> devices;
+  final _JoinNetworkState state;
+  final VoidCallback onJoin;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final attachedDevices = devices.where((d) => d.attached).toList();
+    final onlineCount = attachedDevices.where((d) => d.online).length;
+    final joining = state.phase == _JoinPhase.joining;
+    final failed = state.phase == _JoinPhase.error;
+
+    return GestureDetector(
+      onTap: onOpen,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.hub_outlined,
+              size: 18,
+              color: Colors.grey,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$onlineCount / ${attachedDevices.length} 台设备在线',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
+                    ),
+                  ),
+                  if (failed && state.message != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      state.message!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            FButton(
+              size: .sm,
+              onPress: joining ? null : onJoin,
+              child: Text(joining ? '加入中' : failed ? '重试' : '加入'),
             ),
           ],
         ),

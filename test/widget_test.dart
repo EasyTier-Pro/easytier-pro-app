@@ -48,11 +48,6 @@ void main() {
 
     expect(find.text('本机设备已就绪'), findsOneWidget);
     expect(find.text('尚未加入任何网络'), findsOneWidget);
-
-    // 进入网络页浏览并加入网络
-    await tester.tap(find.widgetWithText(FButton, '网络'));
-    await tester.pumpAndSettle();
-
     expect(find.text('办公网'), findsOneWidget);
     expect(find.text('研发网'), findsOneWidget);
     expect(find.widgetWithText(FButton, '加入'), findsNWidgets(2));
@@ -61,21 +56,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
-    expect(find.text('已加入'), findsWidgets);
-    expect(find.text('本机 IP 10.144.0.2'), findsOneWidget);
+    expect(find.text('已加入 1 个网络'), findsOneWidget);
+    expect(find.textContaining('IP: 10.144.0.2'), findsOneWidget);
     expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FButton, '加入').first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
-    expect(find.text('本机 IP 10.145.0.2'), findsOneWidget);
+    expect(find.textContaining('IP: 10.145.0.2'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FButton, '退出').first);
     await tester.pumpAndSettle();
 
     expect(authService.removedNodeIds, <String>['node-1']);
-    expect(find.text('本机 IP 10.144.0.2'), findsNothing);
+    expect(find.textContaining('IP: 10.144.0.2'), findsNothing);
     expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
     expect(find.widgetWithText(FButton, '退出'), findsOneWidget);
   });
