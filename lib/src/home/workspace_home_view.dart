@@ -1466,8 +1466,8 @@ class _NetworkTabMenu extends StatelessWidget {
     }
 
     return FPopoverMenu(
-      menuAnchor: Alignment.topLeft,
-      childAnchor: Alignment.bottomLeft,
+      menuAnchor: Alignment.topRight,
+      childAnchor: Alignment.bottomRight,
       maxHeight: 280,
       divider: FItemDivider.none,
       menuBuilder: (context, controller, menu) => [
@@ -1493,17 +1493,32 @@ class _NetworkTabMenu extends StatelessWidget {
           ],
         ),
       ],
-      builder: (context, controller, child) => FButton(
-        key: const ValueKey<String>('network-tab-menu'),
-        variant: active ? .secondary : .ghost,
-        size: .sm,
-        onPress: () => unawaited(controller.toggle()),
+      builder: (context, controller, child) => Row(
         mainAxisSize: MainAxisSize.min,
-        suffix: const Icon(Icons.expand_more, size: 16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 132),
-          child: Text(selectedNetwork.name, overflow: TextOverflow.ellipsis),
-        ),
+        children: [
+          FButton(
+            key: const ValueKey<String>('network-tab-current'),
+            variant: active ? .secondary : .ghost,
+            size: .sm,
+            onPress: () => onSelectNetwork(selectedNetwork.id),
+            mainAxisSize: MainAxisSize.min,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 132),
+              child: Text(
+                selectedNetwork.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          FButton.icon(
+            key: const ValueKey<String>('network-tab-dropdown'),
+            variant: active ? .secondary : .ghost,
+            size: .sm,
+            onPress: () => unawaited(controller.toggle()),
+            child: const Icon(Icons.expand_more, size: 16),
+          ),
+        ],
       ),
     );
   }
