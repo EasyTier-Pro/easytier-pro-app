@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
-
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../shared/app_motion.dart';
@@ -174,25 +172,8 @@ class _NodeCard extends StatefulWidget {
   State<_NodeCard> createState() => _NodeCardState();
 }
 
-class _NodeCardState extends State<_NodeCard>
-    with SingleTickerProviderStateMixin {
+class _NodeCardState extends State<_NodeCard> {
   bool _expanded = false;
-  late AnimationController _breathController;
-
-  @override
-  void initState() {
-    super.initState();
-    _breathController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _breathController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -237,23 +218,10 @@ class _NodeCardState extends State<_NodeCard>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // 首行：状态圆点 + 图标 + 名称 + 标记 + Badge + 展开箭头
+                            // 首行：名称 + 状态文字 + 展开箭头
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                _BreathingDot(
-                                  controller: _breathController,
-                                  online: isOnline,
-                                ),
-                                const SizedBox(width: 10),
-                                Icon(
-                                  isLocal
-                                      ? Icons.computer
-                                      : Icons.devices_other_outlined,
-                                  size: 20,
-                                  color: const Color(0xFF64748B),
-                                ),
-                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     widget.node.name,
@@ -267,23 +235,18 @@ class _NodeCardState extends State<_NodeCard>
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                if (isLocal) ...[
-                                  const SizedBox(width: 8),
-                                  const _LocalBadge(),
-                                ],
-                                const SizedBox(width: 8),
-                                FBadge(
-                                  variant: isOnline ? .secondary : .outline,
-                                  child: Text(isOnline ? '在线' : '离线'),
-                                ),
-                                const SizedBox(width: 6),
-                                FBadge(
-                                  variant: peer == null ? .outline : .secondary,
-                                  child: Text(
-                                    peer == null
-                                        ? '运行态未知'
-                                        : _formatPeerCost(peer.cost),
-                                  ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  isOnline ? '在线' : '离线',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: isOnline
+                                            ? const Color(0xFF16A34A)
+                                            : const Color(0xFF9CA3AF),
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                 ),
                                 const SizedBox(width: 4),
                                 Icon(
@@ -295,31 +258,21 @@ class _NodeCardState extends State<_NodeCard>
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            // IPv4 地址
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.vpn_key_outlined,
-                                  size: 14,
-                                  color: Color(0xFF94A3B8),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  widget.node.ipv4?.isNotEmpty == true
-                                      ? widget.node.ipv4!
-                                      : '未分配 IPv4',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: const Color(0xFF64748B),
-                                        fontFamily: 'Inter',
-                                      ),
-                                ),
-                              ],
+                            const SizedBox(height: 4),
+                            // IPv4 地址 + 本机标记
+                            Text(
+                              '${isLocal ? '本机 · ' : ''}${widget.node.ipv4?.isNotEmpty == true ? widget.node.ipv4! : '未分配 IPv4'}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFF64748B),
+                                    fontFamily: 'Inter',
+                                  ),
                             ),
-                            // 快捷指标行
+                            // 快捷指标行（纯文本，灰色）
                             if (peer != null) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4),
                               _QuickMetrics(peer: peer),
                             ],
                             // 展开详情
@@ -341,77 +294,6 @@ class _NodeCardState extends State<_NodeCard>
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BreathingDot extends StatelessWidget {
-  const _BreathingDot({required this.controller, required this.online});
-
-  final AnimationController controller;
-  final bool online;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!online) {
-      return Container(
-        width: 10,
-        height: 10,
-        decoration: const BoxDecoration(
-          color: Colors.grey,
-          shape: BoxShape.circle,
-        ),
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: const Color(
-              0xFF16A34A,
-            ).withValues(alpha: 0.5 + controller.value * 0.5),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xFF16A34A,
-                ).withValues(alpha: 0.2 + controller.value * 0.3),
-                blurRadius: 4 + controller.value * 4,
-                spreadRadius: controller.value * 1,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _LocalBadge extends StatelessWidget {
-  const _LocalBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFDBEAFE),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF93C5FD)),
-      ),
-      child: const Text(
-        '本机',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF2563EB),
-          height: 1.2,
         ),
       ),
     );
@@ -558,62 +440,38 @@ class _QuickMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = <Widget>[];
+    final parts = <String>[];
 
-    final latency = _formatLatency(peer.latencyText);
-    if (latency.isNotEmpty) {
-      items.add(_metricChip(Icons.speed_outlined, latency));
+    final latency = peer.latencyText.trim();
+    if (latency.isNotEmpty && latency != '-' && latency != '*') {
+      parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
     }
 
     if (peer.tunnelProto.isNotEmpty && peer.tunnelProto != '-') {
-      items.add(_metricChip(Icons.route_outlined, peer.tunnelProto));
+      parts.add(peer.tunnelProto);
     }
 
-    if (peer.peerId.isNotEmpty) {
-      items.add(
-        _metricChip(Icons.fingerprint_outlined, 'Peer: ${peer.peerId}'),
-      );
+    if (peer.lossText.isNotEmpty && peer.lossText != '-') {
+      parts.add('丢包 ${peer.lossText}');
     }
 
-    if (peer.rxBytes.isNotEmpty && peer.rxBytes != '-') {
-      items.add(_metricChip(Icons.arrow_downward_outlined, peer.rxBytes));
+    final rx = (peer.rxBytes.isNotEmpty && peer.rxBytes != '-')
+        ? '↓${peer.rxBytes}'
+        : '';
+    final tx = (peer.txBytes.isNotEmpty && peer.txBytes != '-')
+        ? '↑${peer.txBytes}'
+        : '';
+    if (rx.isNotEmpty || tx.isNotEmpty) {
+      parts.add('$rx $tx'.trim());
     }
 
-    if (peer.txBytes.isNotEmpty && peer.txBytes != '-') {
-      items.add(_metricChip(Icons.arrow_upward_outlined, peer.txBytes));
-    }
+    if (parts.isEmpty) return const SizedBox.shrink();
 
-    if (items.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Wrap(spacing: 8, runSpacing: 6, children: items);
-  }
-
-  Widget _metricChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFBBF7D0)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: const Color(0xFF16A34A)),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF15803D),
-              fontFamily: 'Inter',
-              height: 1.2,
-            ),
-          ),
-        ],
+    return Text(
+      parts.join('  ·  '),
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: const Color(0xFF94A3B8),
+        fontFamily: 'Inter',
       ),
     );
   }
@@ -655,17 +513,6 @@ class _NodeStateMessage extends StatelessWidget {
       child: Text(message, textAlign: TextAlign.center),
     );
   }
-}
-
-String _formatPeerCost(String cost) {
-  final value = cost.trim();
-  if (value.isEmpty || value == '-') {
-    return '运行态';
-  }
-  if (value.toLowerCase() == 'p2p') {
-    return 'P2P';
-  }
-  return value;
 }
 
 String _formatLatency(String latencyText) {
