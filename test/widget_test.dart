@@ -46,33 +46,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('本机设备已就绪'), findsOneWidget);
+    expect(find.text('已在线'), findsOneWidget);
     expect(find.text('尚未加入任何网络'), findsOneWidget);
     expect(find.text('办公网'), findsOneWidget);
     expect(find.text('研发网'), findsOneWidget);
-    expect(find.text('加入'), findsNWidgets(2));
+    expect(find.byType(Switch), findsNWidgets(2));
 
-    await tester.tap(find.text('加入').first);
+    await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
-    expect(find.text('已加入 1 个网络'), findsOneWidget);
+    expect(find.textContaining('已加入 1 个网络'), findsOneWidget);
     expect(find.textContaining('10.144.0.2'), findsOneWidget);
-    expect(find.text('加入'), findsOneWidget);
+    expect(find.byType(Switch), findsNWidgets(2));
 
-    await tester.tap(find.text('加入').first);
+    await tester.tap(find.byType(Switch).at(1));
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
     expect(find.textContaining('10.145.0.2'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.power_settings_new).first);
+    await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
 
     expect(authService.removedNodeIds, <String>['node-1']);
     expect(find.textContaining('10.144.0.2'), findsNothing);
-    expect(find.text('加入'), findsOneWidget);
-    expect(find.byIcon(Icons.power_settings_new), findsOneWidget);
+    expect(find.byType(Switch), findsNWidgets(2));
   });
 
   testWidgets('shows realtime traffic after joining a network', (

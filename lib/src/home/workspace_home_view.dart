@@ -928,11 +928,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return _joinStateFor(network).phase == _JoinPhase.joined;
     }).toList(growable: false);
 
-    final availableNetworks = _networks.where((network) {
-      final phase = _joinStateFor(network).phase;
-      return phase != _JoinPhase.joined && phase != _JoinPhase.joining;
-    }).toList(growable: false);
-
     var totalDownloadRate = 0.0;
     var totalUploadRate = 0.0;
     for (final network in joinedNetworks) {
@@ -943,19 +938,25 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       }
     }
 
+    final sortedNetworks = List<ConsoleNetwork>.of(_networks);
+    sortedNetworks.sort((a, b) {
+      final aJoined = _joinStateFor(a).phase == _JoinPhase.joined;
+      final bJoined = _joinStateFor(b).phase == _JoinPhase.joined;
+      if (aJoined && !bJoined) return -1;
+      if (!aJoined && bJoined) return 1;
+      return a.name.compareTo(b.name);
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _HeroStatusPanel(
+        _StatusBar(
           statusListenable: widget.coreLifecycleService.status,
-          workspaceName: _workspace?.name ?? '未关联工作区',
           joinedCount: joinedNetworks.length,
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,
-          onRepair: () => unawaited(widget.coreLifecycleService.repair()),
-          onExportLogs: () => unawaited(_exportLogs(context)),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
         if (_networkError != null)
           _StateMessage(
             message: _networkError!,
@@ -978,30 +979,14 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onRetryRegions: _loadRegions,
           )
         else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (joinedNetworks.isNotEmpty) ...[
-                _ActiveConnections(
-                  networks: joinedNetworks,
-                  networkDevices: _networkDevices,
-                  trafficByNetworkId: _networkTraffic,
-                  joinStateFor: _joinStateFor,
-                  onLeave: _leaveNetwork,
-                  onOpen: _openNetworkDetail,
-                ),
-                const SizedBox(height: 28),
-              ],
-              _NetworkDiscovery(
-                key: const ValueKey('network_discovery'),
-                initiallyExpanded: joinedNetworks.isEmpty,
-                networks: availableNetworks,
-                networkDevices: _networkDevices,
-                joinStateFor: _joinStateFor,
-                onJoin: _joinNetwork,
-                onOpen: _openNetworkDetail,
-              ),
-            ],
+          _NetworkSwitchList(
+            networks: sortedNetworks,
+            networkDevices: _networkDevices,
+            trafficByNetworkId: _networkTraffic,
+            joinStateFor: _joinStateFor,
+            onJoin: _joinNetwork,
+            onLeave: _leaveNetwork,
+            onOpen: _openNetworkDetail,
           ),
       ],
     );
@@ -1406,45 +1391,18 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _HeroStatusPanel extends StatelessWidget {
-  const _HeroStatusPanel({
+class _StatusBar extends StatelessWidget {
+  const _StatusBar({
     required this.statusListenable,
-    required this.workspaceName,
     required this.joinedCount,
     required this.downloadRate,
     required this.uploadRate,
-    required this.onRepair,
-    required this.onExportLogs,
   });
 
   final ValueListenable<CoreRunStatus> statusListenable;
-  final String workspaceName;
   final int joinedCount;
   final double downloadRate;
   final double uploadRate;
-  final VoidCallback onRepair;
-  final VoidCallback onExportLogs;
-
-  static const _greenGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
-  );
-  static const _blueGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
-  );
-  static const _redGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
-  );
-  static const _greyGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF6B7280), Color(0xFF9CA3AF)],
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -1456,209 +1414,82 @@ class _HeroStatusPanel extends StatelessWidget {
         final checking = status.phase == CoreRunPhase.checking;
         final signedOut = status.phase == CoreRunPhase.signedOut;
 
-        final gradient = error
-            ? _redGradient
+        final bgColor = error
+            ? const Color(0xFFFEE2E2)
             : checking || signedOut
-            ? _greyGradient
-            : running
-            ? _greenGradient
-            : _blueGradient;
+                ? const Color(0xFFF3F4F6)
+                : running
+                    ? const Color(0xFFF0FDF4)
+                    : const Color(0xFFDBEAFE);
 
-        final icon = error
-            ? Icons.error_outline
+        final dotColor = error
+            ? const Color(0xFFDC2626)
+            : checking || signedOut
+                ? const Color(0xFF9CA3AF)
+                : running
+                    ? const Color(0xFF16A34A)
+                    : const Color(0xFF2563EB);
+
+        final statusText = error
+            ? '引擎异常'
             : checking
-            ? Icons.sync
-            : running
-            ? Icons.check_circle_outline
-            : Icons.computer_outlined;
-
-        final title = error
-            ? '连接引擎异常'
-            : checking
-            ? '正在检查设备状态'
-            : running
-            ? '本机设备已就绪'
-            : '正在准备本机设备';
-
-        final machineId = status.machineId;
-        final subtitle = machineId == null || machineId.isEmpty
-            ? '$workspaceName · ${status.message}'
-            : '$workspaceName · 设备 ${_shortId(machineId)}';
+                ? '正在检查'
+                : running
+                    ? '已在线'
+                    : '准备中';
 
         return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1A000000),
-                blurRadius: 16,
-                offset: Offset(0, 6),
+            color: bgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: error
+                  ? const Color(0xFFFECACA)
+                  : checking || signedOut
+                      ? const Color(0xFFE5E7EB)
+                      : running
+                          ? const Color(0xFFBBF7D0)
+                          : const Color(0xFFBFDBFE),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                statusText,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 1,
+                height: 14,
+                color: const Color(0xFFD1D5DB),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  joinedCount > 0
+                      ? '已加入 $joinedCount 个网络 · ↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}'
+                      : '尚未加入任何网络',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(51),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(icon, size: 28, color: Colors.white),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            subtitle,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.white.withAlpha(204),
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!running && !error)
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withAlpha(204),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (status.lastError != null && status.lastError!.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(31),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      status.lastError!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withAlpha(230),
-                      ),
-                    ),
-                  ),
-                ],
-                if (error) ...[
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      FButton(
-                        variant: .outline,
-                        onPress: onRepair,
-                        child: const Text('修复连接引擎'),
-                      ),
-                      FButton(
-                        variant: .outline,
-                        onPress: onExportLogs,
-                        child: const Text('导出诊断日志'),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 20),
-                Container(
-                  height: 1,
-                  color: Colors.white.withAlpha(51),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            joinedCount > 0
-                                ? '已加入 $joinedCount 个网络'
-                                : '尚未加入任何网络',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          if (joinedCount > 0) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.arrow_downward,
-                                  size: 14,
-                                  color: Colors.white.withAlpha(179),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatTrafficRate(downloadRate),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: Colors.white.withAlpha(204),
-                                      ),
-                                ),
-                                const SizedBox(width: 16),
-                                Icon(
-                                  Icons.arrow_upward,
-                                  size: 14,
-                                  color: Colors.white.withAlpha(179),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatTrafficRate(uploadRate),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: Colors.white.withAlpha(204),
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ),
         );
       },
@@ -2563,12 +2394,13 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _ActiveConnections extends StatelessWidget {
-  const _ActiveConnections({
+class _NetworkSwitchList extends StatelessWidget {
+  const _NetworkSwitchList({
     required this.networks,
     required this.networkDevices,
     required this.trafficByNetworkId,
     required this.joinStateFor,
+    required this.onJoin,
     required this.onLeave,
     required this.onOpen,
   });
@@ -2577,19 +2409,9 @@ class _ActiveConnections extends StatelessWidget {
   final Map<String, List<NetworkDevice>> networkDevices;
   final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
   final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
+  final Future<void> Function(ConsoleNetwork) onJoin;
   final Future<void> Function(ConsoleNetwork) onLeave;
   final void Function(ConsoleNetwork) onOpen;
-
-  static const _accentColors = <Color>[
-    Color(0xFF16A34A),
-    Color(0xFF2563EB),
-    Color(0xFF9333EA),
-    Color(0xFFEA580C),
-    Color(0xFF0891B2),
-    Color(0xFFDB2777),
-  ];
-
-  Color _accentColorFor(int index) => _accentColors[index % _accentColors.length];
 
   @override
   Widget build(BuildContext context) {
@@ -2599,53 +2421,52 @@ class _ActiveConnections extends StatelessWidget {
         Row(
           children: [
             Text(
-              '我的网络',
+              '网络',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
             ),
             const Spacer(),
-            FButton(
-              variant: .ghost,
-              size: .sm,
-              onPress: networks.isNotEmpty
-                  ? () => onOpen(networks.first)
-                  : null,
-              child: const Text('管理'),
+            Text(
+              '${networks.length} 个',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF94A3B8),
+                  ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Column(
-          children: [
-            for (var i = 0; i < networks.length; i++) ...[
-              if (i > 0) const SizedBox(height: 12),
-              _ActiveConnectionCard(
-                network: networks[i],
-                devices: networkDevices[networks[i].id] ??
-                    const <NetworkDevice>[],
-                state: joinStateFor(networks[i]),
-                traffic: trafficByNetworkId[networks[i].id],
-                accentColor: _accentColorFor(i),
-                onLeave: () => unawaited(onLeave(networks[i])),
-                onOpen: () => onOpen(networks[i]),
-              ),
+        const SizedBox(height: 12),
+        FCard.raw(
+          child: Column(
+            children: [
+              for (var i = 0; i < networks.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _NetworkSwitchTile(
+                  network: networks[i],
+                  devices: networkDevices[networks[i].id] ?? const <NetworkDevice>[],
+                  state: joinStateFor(networks[i]),
+                  traffic: trafficByNetworkId[networks[i].id],
+                  onJoin: () => unawaited(onJoin(networks[i])),
+                  onLeave: () => unawaited(onLeave(networks[i])),
+                  onOpen: () => onOpen(networks[i]),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ],
     );
   }
 }
 
-class _ActiveConnectionCard extends StatelessWidget {
-  const _ActiveConnectionCard({
+class _NetworkSwitchTile extends StatelessWidget {
+  const _NetworkSwitchTile({
     required this.network,
     required this.devices,
     required this.state,
     required this.traffic,
-    required this.accentColor,
+    required this.onJoin,
     required this.onLeave,
     required this.onOpen,
   });
@@ -2654,91 +2475,62 @@ class _ActiveConnectionCard extends StatelessWidget {
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
   final _NetworkTrafficSnapshot? traffic;
-  final Color accentColor;
+  final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final localIpv4 = state.localIpv4?.trim();
     final attachedDevices = devices.where((d) => d.attached).toList();
     final onlineCount = attachedDevices.where((d) => d.online).length;
+    final joined = state.phase == _JoinPhase.joined;
+    final joining = state.phase == _JoinPhase.joining;
+    final leaving = state.phase == _JoinPhase.leaving;
+    final failed = state.phase == _JoinPhase.error;
+    final localIpv4 = state.localIpv4?.trim();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: GestureDetector(
-          onTap: onOpen,
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            children: [
-              Container(
-                width: 5,
-                color: accentColor,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              network.name,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                            ),
-                          ),
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.power_settings_new,
-                                size: 18,
-                                color: Color(0xFF64748B),
-                              ),
-                              onPressed: onLeave,
-                              tooltip: '退出网络',
-                              padding: EdgeInsets.zero,
-                              splashRadius: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      if (localIpv4 != null && localIpv4.isNotEmpty)
+    final switchValue = joined || joining;
+    final isLoading = joining || leaving;
+    final onToggle = isLoading
+        ? null
+        : () {
+            if (joined) {
+              onLeave();
+            } else {
+              onJoin();
+            }
+          };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: onOpen,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF0F172A),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (joined && localIpv4 != null && localIpv4.isNotEmpty)
+                    Row(
+                      children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                            horizontal: 8,
+                            vertical: 2,
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF0FDF4),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: const Color(0xFFBBF7D0),
                             ),
@@ -2747,312 +2539,88 @@ class _ActiveConnectionCard extends StatelessWidget {
                             localIpv4,
                             style: Theme.of(context)
                                 .textTheme
-                                .bodyMedium
+                                .bodySmall
                                 ?.copyWith(
                                   fontFamily: 'monospace',
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF15803D),
                                 ),
                           ),
-                        )
-                      else
-                        Text(
-                          'IP 分配中',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: const Color(0xFF94A3B8),
-                              ),
                         ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF22C55E),
-                              shape: BoxShape.circle,
-                            ),
+                        const SizedBox(width: 10),
+                        if (traffic != null) ...[
+                          Icon(
+                            Icons.arrow_downward,
+                            size: 11,
+                            color: const Color(0xFF16A34A),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 2),
                           Text(
-                            '$onlineCount / ${attachedDevices.length} 台在线',
+                            _formatTrafficRate(traffic!.downloadBytesPerSecond),
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
                                 ?.copyWith(
-                                  color: const Color(0xFF64748B),
+                                  color: const Color(0xFF16A34A),
+                                  fontWeight: FontWeight.w500,
                                 ),
                           ),
-                          if (traffic != null) ...[
-                            const SizedBox(width: 16),
-                            Icon(
-                              Icons.arrow_downward,
-                              size: 12,
-                              color: const Color(0xFF16A34A),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              _formatTrafficRate(
-                                traffic!.downloadBytesPerSecond,
-                              ),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: const Color(0xFF16A34A),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            const SizedBox(width: 12),
-                            Icon(
-                              Icons.arrow_upward,
-                              size: 12,
-                              color: const Color(0xFF2563EB),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              _formatTrafficRate(
-                                traffic!.uploadBytesPerSecond,
-                              ),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: const Color(0xFF2563EB),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ],
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_upward,
+                            size: 11,
+                            color: const Color(0xFF2563EB),
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            _formatTrafficRate(traffic!.uploadBytesPerSecond),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: const Color(0xFF2563EB),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
                         ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NetworkDiscovery extends StatefulWidget {
-  const _NetworkDiscovery({
-    super.key,
-    required this.initiallyExpanded,
-    required this.networks,
-    required this.networkDevices,
-    required this.joinStateFor,
-    required this.onJoin,
-    required this.onOpen,
-  });
-
-  final bool initiallyExpanded;
-  final List<ConsoleNetwork> networks;
-  final Map<String, List<NetworkDevice>> networkDevices;
-  final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
-  final Future<void> Function(ConsoleNetwork) onJoin;
-  final void Function(ConsoleNetwork) onOpen;
-
-  @override
-  State<_NetworkDiscovery> createState() => _NetworkDiscoveryState();
-}
-
-class _NetworkDiscoveryState extends State<_NetworkDiscovery> {
-  late bool _expanded = widget.initiallyExpanded;
-
-  @override
-  void didUpdateWidget(covariant _NetworkDiscovery oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initiallyExpanded && !oldWidget.initiallyExpanded) {
-      setState(() => _expanded = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasNetworks = widget.networks.isNotEmpty;
-    final joiningCount = widget.networks.where((n) {
-      return widget.joinStateFor(n).phase == _JoinPhase.joining;
-    }).length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: hasNetworks
-              ? () => setState(() => _expanded = !_expanded)
-              : null,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  hasNetworks ? '发现更多网络' : '暂无其他可用网络',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-                const Spacer(),
-                if (hasNetworks) ...[
-                  Text(
-                    '${widget.networks.length} 个',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF94A3B8),
+                      ],
+                    )
+                  else
+                    Text(
+                      '$onlineCount / ${attachedDevices.length} 台设备在线',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF94A3B8),
+                          ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.expand_more,
-                      size: 20,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        if (_expanded && hasNetworks) ...[
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                for (var i = 0; i < widget.networks.length; i++) ...[
-                  if (i > 0)
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                  _NetworkDiscoveryRow(
-                    network: widget.networks[i],
-                    devices: widget.networkDevices[widget.networks[i].id] ??
-                        const <NetworkDevice>[],
-                    state: widget.joinStateFor(widget.networks[i]),
-                    onJoin: () =>
-                        unawaited(widget.onJoin(widget.networks[i])),
-                    onOpen: () => widget.onOpen(widget.networks[i]),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-        if (joiningCount > 0 && !_expanded)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF2563EB),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$joiningCount 个网络正在加入中',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF2563EB),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _NetworkDiscoveryRow extends StatelessWidget {
-  const _NetworkDiscoveryRow({
-    required this.network,
-    required this.devices,
-    required this.state,
-    required this.onJoin,
-    required this.onOpen,
-  });
-
-  final ConsoleNetwork network;
-  final List<NetworkDevice> devices;
-  final _JoinNetworkState state;
-  final VoidCallback onJoin;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final attachedDevices = devices.where((d) => d.attached).toList();
-    final onlineCount = attachedDevices.where((d) => d.online).length;
-    final joining = state.phase == _JoinPhase.joining;
-    final failed = state.phase == _JoinPhase.error;
-
-    return GestureDetector(
-      onTap: onOpen,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              Icons.radio_button_unchecked,
-              size: 18,
-              color: const Color(0xFFCBD5E1),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    network.name,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF334155),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '$onlineCount / ${attachedDevices.length} 台设备在线',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
                   if (failed && state.message != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       state.message!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFDC2626),
-                      ),
+                            color: const Color(0xFFDC2626),
+                          ),
                     ),
                   ],
                 ],
               ),
             ),
-            FButton(
-              size: .sm,
-              onPress: joining ? null : onJoin,
-              child: Text(
-                joining ? '加入中' : failed ? '重试' : '加入',
+          ),
+          const SizedBox(width: 12),
+          if (isLoading)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Material(
+              color: Colors.transparent,
+              child: Switch(
+                value: switchValue,
+                onChanged: (_) => onToggle?.call(),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
