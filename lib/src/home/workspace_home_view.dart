@@ -831,12 +831,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     unawaited(_loadSingleNetworkDevices(networkId));
   }
 
-  void _showNetwork() {
-    setState(() {
-      _activeView = _DashboardView.network;
-    });
-  }
-
   void _showDevices() {
     setState(() {
       _activeView = _DashboardView.devices;
@@ -850,28 +844,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _activeView = _DashboardView.settings;
     });
-  }
-
-  Future<void> _exportLogs(BuildContext context) async {
-    try {
-      final file = await AppLogger.instance.exportDiagnostics();
-      AppLogger.instance.info(
-        'home',
-        'Diagnostics exported',
-        context: {'file': file.path},
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('诊断日志已导出: ${file.path}')));
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('导出诊断日志失败')));
-      }
-    }
   }
 
   @override
@@ -1038,14 +1010,24 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final state = _joinStateFor(network);
     final joined = state.phase == _JoinPhase.joined;
 
+    final regionText = network.regions.isEmpty ? '-' : network.regions.join(', ');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               network.name,
               style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '${_workspace?.name ?? '未关联工作区'} · $regionText · ID ${network.id}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF94A3B8),
+                  ),
             ),
             const Spacer(),
             if (joined)
@@ -1063,16 +1045,44 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
           ],
         ),
-        const SizedBox(height: 20),
-        _NetworkInfoPanel(
-          network: network,
-          workspaceName: _workspace?.name ?? '未关联工作区',
-          totalDevices: devices.length,
-          onlineDevices: onlineCount,
-          traffic: _networkTraffic[network.id],
+        const SizedBox(height: 24),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _NetworkSidebar(
+              totalDevices: devices.length,
+              onlineDevices: onlineCount,
+              traffic: _networkTraffic[network.id],
+              onRefresh: () => unawaited(_loadSingleNetworkDevices(network.id)),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        '设备',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A),
+                            ),
+                      ),
+                      const Spacer(),
+                      FBadge(
+                        variant: .secondary,
+                        child: Text('${devices.length} 台'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _DeviceListPanel(devices: devices),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        _DeviceListPanel(deviceCount: devices.length, devices: devices),
         const SizedBox(height: 24),
         if (_showCreateFormOnNetworkPage) ...[
           _CreateNetworkPanel(
@@ -1207,20 +1217,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
   }
-}
-
-String _formatTrafficSummary(_NetworkTrafficSnapshot? traffic) {
-  if (traffic == null) {
-    return '流量统计暂不可用';
-  }
-  return '实时 ${_formatRealtimeTraffic(traffic)} | 累计 ${_formatTotalTraffic(traffic)}';
-}
-
-String _formatRealtimeTraffic(_NetworkTrafficSnapshot? traffic) {
-  if (traffic == null) {
-    return '流量统计暂不可用';
-  }
-  return '下载 ${_formatTrafficRate(traffic.downloadBytesPerSecond)} / 上传 ${_formatTrafficRate(traffic.uploadBytesPerSecond)}';
 }
 
 String _formatTotalTraffic(_NetworkTrafficSnapshot? traffic) {
@@ -1738,233 +1734,6 @@ class _CreateNetworkPanel extends StatelessWidget {
   }
 }
 
-class _NetworkJoinList extends StatelessWidget {
-  const _NetworkJoinList({
-    required this.title,
-    required this.subtitle,
-    required this.networks,
-    required this.networkDevices,
-    required this.trafficByNetworkId,
-    required this.joinStateFor,
-    required this.onJoin,
-    required this.onLeave,
-    required this.onOpen,
-    required this.onRefresh,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<ConsoleNetwork> networks;
-  final Map<String, List<NetworkDevice>> networkDevices;
-  final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
-  final _JoinNetworkState Function(ConsoleNetwork network) joinStateFor;
-  final Future<void> Function(ConsoleNetwork network) onJoin;
-  final Future<void> Function(ConsoleNetwork network) onLeave;
-  final void Function(ConsoleNetwork network) onOpen;
-  final Future<void> Function() onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionTitle(
-          title: title,
-          subtitle: subtitle,
-          trailing: FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: onRefresh,
-            child: const Text('刷新'),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Column(
-          children: [
-            for (final network in networks) ...[
-              _NetworkJoinCard(
-                network: network,
-                devices: networkDevices[network.id] ?? const <NetworkDevice>[],
-                state: joinStateFor(network),
-                traffic: trafficByNetworkId[network.id],
-                onJoin: () => unawaited(onJoin(network)),
-                onLeave: () => unawaited(onLeave(network)),
-                onOpen: () => onOpen(network),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _NetworkJoinCard extends StatelessWidget {
-  const _NetworkJoinCard({
-    required this.network,
-    required this.devices,
-    required this.state,
-    required this.traffic,
-    required this.onJoin,
-    required this.onLeave,
-    required this.onOpen,
-  });
-
-  final ConsoleNetwork network;
-  final List<NetworkDevice> devices;
-  final _JoinNetworkState state;
-  final _NetworkTrafficSnapshot? traffic;
-  final VoidCallback onJoin;
-  final VoidCallback onLeave;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final attachedDevices = devices.where((device) => device.attached).toList();
-    final online = attachedDevices.where((device) => device.online).length;
-    final joined = state.phase == _JoinPhase.joined;
-    final joining = state.phase == _JoinPhase.joining;
-    final leaving = state.phase == _JoinPhase.leaving;
-    final failed = state.phase == _JoinPhase.error;
-    final localIpv4 = state.localIpv4?.trim();
-
-    final statusLabel = joined
-        ? '已加入'
-        : joining
-        ? '正在加入'
-        : leaving
-        ? '正在退出'
-        : failed
-        ? '操作失败'
-        : '未加入';
-    final statusColor = joined
-        ? const Color(0xFF16A34A)
-        : joining
-        ? const Color(0xFF2563EB)
-        : leaving
-        ? const Color(0xFFF59E0B)
-        : failed
-        ? const Color(0xFFDC2626)
-        : Colors.grey;
-
-    return FCard.raw(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.hub_outlined, color: statusColor),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          network.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      FBadge(
-                        variant: joined ? .secondary : .outline,
-                        child: Text(statusLabel),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '$online / ${attachedDevices.length} 台设备在线',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
-                    ),
-                  ),
-                  if (joined) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      localIpv4 == null || localIpv4.isEmpty
-                          ? '本机 IP 分配中'
-                          : '本机 IP $localIpv4',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatTrafficSummary(traffic),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                  if (network.regions.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '区域 ${network.regions.join(', ')}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                  if (state.message != null && state.message!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      state.message!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color:
-                            failed || (joined && state.message!.contains('失败'))
-                            ? const Color(0xFFDC2626)
-                            : const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FButton(
-                  variant: .outline,
-                  size: .sm,
-                  onPress: onOpen,
-                  child: const Text('详情'),
-                ),
-                if (joined || leaving)
-                  FButton(
-                    variant: .outline,
-                    size: .sm,
-                    onPress: leaving ? null : onLeave,
-                    child: Text(leaving ? '退出中' : '退出'),
-                  )
-                else
-                  FButton(
-                    size: .sm,
-                    onPress: joining ? null : onJoin,
-                    child: Text(
-                      joining
-                          ? '加入中'
-                          : failed
-                          ? '重试'
-                          : '加入',
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _UserMenu extends StatelessWidget {
   const _UserMenu({
     required this.userName,
@@ -2146,66 +1915,118 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _NetworkInfoPanel extends StatelessWidget {
-  const _NetworkInfoPanel({
-    required this.network,
-    required this.workspaceName,
-    required this.totalDevices,
-    required this.onlineDevices,
-    required this.traffic,
+class _MetricRow extends StatelessWidget {
+  const _MetricRow({
+    required this.icon,
+    required this.value,
+    required this.color,
   });
 
-  final ConsoleNetwork network;
-  final String workspaceName;
-  final int totalDevices;
-  final int onlineDevices;
-  final _NetworkTrafficSnapshot? traffic;
+  final IconData icon;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return FCard(
-      title: Text(network.name, style: Theme.of(context).textTheme.titleLarge),
-      subtitle: const Text('网络信息'),
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NetworkSidebar extends StatelessWidget {
+  const _NetworkSidebar({
+    required this.totalDevices,
+    required this.onlineDevices,
+    required this.traffic,
+    required this.onRefresh,
+  });
+
+  final int totalDevices;
+  final int onlineDevices;
+  final _NetworkTrafficSnapshot? traffic;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 8),
-          FItemGroup(
-            divider: .full,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              FItem(
-                prefix: const Icon(Icons.badge_outlined),
-                title: const Text('网络 ID'),
-                details: Text(network.id),
-              ),
-              FItem(
-                prefix: const Icon(Icons.apartment_outlined),
-                title: const Text('工作区'),
-                details: Text(workspaceName),
-              ),
-              FItem(
-                prefix: const Icon(Icons.public_outlined),
-                title: const Text('区域'),
-                details: Text(
-                  network.regions.isEmpty ? '-' : network.regions.join(', '),
+          Text(
+            '$onlineDevices / $totalDevices',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
                 ),
-              ),
-              FItem(
-                prefix: const Icon(Icons.devices_other_outlined),
-                title: const Text('设备'),
-                details: Text('$onlineDevices / $totalDevices 在线'),
-              ),
-              FItem(
-                prefix: const Icon(Icons.speed_outlined),
-                title: const Text('实时流量'),
-                details: Text(_formatRealtimeTraffic(traffic)),
-              ),
-              FItem(
-                prefix: const Icon(Icons.swap_vert_outlined),
-                title: const Text('累计流量'),
-                details: Text(_formatTotalTraffic(traffic)),
-              ),
-            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '台设备在线',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF64748B),
+                ),
+          ),
+          const Divider(height: 32),
+          Text(
+            '实时流量',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 10),
+          _MetricRow(
+            icon: Icons.arrow_downward,
+            value: _formatTrafficRate(traffic?.downloadBytesPerSecond),
+            color: const Color(0xFF16A34A),
+          ),
+          const SizedBox(height: 8),
+          _MetricRow(
+            icon: Icons.arrow_upward,
+            value: _formatTrafficRate(traffic?.uploadBytesPerSecond),
+            color: const Color(0xFF2563EB),
+          ),
+          const Divider(height: 32),
+          Text(
+            '累计流量',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _formatTotalTraffic(traffic),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF374151),
+                ),
+          ),
+          const SizedBox(height: 20),
+          FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: onRefresh,
+            child: const Text('刷新设备'),
           ),
         ],
       ),
@@ -2214,50 +2035,39 @@ class _NetworkInfoPanel extends StatelessWidget {
 }
 
 class _DeviceListPanel extends StatelessWidget {
-  const _DeviceListPanel({required this.deviceCount, required this.devices});
+  const _DeviceListPanel({required this.devices});
 
-  final int deviceCount;
   final List<NetworkDevice> devices;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('设备列表', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FBadge(variant: .secondary, child: Text('$deviceCount 台设备')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (devices.isEmpty)
-          const SizedBox(height: 160, child: _StateMessage(message: '该网络暂无设备'))
-        else
-          FCard.raw(
-            child: FItemGroup(
-              divider: .full,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (final device in devices)
-                  FItem(
-                    prefix: _StatusDot(online: device.online),
-                    title: Text(device.name),
-                    subtitle: Text(
-                      device.ipv4 == null || device.ipv4!.isEmpty
-                          ? 'ID: ${device.id}'
-                          : 'IP: ${device.ipv4}  |  ID: ${device.id}',
-                    ),
-                    suffix: FBadge(
-                      variant: device.online ? .secondary : .outline,
-                      child: Text(device.online ? '在线' : '离线'),
-                    ),
-                  ),
-              ],
+    if (devices.isEmpty) {
+      return const SizedBox(
+        height: 200,
+        child: _StateMessage(message: '该网络暂无设备'),
+      );
+    }
+    return FCard.raw(
+      child: FItemGroup(
+        divider: .full,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          for (final device in devices)
+            FItem(
+              prefix: _StatusDot(online: device.online),
+              title: Text(device.name),
+              subtitle: Text(
+                device.ipv4 == null || device.ipv4!.isEmpty
+                    ? 'ID: ${device.id}'
+                    : 'IP: ${device.ipv4}  |  ID: ${device.id}',
+              ),
+              suffix: FBadge(
+                variant: device.online ? .secondary : .outline,
+                child: Text(device.online ? '在线' : '离线'),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

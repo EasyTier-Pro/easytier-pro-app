@@ -146,7 +146,8 @@ void main() {
 
     expect(find.text('实时流量'), findsOneWidget);
     expect(find.text('累计流量'), findsOneWidget);
-    expect(find.textContaining('下载 1.00 KiB/s / 上传 2.00 KiB/s'), findsOneWidget);
+    expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
+    expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
