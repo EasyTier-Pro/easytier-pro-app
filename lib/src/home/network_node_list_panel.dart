@@ -449,13 +449,14 @@ class _NodeMetaLine extends StatelessWidget {
     if (peer != null) {
       final p = peer!;
 
+      final cost = p.cost.trim();
+      if (cost.isNotEmpty && cost != '-') {
+        parts.add(cost.toLowerCase() == 'p2p' ? 'P2P' : cost);
+      }
+
       final latency = p.latencyText.trim();
       if (latency.isNotEmpty && latency != '-' && latency != '*') {
         parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
-      }
-
-      if (p.tunnelProto.isNotEmpty && p.tunnelProto != '-') {
-        parts.add(p.tunnelProto);
       }
 
       if (p.lossText.isNotEmpty && p.lossText != '-') {
