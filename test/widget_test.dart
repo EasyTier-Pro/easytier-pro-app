@@ -305,7 +305,7 @@ void main() {
     await _selectNetworkFromHeader(tester, '办公网');
 
     tester.view.physicalSize = const Size(360, 700);
-    await tester.pumpAndSettle();
+    await _pumpAppMotionFrames(tester);
 
     expect(tester.takeException(), isNull);
     expect(
@@ -468,7 +468,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.pumpAndSettle();
+    await _pumpAppMotionFrames(tester);
 
     expect(find.text('节点'), findsOneWidget);
     expect(find.text('P2P'), findsOneWidget);
@@ -528,7 +528,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.pumpAndSettle();
+    await _pumpAppMotionFrames(tester);
 
     expect(find.text('desktop-1'), findsOneWidget);
     expect(find.textContaining('运行态暂不可用'), findsOneWidget);
@@ -605,13 +605,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.pumpAndSettle();
+    await _pumpAppMotionFrames(tester);
 
     final nodeFetchCount = authService.networkDeviceFetchCount;
     final peerReadCount = coreLifecycleService.peerReadCount;
 
     await tester.tap(find.widgetWithText(FButton, '刷新节点'));
-    await tester.pumpAndSettle();
+    await _pumpAppMotionFrames(tester);
 
     expect(authService.networkDeviceFetchCount, greaterThan(nodeFetchCount));
     expect(coreLifecycleService.peerReadCount, greaterThan(peerReadCount));
@@ -1161,7 +1161,14 @@ Future<void> _selectNetworkFromHeader(
       matching: find.text(networkName),
     ),
   );
-  await tester.pumpAndSettle();
+  await _pumpAppMotionFrames(tester);
+}
+
+Future<void> _pumpAppMotionFrames(WidgetTester tester) async {
+  for (var i = 0; i < 8; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pump();
 }
 
 http.Response _jsonResponse(Object body, [int statusCode = 200]) {

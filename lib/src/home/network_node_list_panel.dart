@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
+import '../shared/app_motion.dart';
 
 const double _nodeListMinWidth = 360;
 
@@ -34,27 +35,35 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.nodes.isEmpty) {
-      return NetworkNodeListPanel(
-        nodes: widget.nodes,
-        peerStatusesByIpv4: widget.peerStatusesByIpv4,
-        runtimeError: widget.runtimeError,
-      );
-    }
+    final content = widget.nodes.isEmpty
+        ? NetworkNodeListPanel(
+            key: const ValueKey<String>('network-node-list-empty'),
+            nodes: widget.nodes,
+            peerStatusesByIpv4: widget.peerStatusesByIpv4,
+            runtimeError: widget.runtimeError,
+          )
+        : Scrollbar(
+            key: const ValueKey<String>('network-node-list-scrollbar'),
+            controller: _scrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              key: const ValueKey<String>('network-node-list-scroll'),
+              controller: _scrollController,
+              primary: false,
+              physics: appScrollPhysics,
+              child: NetworkNodeListPanel(
+                nodes: widget.nodes,
+                peerStatusesByIpv4: widget.peerStatusesByIpv4,
+                runtimeError: widget.runtimeError,
+              ),
+            ),
+          );
 
-    return Scrollbar(
-      controller: _scrollController,
-      thumbVisibility: true,
-      child: SingleChildScrollView(
-        key: const ValueKey<String>('network-node-list-scroll'),
-        controller: _scrollController,
-        primary: false,
-        child: NetworkNodeListPanel(
-          nodes: widget.nodes,
-          peerStatusesByIpv4: widget.peerStatusesByIpv4,
-          runtimeError: widget.runtimeError,
-        ),
-      ),
+    return AnimatedSwitcher(
+      duration: appMotionMedium,
+      reverseDuration: appMotionShort,
+      transitionBuilder: appFadeSlideTransition,
+      child: content,
     );
   }
 }
@@ -73,72 +82,77 @@ class NetworkNodeListPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (nodes.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (runtimeError != null) ...[
-            _RuntimeStatusNotice(message: runtimeError!),
-            const SizedBox(height: 12),
-          ],
-          const Center(child: _NodeStateMessage(message: '该网络暂无节点')),
-        ],
-      );
-    }
-
-    final sortedNodes = _sortNodes(nodes);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.hasBoundedWidth &&
-            constraints.maxWidth < _nodeListMinWidth;
-
-        Widget list = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (runtimeError != null) ...[
-              _RuntimeStatusNotice(message: runtimeError!),
-              const SizedBox(height: 12),
+    final content = nodes.isEmpty
+        ? Column(
+            key: const ValueKey<String>('network-node-list-panel-empty'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (runtimeError != null) ...[
+                _RuntimeStatusNotice(message: runtimeError!),
+                const SizedBox(height: 12),
+              ],
+              const Center(child: _NodeStateMessage(message: '该网络暂无节点')),
             ],
-            for (final node in sortedNodes)
-              _NodeCard(
-                node: node,
-                peer: _peerFor(node),
-              ),
-          ],
-        );
+          )
+        : LayoutBuilder(
+            key: const ValueKey<String>('network-node-list-panel-loaded'),
+            builder: (context, constraints) {
+              final sortedNodes = _sortNodes(nodes);
+              final isNarrow =
+                  constraints.hasBoundedWidth &&
+                  constraints.maxWidth < _nodeListMinWidth;
 
-        if (isNarrow) {
-          return SingleChildScrollView(
-            primary: false,
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: _nodeListMinWidth,
-              child: list,
-            ),
+              Widget list = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (runtimeError != null) ...[
+                    _RuntimeStatusNotice(message: runtimeError!),
+                    const SizedBox(height: 12),
+                  ],
+                  for (final node in sortedNodes)
+                    _NodeCard(
+                      key: ValueKey<String>('network-node-${node.id}'),
+                      node: node,
+                      peer: _peerFor(node),
+                    ),
+                ],
+              );
+
+              if (isNarrow) {
+                return SingleChildScrollView(
+                  primary: false,
+                  scrollDirection: Axis.horizontal,
+                  physics: appScrollPhysics,
+                  child: SizedBox(width: _nodeListMinWidth, child: list),
+                );
+              }
+
+              return list;
+            },
           );
-        }
 
-        return list;
-      },
+    return AnimatedSwitcher(
+      duration: appMotionMedium,
+      reverseDuration: appMotionShort,
+      transitionBuilder: appFadeSlideTransition,
+      child: content,
     );
   }
 
   List<NetworkDevice> _sortNodes(List<NetworkDevice> source) {
-    return List<NetworkDevice>.of(source)
-      ..sort((a, b) {
-        if (a.online && !b.online) return -1;
-        if (!a.online && b.online) return 1;
+    return List<NetworkDevice>.of(source)..sort((a, b) {
+      if (a.online && !b.online) return -1;
+      if (!a.online && b.online) return 1;
 
-        final aPeer = _peerFor(a);
-        final bPeer = _peerFor(b);
-        final aLocal = aPeer?.isLocal ?? false;
-        final bLocal = bPeer?.isLocal ?? false;
-        if (aLocal && !bLocal) return -1;
-        if (!aLocal && bLocal) return 1;
+      final aPeer = _peerFor(a);
+      final bPeer = _peerFor(b);
+      final aLocal = aPeer?.isLocal ?? false;
+      final bLocal = bPeer?.isLocal ?? false;
+      if (aLocal && !bLocal) return -1;
+      if (!aLocal && bLocal) return 1;
 
-        return a.name.compareTo(b.name);
-      });
+      return a.name.compareTo(b.name);
+    });
   }
 
   CorePeerStatus? _peerFor(NetworkDevice node) {
@@ -151,10 +165,7 @@ class NetworkNodeListPanel extends StatelessWidget {
 }
 
 class _NodeCard extends StatefulWidget {
-  const _NodeCard({
-    required this.node,
-    required this.peer,
-  });
+  const _NodeCard({super.key, required this.node, required this.peer});
 
   final NetworkDevice node;
   final CorePeerStatus? peer;
@@ -191,136 +202,142 @@ class _NodeCardState extends State<_NodeCard>
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 左侧状态条
-                  Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: isOnline
-                          ? const Color(0xFF16A34A)
-                          : const Color(0xFF9CA3AF),
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 首行：状态圆点 + 图标 + 名称 + 标记 + Badge + 展开箭头
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              _BreathingDot(
-                                controller: _breathController,
-                                online: isOnline,
-                              ),
-                              const SizedBox(width: 10),
-                              Icon(
-                                isLocal
-                                    ? Icons.computer
-                                    : Icons.devices_other_outlined,
-                                size: 20,
-                                color: const Color(0xFF64748B),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  widget.node.name,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (isLocal) ...[
-                                const SizedBox(width: 8),
-                                const _LocalBadge(),
-                              ],
-                              const SizedBox(width: 8),
-                              FBadge(
-                                variant: isOnline ? .secondary : .outline,
-                                child: Text(isOnline ? '在线' : '离线'),
-                              ),
-                              const SizedBox(width: 6),
-                              FBadge(
-                                variant: peer == null ? .outline : .secondary,
-                                child: Text(peer == null
-                                    ? '运行态未知'
-                                    : _formatPeerCost(peer.cost)),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                _expanded
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                size: 18,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          // IPv4 地址
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.vpn_key_outlined,
-                                size: 14,
-                                color: Color(0xFF94A3B8),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                widget.node.ipv4?.isNotEmpty == true
-                                    ? widget.node.ipv4!
-                                    : '未分配 IPv4',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: const Color(0xFF64748B),
-                                      fontFamily: 'Inter',
-                                    ),
-                              ),
-                            ],
-                          ),
-                          // 快捷指标行
-                          if (peer != null) ...[
-                            const SizedBox(height: 8),
-                            _QuickMetrics(peer: peer),
-                          ],
-                          // 展开详情
-                          AnimatedCrossFade(
-                            firstChild: const SizedBox.shrink(),
-                            secondChild: _NodeDetailPanel(peer: peer),
-                            crossFadeState: _expanded
-                                ? CrossFadeState.showSecond
-                                : CrossFadeState.showFirst,
-                            duration: const Duration(milliseconds: 250),
-                          ),
-                        ],
+      child: AnimatedSize(
+        duration: appMotionMedium,
+        curve: appMotionCurve,
+        alignment: Alignment.topCenter,
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 左侧状态条
+                    Container(
+                      width: 4,
+                      decoration: BoxDecoration(
+                        color: isOnline
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFF9CA3AF),
                       ),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 首行：状态圆点 + 图标 + 名称 + 标记 + Badge + 展开箭头
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _BreathingDot(
+                                  controller: _breathController,
+                                  online: isOnline,
+                                ),
+                                const SizedBox(width: 10),
+                                Icon(
+                                  isLocal
+                                      ? Icons.computer
+                                      : Icons.devices_other_outlined,
+                                  size: 20,
+                                  color: const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    widget.node.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isLocal) ...[
+                                  const SizedBox(width: 8),
+                                  const _LocalBadge(),
+                                ],
+                                const SizedBox(width: 8),
+                                FBadge(
+                                  variant: isOnline ? .secondary : .outline,
+                                  child: Text(isOnline ? '在线' : '离线'),
+                                ),
+                                const SizedBox(width: 6),
+                                FBadge(
+                                  variant: peer == null ? .outline : .secondary,
+                                  child: Text(
+                                    peer == null
+                                        ? '运行态未知'
+                                        : _formatPeerCost(peer.cost),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _expanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 18,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            // IPv4 地址
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.vpn_key_outlined,
+                                  size: 14,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  widget.node.ipv4?.isNotEmpty == true
+                                      ? widget.node.ipv4!
+                                      : '未分配 IPv4',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF64748B),
+                                        fontFamily: 'Inter',
+                                      ),
+                                ),
+                              ],
+                            ),
+                            // 快捷指标行
+                            if (peer != null) ...[
+                              const SizedBox(height: 8),
+                              _QuickMetrics(peer: peer),
+                            ],
+                            // 展开详情
+                            AnimatedCrossFade(
+                              firstChild: const SizedBox.shrink(),
+                              secondChild: _NodeDetailPanel(peer: peer),
+                              crossFadeState: _expanded
+                                  ? CrossFadeState.showSecond
+                                  : CrossFadeState.showFirst,
+                              duration: appMotionMedium,
+                              sizeCurve: appMotionCurve,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -331,10 +348,7 @@ class _NodeCardState extends State<_NodeCard>
 }
 
 class _BreathingDot extends StatelessWidget {
-  const _BreathingDot({
-    required this.controller,
-    required this.online,
-  });
+  const _BreathingDot({required this.controller, required this.online});
 
   final AnimationController controller;
   final bool online;
@@ -359,15 +373,15 @@ class _BreathingDot extends StatelessWidget {
           width: 10,
           height: 10,
           decoration: BoxDecoration(
-            color: const Color(0xFF16A34A).withValues(
-              alpha: 0.5 + controller.value * 0.5,
-            ),
+            color: const Color(
+              0xFF16A34A,
+            ).withValues(alpha: 0.5 + controller.value * 0.5),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF16A34A).withValues(
-                  alpha: 0.2 + controller.value * 0.3,
-                ),
+                color: const Color(
+                  0xFF16A34A,
+                ).withValues(alpha: 0.2 + controller.value * 0.3),
                 blurRadius: 4 + controller.value * 4,
                 spreadRadius: controller.value * 1,
               ),
@@ -422,9 +436,9 @@ class _NodeDetailPanel extends StatelessWidget {
           Text(
             '运行态信息暂不可用',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF94A3B8),
-                  fontStyle: FontStyle.italic,
-                ),
+              color: const Color(0xFF94A3B8),
+              fontStyle: FontStyle.italic,
+            ),
           )
         else
           Wrap(
@@ -441,8 +455,7 @@ class _NodeDetailPanel extends StatelessWidget {
                 _DetailChip(
                   icon: Icons.speed_outlined,
                   label: '延迟',
-                  value: _formatLatency(p.latencyText)
-                      .replaceFirst('延迟 ', ''),
+                  value: _formatLatency(p.latencyText).replaceFirst('延迟 ', ''),
                 ),
               if (p.lossText.isNotEmpty && p.lossText != '-')
                 _DetailChip(
@@ -549,11 +562,17 @@ class _QuickMetrics extends StatelessWidget {
 
     final latency = _formatLatency(peer.latencyText);
     if (latency.isNotEmpty) {
-      items.add(_metricChip(Icons.speed_outlined, latency.replaceFirst('延迟 ', '')));
+      items.add(_metricChip(Icons.speed_outlined, latency));
     }
 
     if (peer.tunnelProto.isNotEmpty && peer.tunnelProto != '-') {
       items.add(_metricChip(Icons.route_outlined, peer.tunnelProto));
+    }
+
+    if (peer.peerId.isNotEmpty) {
+      items.add(
+        _metricChip(Icons.fingerprint_outlined, 'Peer: ${peer.peerId}'),
+      );
     }
 
     if (peer.rxBytes.isNotEmpty && peer.rxBytes != '-') {
@@ -568,11 +587,7 @@ class _QuickMetrics extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: items,
-    );
+    return Wrap(spacing: 8, runSpacing: 6, children: items);
   }
 
   Widget _metricChip(IconData icon, String text) {

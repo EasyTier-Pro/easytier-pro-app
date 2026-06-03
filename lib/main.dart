@@ -10,6 +10,7 @@ import 'src/auth/console_auth_service.dart';
 import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/tray_support.dart';
 import 'src/logging/app_logger.dart';
+import 'src/shared/app_motion.dart';
 
 const Color _appBackground = Color(0xFFF8F9FB);
 const Color _cardBackground = Color(0xFFFFFFFF);
@@ -129,6 +130,7 @@ class _MyAppState extends State<MyApp> {
 
     return MaterialApp(
       title: 'EasyTier Pro',
+      scrollBehavior: const AppScrollBehavior(),
       builder: (context, child) => FTheme(
         data: _foruiThemeData,
         child: FToaster(child: child ?? const SizedBox.shrink()),

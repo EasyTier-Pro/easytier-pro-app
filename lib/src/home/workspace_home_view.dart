@@ -9,6 +9,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
+import '../shared/app_motion.dart';
 import 'network_node_list_panel.dart';
 
 enum _DashboardView { overview, network, devices, settings }
@@ -456,6 +457,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         builder: (context, _) => Padding(
           padding: const EdgeInsets.all(24),
           child: SingleChildScrollView(
+            physics: appScrollPhysics,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1045,6 +1047,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   @override
   Widget build(BuildContext context) {
     final workspaceName = _workspace?.name ?? '未关联工作区';
+    final contentKey = ValueKey<String>(
+      [
+        _activeView.name,
+        if (_activeView == _DashboardView.network) _selectedNetworkId ?? 'none',
+      ].join(':'),
+    );
 
     return FScaffold(
       childPad: false,
@@ -1068,25 +1076,35 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           Expanded(
             child: DecoratedBox(
               decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-              child: _activeView == _DashboardView.network
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1040),
-                          child: _buildContent(context),
+              child: AnimatedSwitcher(
+                duration: appMotionMedium,
+                reverseDuration: appMotionShort,
+                transitionBuilder: appFadeSlideTransition,
+                layoutBuilder: appSwitcherStackLayout,
+                child: KeyedSubtree(
+                  key: contentKey,
+                  child: _activeView == _DashboardView.network
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1040),
+                              child: _buildContent(context),
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(24),
+                          physics: appScrollPhysics,
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1040),
+                              child: _buildContent(context),
+                            ),
+                          ),
                         ),
-                      ),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1040),
-                          child: _buildContent(context),
-                        ),
-                      ),
-                    ),
+                ),
+              ),
             ),
           ),
         ],
@@ -1301,56 +1319,63 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 ],
               );
 
-              if (constraints.maxWidth < _networkDetailStackBreakpoint) {
-                return SingleChildScrollView(
-                  key: const ValueKey<String>('network-detail-stacked'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _NetworkSidebar(
-                        width: double.infinity,
-                        totalDevices: devices.length,
-                        onlineDevices: onlineCount,
-                        traffic: _networkTraffic[network.id],
-                        onRefresh: () =>
-                            unawaited(_refreshNetworkNodes(network)),
-                      ),
-                      const SizedBox(height: 20),
-                      listHeader,
-                      const SizedBox(height: 12),
-                      NetworkNodeListPanel(
-                        nodes: devices,
-                        peerStatusesByIpv4: peerStatuses,
-                        runtimeError: peerStatusError,
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return Row(
-                key: const ValueKey<String>('network-detail-wide'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  sidebar,
-                  const SizedBox(width: 24),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        listHeader,
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: NetworkNodeListViewport(
+              final detailBody =
+                  constraints.maxWidth < _networkDetailStackBreakpoint
+                  ? SingleChildScrollView(
+                      key: const ValueKey<String>('network-detail-stacked'),
+                      physics: appScrollPhysics,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _NetworkSidebar(
+                            width: double.infinity,
+                            totalDevices: devices.length,
+                            onlineDevices: onlineCount,
+                            traffic: _networkTraffic[network.id],
+                            onRefresh: () =>
+                                unawaited(_refreshNetworkNodes(network)),
+                          ),
+                          const SizedBox(height: 20),
+                          listHeader,
+                          const SizedBox(height: 12),
+                          NetworkNodeListPanel(
                             nodes: devices,
                             peerStatusesByIpv4: peerStatuses,
                             runtimeError: peerStatusError,
                           ),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      key: const ValueKey<String>('network-detail-wide'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        sidebar,
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              listHeader,
+                              const SizedBox(height: 12),
+                              Expanded(
+                                child: NetworkNodeListViewport(
+                                  nodes: devices,
+                                  peerStatusesByIpv4: peerStatuses,
+                                  runtimeError: peerStatusError,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                ],
+                    );
+
+              return AnimatedSize(
+                duration: appMotionMedium,
+                curve: appMotionCurve,
+                alignment: Alignment.topCenter,
+                child: detailBody,
               );
             },
           ),
@@ -1551,6 +1576,7 @@ class _DashboardHeader extends StatelessWidget {
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
+                  physics: appScrollPhysics,
                   child: Row(
                     children: [
                       FButton(
@@ -2345,7 +2371,7 @@ class _ConstrainedFItemGroup extends StatelessWidget {
   const _ConstrainedFItemGroup({
     required this.children,
     this.divider = FItemDivider.none,
-    this.physics = const ClampingScrollPhysics(),
+    this.physics = appScrollPhysics,
   });
 
   final List<FItemMixin> children;
@@ -2368,6 +2394,7 @@ class _ConstrainedFItemGroup extends StatelessWidget {
         return SingleChildScrollView(
           primary: false,
           scrollDirection: Axis.horizontal,
+          physics: appScrollPhysics,
           child: SizedBox(
             width: _itemListMinWidth,
             child: FItemGroup(
