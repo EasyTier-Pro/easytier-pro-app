@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../auth/console_auth_service.dart';
+import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
+import 'network_node_list_panel.dart';
 
 enum _DashboardView { overview, network, devices, settings }
 
@@ -108,6 +110,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   static const Duration _devicePollDelay = Duration(seconds: 1);
   static const int _devicePollAttempts = 60;
   static const Duration _trafficPollInterval = Duration(seconds: 2);
+  static const Duration _peerPollInterval = Duration(seconds: 5);
 
   List<ConsoleNetwork> _networks = const <ConsoleNetwork>[];
   List<ConsoleRegion> _regions = const <ConsoleRegion>[];
@@ -133,12 +136,18 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   int _deviceRequestId = 0;
   int _regionRequestId = 0;
   Timer? _trafficPollTimer;
+  Timer? _peerPollTimer;
   bool _isTrafficPollInFlight = false;
+  bool _isPeerPollInFlight = false;
   Set<String> _trafficPollNetworkIds = const <String>{};
+  String? _peerPollNetworkId;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, CoreNetworkTrafficTotals> _previousTrafficTotals =
       const <String, CoreNetworkTrafficTotals>{};
+  Map<String, Map<String, CorePeerStatus>> _networkPeerStatuses =
+      const <String, Map<String, CorePeerStatus>>{};
+  Map<String, String> _peerStatusErrors = const <String, String>{};
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -177,6 +186,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   @override
   void dispose() {
     _trafficPollTimer?.cancel();
+    _peerPollTimer?.cancel();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     super.dispose();
   }
@@ -187,6 +197,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     }
     setState(() {});
     _refreshTrafficPolling();
+    _refreshPeerPolling();
   }
 
   Future<void> _loadInitialData() async {
@@ -271,8 +282,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _networkError = '当前账号未关联工作区。';
         _networks = const <ConsoleNetwork>[];
         _selectedNetworkId = null;
+        _networkPeerStatuses = const <String, Map<String, CorePeerStatus>>{};
+        _peerStatusErrors = const <String, String>{};
       });
       _refreshTrafficPolling();
+      _refreshPeerPolling();
       return;
     }
 
@@ -304,6 +318,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _isLoadingNetworks = false;
       });
       _refreshTrafficPolling();
+      _refreshPeerPolling();
       unawaited(_loadNetworkDevices(networks));
     } catch (error) {
       if (!mounted || requestId != _networkRequestId) {
@@ -348,6 +363,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _networkDevices = Map<String, List<NetworkDevice>>.fromEntries(results);
     });
     _refreshTrafficPolling();
+    _refreshPeerPolling();
   }
 
   Future<void> _loadSingleNetworkDevices(String networkId) async {
@@ -367,6 +383,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _networkDevices = {..._networkDevices, networkId: devices};
     });
     _refreshTrafficPolling();
+    _refreshPeerPolling();
+  }
+
+  Future<void> _refreshNetworkNodes(ConsoleNetwork network) async {
+    await _loadSingleNetworkDevices(network.id);
+    await _pollNetworkPeers(network);
   }
 
   Future<void> _createNetwork({VoidCallback? onSuccess}) async {
@@ -666,6 +688,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _joinStates = {..._joinStates, networkId: state};
     });
     _refreshTrafficPolling();
+    _refreshPeerPolling();
   }
 
   void _setJoinError(String networkId, String message) {
@@ -687,8 +710,16 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             .toList(growable: false),
       };
       _joinStates = {..._joinStates, networkId: _JoinNetworkState.idle};
+      final nextPeerStatuses = Map<String, Map<String, CorePeerStatus>>.from(
+        _networkPeerStatuses,
+      )..remove(networkId);
+      final nextPeerErrors = Map<String, String>.from(_peerStatusErrors)
+        ..remove(networkId);
+      _networkPeerStatuses = nextPeerStatuses;
+      _peerStatusErrors = nextPeerErrors;
     });
     _refreshTrafficPolling();
+    _refreshPeerPolling();
   }
 
   List<ConsoleNetwork> _trafficPollNetworks() {
@@ -859,11 +890,122 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     }
   }
 
+  ConsoleNetwork? _peerPollNetwork() {
+    if (!widget.coreLifecycleService.status.value.isRunning ||
+        _activeView != _DashboardView.network) {
+      return null;
+    }
+
+    final network =
+        _selectedNetwork ?? (_networks.isEmpty ? null : _networks.first);
+    if (network == null || network.runtimeNetworkName.trim().isEmpty) {
+      return null;
+    }
+    if (_joinStateFor(network).phase != _JoinPhase.joined) {
+      return null;
+    }
+    return network;
+  }
+
+  void _refreshPeerPolling() {
+    if (!mounted) {
+      return;
+    }
+
+    final network = _peerPollNetwork();
+    if (network == null) {
+      _stopPeerPolling(
+        clearSnapshots: !widget.coreLifecycleService.status.value.isRunning,
+      );
+      return;
+    }
+
+    final targetChanged = _peerPollNetworkId != network.id;
+    _peerPollNetworkId = network.id;
+    if (_peerPollTimer == null) {
+      _peerPollTimer = Timer.periodic(
+        _peerPollInterval,
+        (_) => unawaited(_pollSelectedNetworkPeers()),
+      );
+      unawaited(_pollSelectedNetworkPeers());
+    } else if (targetChanged) {
+      unawaited(_pollSelectedNetworkPeers());
+    }
+  }
+
+  void _stopPeerPolling({required bool clearSnapshots}) {
+    _peerPollTimer?.cancel();
+    _peerPollTimer = null;
+    _peerPollNetworkId = null;
+    if (!clearSnapshots || !mounted) {
+      return;
+    }
+    setState(() {
+      _networkPeerStatuses = const <String, Map<String, CorePeerStatus>>{};
+      _peerStatusErrors = const <String, String>{};
+    });
+  }
+
+  Future<void> _pollSelectedNetworkPeers() async {
+    final network = _peerPollNetwork();
+    if (network == null) {
+      _refreshPeerPolling();
+      return;
+    }
+    await _pollNetworkPeers(network);
+  }
+
+  Future<void> _pollNetworkPeers(ConsoleNetwork network) async {
+    if (_isPeerPollInFlight || !mounted) {
+      return;
+    }
+    if (!widget.coreLifecycleService.status.value.isRunning ||
+        _joinStateFor(network).phase != _JoinPhase.joined) {
+      return;
+    }
+    final runtimeNetworkName = network.runtimeNetworkName.trim();
+    if (runtimeNetworkName.isEmpty) {
+      return;
+    }
+
+    _isPeerPollInFlight = true;
+    try {
+      final statuses = await widget.coreLifecycleService
+          .readNetworkPeerStatuses(runtimeNetworkName);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _networkPeerStatuses = {..._networkPeerStatuses, network.id: statuses};
+        final nextErrors = Map<String, String>.from(_peerStatusErrors)
+          ..remove(network.id);
+        _peerStatusErrors = nextErrors;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        final nextStatuses = Map<String, Map<String, CorePeerStatus>>.from(
+          _networkPeerStatuses,
+        )..remove(network.id);
+        _networkPeerStatuses = nextStatuses;
+        _peerStatusErrors = {
+          ..._peerStatusErrors,
+          network.id: _normalizeError(error),
+        };
+      });
+    } finally {
+      _isPeerPollInFlight = false;
+    }
+  }
+
   void _openNetworkDetail(ConsoleNetwork network) {
     setState(() {
       _selectedNetworkId = network.id;
       _activeView = _DashboardView.network;
     });
+    _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(network.id));
   }
 
@@ -871,6 +1013,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _activeView = _DashboardView.overview;
     });
+    _refreshPeerPolling();
   }
 
   void _selectNetwork(String networkId) {
@@ -878,6 +1021,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _selectedNetworkId = networkId;
       _activeView = _DashboardView.network;
     });
+    _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(networkId));
   }
 
@@ -885,6 +1029,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _activeView = _DashboardView.devices;
     });
+    _refreshPeerPolling();
     if (!_isLoadingDevices) {
       unawaited(_loadManagedDevices());
     }
@@ -894,6 +1039,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _activeView = _DashboardView.settings;
     });
+    _refreshPeerPolling();
   }
 
   @override
@@ -1077,6 +1223,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final onlineCount = devices.where((device) => device.online).length;
     final state = _joinStateFor(network);
     final joined = state.phase == _JoinPhase.joined;
+    final peerStatuses =
+        _networkPeerStatuses[network.id] ?? const <String, CorePeerStatus>{};
+    final peerStatusError = _peerStatusErrors[network.id];
 
     final regionText = network.regions.isEmpty
         ? '-'
@@ -1133,13 +1282,12 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 totalDevices: devices.length,
                 onlineDevices: onlineCount,
                 traffic: _networkTraffic[network.id],
-                onRefresh: () =>
-                    unawaited(_loadSingleNetworkDevices(network.id)),
+                onRefresh: () => unawaited(_refreshNetworkNodes(network)),
               );
               final listHeader = Row(
                 children: [
                   Text(
-                    '设备',
+                    '节点',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF0F172A),
@@ -1165,12 +1313,16 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                         onlineDevices: onlineCount,
                         traffic: _networkTraffic[network.id],
                         onRefresh: () =>
-                            unawaited(_loadSingleNetworkDevices(network.id)),
+                            unawaited(_refreshNetworkNodes(network)),
                       ),
                       const SizedBox(height: 20),
                       listHeader,
                       const SizedBox(height: 12),
-                      _DeviceListPanel(devices: devices),
+                      NetworkNodeListPanel(
+                        nodes: devices,
+                        peerStatusesByIpv4: peerStatuses,
+                        runtimeError: peerStatusError,
+                      ),
                     ],
                   ),
                 );
@@ -1189,7 +1341,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                         listHeader,
                         const SizedBox(height: 12),
                         Expanded(
-                          child: _NetworkDeviceListViewport(devices: devices),
+                          child: NetworkNodeListViewport(
+                            nodes: devices,
+                            peerStatusesByIpv4: peerStatuses,
+                            runtimeError: peerStatusError,
+                          ),
                         ),
                       ],
                     ),
@@ -2294,7 +2450,7 @@ class _NetworkSidebar extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '台设备在线',
+            '台节点在线',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
@@ -2339,81 +2495,8 @@ class _NetworkSidebar extends StatelessWidget {
             variant: .outline,
             size: .sm,
             onPress: onRefresh,
-            child: const Text('刷新设备'),
+            child: const Text('刷新节点'),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NetworkDeviceListViewport extends StatefulWidget {
-  const _NetworkDeviceListViewport({required this.devices});
-
-  final List<NetworkDevice> devices;
-
-  @override
-  State<_NetworkDeviceListViewport> createState() =>
-      _NetworkDeviceListViewportState();
-}
-
-class _NetworkDeviceListViewportState
-    extends State<_NetworkDeviceListViewport> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.devices.isEmpty) {
-      return _DeviceListPanel(devices: widget.devices);
-    }
-
-    return Scrollbar(
-      controller: _scrollController,
-      thumbVisibility: true,
-      child: SingleChildScrollView(
-        key: const ValueKey<String>('network-device-list-scroll'),
-        controller: _scrollController,
-        primary: false,
-        child: _DeviceListPanel(devices: widget.devices),
-      ),
-    );
-  }
-}
-
-class _DeviceListPanel extends StatelessWidget {
-  const _DeviceListPanel({required this.devices});
-
-  final List<NetworkDevice> devices;
-
-  @override
-  Widget build(BuildContext context) {
-    if (devices.isEmpty) {
-      return const Center(child: _StateMessage(message: '该网络暂无设备'));
-    }
-    return FCard.raw(
-      child: _ConstrainedFItemGroup(
-        divider: .full,
-        children: [
-          for (final device in devices)
-            FItem(
-              prefix: _StatusDot(online: device.online),
-              title: Text(device.name),
-              subtitle: Text(
-                device.ipv4 == null || device.ipv4!.isEmpty
-                    ? 'ID: ${device.id}'
-                    : 'IP: ${device.ipv4}  |  ID: ${device.id}',
-              ),
-              suffix: FBadge(
-                variant: device.online ? .secondary : .outline,
-                child: Text(device.online ? '在线' : '离线'),
-              ),
-            ),
         ],
       ),
     );

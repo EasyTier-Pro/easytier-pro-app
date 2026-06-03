@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
+import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 
@@ -252,7 +253,7 @@ void main() {
     await _selectNetworkFromHeader(tester, '办公网');
 
     final scrollView = tester.widget<SingleChildScrollView>(
-      find.byKey(const ValueKey<String>('network-device-list-scroll')),
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
     expect(scrollView.controller?.position.maxScrollExtent, greaterThan(0));
   });
@@ -382,6 +383,239 @@ void main() {
       find.byKey(const ValueKey<String>('network-sidebar')),
     );
     expect(sidebarSize.width, closeTo(260, 0.1));
+  });
+
+  testWidgets('network detail enriches nodes with peer status', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      peerSamples: const <Map<String, CorePeerStatus>>[
+        <String, CorePeerStatus>{
+          '10.144.0.2': CorePeerStatus(
+            cidr: '10.144.0.2/24',
+            ipv4: '10.144.0.2',
+            hostname: 'desktop-1',
+            cost: 'p2p',
+            latencyText: '3.45',
+            lossText: '0.0%',
+            rxBytes: '17.33 kB',
+            txBytes: '20.42 kB',
+            tunnelProto: 'udp',
+            natType: 'FullCone',
+            peerId: '390879727',
+            version: '2.6.4',
+          ),
+          '10.144.0.99': CorePeerStatus(
+            cidr: '10.144.0.99/24',
+            ipv4: '10.144.0.99',
+            hostname: 'peer-only',
+            cost: 'p2p',
+            latencyText: '1.00',
+            lossText: '0.0%',
+            rxBytes: '1 kB',
+            txBytes: '1 kB',
+            tunnelProto: 'udp',
+            natType: 'FullCone',
+            peerId: '999',
+            version: '2.6.4',
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.pumpAndSettle();
+
+    expect(find.text('节点'), findsOneWidget);
+    expect(find.text('P2P'), findsOneWidget);
+    expect(find.textContaining('延迟 3.45 ms'), findsOneWidget);
+    expect(find.textContaining('Peer: 390879727'), findsOneWidget);
+    expect(find.textContaining('Peer: 999'), findsNothing);
+  });
+
+  testWidgets('network detail keeps nodes visible when peer read fails', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+          peerError: StateError('peer unavailable'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.pumpAndSettle();
+
+    expect(find.text('desktop-1'), findsOneWidget);
+    expect(find.textContaining('运行态暂不可用'), findsOneWidget);
+    expect(find.text('运行态未知'), findsOneWidget);
+  });
+
+  testWidgets('refresh nodes reloads console nodes and peer status', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      peerSamples: const <Map<String, CorePeerStatus>>[
+        <String, CorePeerStatus>{},
+        <String, CorePeerStatus>{
+          '10.144.0.2': CorePeerStatus(
+            cidr: '10.144.0.2/24',
+            ipv4: '10.144.0.2',
+            hostname: 'desktop-1',
+            cost: 'p2p',
+            latencyText: '5.00',
+            lossText: '0.0%',
+            rxBytes: '1 kB',
+            txBytes: '1 kB',
+            tunnelProto: 'udp',
+            natType: 'FullCone',
+            peerId: '390879727',
+            version: '2.6.4',
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.pumpAndSettle();
+
+    final nodeFetchCount = authService.networkDeviceFetchCount;
+    final peerReadCount = coreLifecycleService.peerReadCount;
+
+    await tester.tap(find.widgetWithText(FButton, '刷新节点'));
+    await tester.pumpAndSettle();
+
+    expect(authService.networkDeviceFetchCount, greaterThan(nodeFetchCount));
+    expect(coreLifecycleService.peerReadCount, greaterThan(peerReadCount));
+    expect(find.text('P2P'), findsOneWidget);
   });
 
   testWidgets('shows create network flow when workspace has no networks', (
@@ -686,6 +920,70 @@ void main() {
     expect(totals['nt-office']?.sampledAt, sampledAt);
   });
 
+  test('parses peer statuses by normalized ipv4', () {
+    final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
+      jsonEncode([
+        {
+          'cidr': '10.144.0.2/24',
+          'ipv4': '10.144.0.2',
+          'hostname': 'desktop-1',
+          'cost': 'p2p',
+          'lat_ms': '3.45',
+          'loss_rate': '0.0%',
+          'rx_bytes': '17.33 kB',
+          'tx_bytes': '20.42 kB',
+          'tunnel_proto': 'udp',
+          'nat_type': 'FullCone',
+          'id': '390879727',
+          'version': '2.6.4',
+        },
+        {'cidr': '10.144.0.3/24', 'hostname': 'laptop-2', 'cost': 'relay'},
+        'ignored',
+      ]),
+    );
+
+    expect(statuses.keys, containsAll(<String>['10.144.0.2', '10.144.0.3']));
+    expect(statuses['10.144.0.2']?.cost, 'p2p');
+    expect(statuses['10.144.0.2']?.latencyText, '3.45');
+    expect(statuses['10.144.0.2']?.peerId, '390879727');
+    expect(statuses['10.144.0.3']?.ipv4, '10.144.0.3');
+  });
+
+  test('parses multi-instance peer status wrappers', () {
+    final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
+      jsonEncode([
+        {
+          'instance_id': 'instance-1',
+          'instance_name': 'nt-office',
+          'result': [
+            {
+              'cidr': '10.144.0.2/24',
+              'ipv4': '10.144.0.2',
+              'hostname': 'desktop-1',
+              'cost': 'Local',
+            },
+          ],
+        },
+        {
+          'instance_id': 'instance-2',
+          'instance_name': 'nt-lab',
+          'result': [
+            {
+              'cidr': '10.145.0.2/24',
+              'ipv4': '10.145.0.2',
+              'hostname': 'laptop-2',
+              'cost': 'p2p',
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(statuses.length, 2);
+    expect(statuses['10.144.0.2']?.cost, 'Local');
+    expect(statuses['10.145.0.2']?.cost, 'p2p');
+  });
+
   test('console service decodes regions and managed devices', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -890,6 +1188,7 @@ class _FakeAuthService implements AuthService {
   final List<String> removedNodeIds = <String>[];
   final List<String> createdNetworkNames = <String>[];
   final List<String?> createdNetworkIPv4Cidrs = <String?>[];
+  int networkDeviceFetchCount = 0;
 
   @override
   Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) {
@@ -972,6 +1271,7 @@ class _FakeAuthService implements AuthService {
     required String workspaceId,
     required String networkId,
   }) async {
+    networkDeviceFetchCount++;
     return List<NetworkDevice>.unmodifiable(
       networkDevices[networkId] ?? const <NetworkDevice>[],
     );
@@ -1040,11 +1340,16 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     required super.authService,
     required this.machineId,
     this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
+    this.peerSamples = const <Map<String, CorePeerStatus>>[],
+    this.peerError,
   });
 
   final String? machineId;
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
+  final List<Map<String, CorePeerStatus>> peerSamples;
+  final Object? peerError;
   int _trafficReadCount = 0;
+  int peerReadCount = 0;
 
   @override
   Future<void> bindSession(AuthSession session) async {
@@ -1080,5 +1385,23 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
         : trafficSamples.length - 1;
     _trafficReadCount++;
     return trafficSamples[sampleIndex];
+  }
+
+  @override
+  Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
+    String runtimeNetworkName,
+  ) async {
+    peerReadCount++;
+    final error = peerError;
+    if (error != null) {
+      throw error;
+    }
+    if (peerSamples.isEmpty) {
+      return const <String, CorePeerStatus>{};
+    }
+    final sampleIndex = peerReadCount - 1 < peerSamples.length
+        ? peerReadCount - 1
+        : peerSamples.length - 1;
+    return peerSamples[sampleIndex];
   }
 }

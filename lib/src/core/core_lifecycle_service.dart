@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../auth/console_auth_service.dart';
+import 'core_peer_status.dart';
 import '../logging/app_logger.dart';
 
 enum CoreRunPhase { signedOut, checking, repairing, running, error }
@@ -220,6 +221,52 @@ class CoreLifecycleService {
     }
 
     return parseNetworkTrafficTotalsFromJson(stdoutText);
+  }
+
+  Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
+    String runtimeNetworkName,
+  ) async {
+    final instanceName = runtimeNetworkName.trim();
+    if (instanceName.isEmpty) {
+      return const <String, CorePeerStatus>{};
+    }
+
+    final cliExecutable = _resolveCliExecutable();
+    _logger.debug(
+      'core.peer',
+      'Reading EasyTier peer status',
+      context: {'executable': cliExecutable, 'instance_name': instanceName},
+    );
+
+    final process = await Process.start(cliExecutable, [
+      '-o',
+      'json',
+      '--instance-name',
+      instanceName,
+      'peer',
+    ]);
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill();
+        throw TimeoutException('easytier-cli peer 执行超时');
+      },
+    );
+    final stdoutText = await stdoutFuture;
+    final stderrText = (await stderrFuture).trim();
+
+    if (exitCode != 0) {
+      throw StateError(
+        stderrText.isEmpty
+            ? 'easytier-cli peer 执行失败 (exit=$exitCode)'
+            : stderrText,
+      );
+    }
+
+    return parseNetworkPeerStatusesFromJson(stdoutText);
   }
 
   Future<void> _ensureRunning({required bool forceReinstall}) async {
@@ -558,6 +605,13 @@ class CoreLifecycleService {
         ),
       );
     });
+  }
+
+  @visibleForTesting
+  static Map<String, CorePeerStatus> parseNetworkPeerStatusesFromJson(
+    String output,
+  ) {
+    return parseCorePeerStatusesFromJson(output);
   }
 
   static int? _readInt(Object? value) {
