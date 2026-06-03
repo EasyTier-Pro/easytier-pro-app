@@ -191,15 +191,9 @@ class _NodeCardState extends State<_NodeCard> {
           onTap: () => setState(() => _expanded = !_expanded),
           child: Container(
             decoration: BoxDecoration(
-              color: isOnline
-                  ? const Color(0xFFF0FDF4)
-                  : Colors.white,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isOnline
-                    ? const Color(0xFFBBF7D0)
-                    : const Color(0xFFE5E7EB),
-              ),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: IntrinsicHeight(
               child: Padding(
