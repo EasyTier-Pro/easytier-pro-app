@@ -16,10 +16,8 @@ enum _DashboardView { overview, network, devices, settings }
 
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
-const double _networkDetailStackBreakpoint = 560;
 const double _dashboardHeaderCompactBreakpoint = 560;
 const double _dashboardHeaderDenseBreakpoint = 400;
-const double _networkSidebarWidth = 260;
 const double _itemListMinWidth = 360;
 
 class _JoinNetworkState {
@@ -1292,92 +1290,36 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        _NetworkSummaryBar(
+          totalDevices: devices.length,
+          onlineDevices: onlineCount,
+          traffic: _networkTraffic[network.id],
+          onRefresh: () => unawaited(_refreshNetworkNodes(network)),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Text(
+              '节点',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const Spacer(),
+            FBadge(
+              variant: .secondary,
+              child: Text('${devices.length} 台'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final sidebar = _NetworkSidebar(
-                totalDevices: devices.length,
-                onlineDevices: onlineCount,
-                traffic: _networkTraffic[network.id],
-                onRefresh: () => unawaited(_refreshNetworkNodes(network)),
-              );
-              final listHeader = Row(
-                children: [
-                  Text(
-                    '节点',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  const Spacer(),
-                  FBadge(
-                    variant: .secondary,
-                    child: Text('${devices.length} 台'),
-                  ),
-                ],
-              );
-
-              final detailBody =
-                  constraints.maxWidth < _networkDetailStackBreakpoint
-                  ? SingleChildScrollView(
-                      key: const ValueKey<String>('network-detail-stacked'),
-                      physics: appScrollPhysics,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _NetworkSidebar(
-                            width: double.infinity,
-                            totalDevices: devices.length,
-                            onlineDevices: onlineCount,
-                            traffic: _networkTraffic[network.id],
-                            onRefresh: () =>
-                                unawaited(_refreshNetworkNodes(network)),
-                          ),
-                          const SizedBox(height: 20),
-                          listHeader,
-                          const SizedBox(height: 12),
-                          NetworkNodeListPanel(
-                            nodes: devices,
-                            peerStatusesByIpv4: peerStatuses,
-                            runtimeError: peerStatusError,
-                          ),
-                        ],
-                      ),
-                    )
-                  : Row(
-                      key: const ValueKey<String>('network-detail-wide'),
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        sidebar,
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              listHeader,
-                              const SizedBox(height: 12),
-                              Expanded(
-                                child: NetworkNodeListViewport(
-                                  nodes: devices,
-                                  peerStatusesByIpv4: peerStatuses,
-                                  runtimeError: peerStatusError,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-
-              return AnimatedSize(
-                duration: appMotionMedium,
-                curve: appMotionCurve,
-                alignment: Alignment.topCenter,
-                child: detailBody,
-              );
-            },
+          child: NetworkNodeListViewport(
+            nodes: devices,
+            peerStatusesByIpv4: peerStatuses,
+            runtimeError: peerStatusError,
           ),
         ),
       ],
@@ -2409,46 +2351,14 @@ class _ConstrainedFItemGroup extends StatelessWidget {
   }
 }
 
-class _MetricRow extends StatelessWidget {
-  const _MetricRow({
-    required this.icon,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 8),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NetworkSidebar extends StatelessWidget {
-  const _NetworkSidebar({
-    this.width = _networkSidebarWidth,
+class _NetworkSummaryBar extends StatelessWidget {
+  const _NetworkSummaryBar({
     required this.totalDevices,
     required this.onlineDevices,
     required this.traffic,
     required this.onRefresh,
   });
 
-  final double width;
   final int totalDevices;
   final int onlineDevices;
   final _NetworkTrafficSnapshot? traffic;
@@ -2456,76 +2366,63 @@ class _NetworkSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: const ValueKey<String>('network-sidebar'),
-      width: width,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$onlineDevices / $totalDevices',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '台节点在线',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
-          ),
-          const Divider(height: 32),
-          Text(
-            '实时流量',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF64748B),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _MetricRow(
-            icon: Icons.arrow_downward,
-            value: _formatTrafficRate(traffic?.downloadBytesPerSecond),
-            color: const Color(0xFF16A34A),
-          ),
-          const SizedBox(height: 8),
-          _MetricRow(
-            icon: Icons.arrow_upward,
-            value: _formatTrafficRate(traffic?.uploadBytesPerSecond),
-            color: const Color(0xFF2563EB),
-          ),
-          const Divider(height: 32),
-          Text(
-            '累计流量',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF64748B),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _formatTotalTraffic(traffic),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF374151)),
-          ),
-          const SizedBox(height: 20),
-          FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: onRefresh,
-            child: const Text('刷新节点'),
-          ),
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _SummaryItem(
+          icon: Icons.circle,
+          iconColor: const Color(0xFF16A34A),
+          text: '$onlineDevices / $totalDevices 在线',
+        ),
+        _SummaryItem(
+          icon: Icons.arrow_downward,
+          iconColor: const Color(0xFF16A34A),
+          text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
+        ),
+        _SummaryItem(
+          icon: Icons.arrow_upward,
+          iconColor: const Color(0xFF2563EB),
+          text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
+        ),
+        _SummaryItem(
+          text: _formatTotalTraffic(traffic),
+        ),
+        FButton(
+          variant: .outline,
+          size: .sm,
+          onPress: onRefresh,
+          child: const Text('刷新节点'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  const _SummaryItem({this.icon, this.iconColor, required this.text});
+
+  final IconData? icon;
+  final Color? iconColor;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 14, color: iconColor ?? const Color(0xFF94A3B8)),
+          const SizedBox(width: 4),
         ],
-      ),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
 }
