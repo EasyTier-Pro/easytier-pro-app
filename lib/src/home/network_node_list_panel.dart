@@ -450,7 +450,7 @@ class _NodeMetaLine extends StatelessWidget {
       final p = peer!;
 
       final cost = p.cost.trim();
-      if (cost.isNotEmpty && cost != '-') {
+      if (cost.isNotEmpty && cost != '-' && cost.toLowerCase() != 'local') {
         parts.add(cost.toLowerCase() == 'p2p' ? 'P2P' : cost);
       }
 
@@ -459,15 +459,18 @@ class _NodeMetaLine extends StatelessWidget {
         parts.add(latency.toLowerCase().endsWith('ms') ? latency : '$latency ms');
       }
 
-      if (p.lossText.isNotEmpty && p.lossText != '-') {
-        parts.add('丢包 ${p.lossText}');
+      final loss = p.lossText.trim();
+      if (loss.isNotEmpty && loss != '-' && loss != '0%' && loss != '0.0%') {
+        parts.add('丢包 $loss');
       }
 
-      final rx = (p.rxBytes.isNotEmpty && p.rxBytes != '-')
-          ? '↓${p.rxBytes}'
+      final rxRaw = p.rxBytes.trim();
+      final txRaw = p.txBytes.trim();
+      final rx = (rxRaw.isNotEmpty && rxRaw != '-' && rxRaw != '0 B')
+          ? '↓$rxRaw'
           : '';
-      final tx = (p.txBytes.isNotEmpty && p.txBytes != '-')
-          ? '↑${p.txBytes}'
+      final tx = (txRaw.isNotEmpty && txRaw != '-' && txRaw != '0 B')
+          ? '↑$txRaw'
           : '';
       if (rx.isNotEmpty || tx.isNotEmpty) {
         parts.add('$rx $tx'.trim());

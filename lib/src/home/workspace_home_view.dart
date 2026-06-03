@@ -1266,7 +1266,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${_workspace?.name ?? '未关联工作区'} · $regionText · CIDR $cidrText · ID ${network.id}',
+                    '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: const Color(0xFF94A3B8),
                     ),
@@ -1275,25 +1275,23 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
             ),
             const SizedBox(width: 8),
-            FButton(
-              variant: .outline,
-              size: .sm,
-              onPress: () => unawaited(_refreshNetworkNodes(network)),
-              child: const Text('刷新节点'),
+            _TextButton(
+              icon: Icons.refresh,
+              label: '刷新',
+              onTap: () => unawaited(_refreshNetworkNodes(network)),
             ),
             const SizedBox(width: 8),
             if (joined)
-              FButton(
-                variant: .outline,
-                size: .sm,
-                onPress: () => unawaited(_leaveNetwork(network)),
-                child: const Text('退出网络'),
+              _TextButton(
+                icon: Icons.logout,
+                label: '退出',
+                onTap: () => unawaited(_leaveNetwork(network)),
               )
             else
-              FButton(
-                size: .sm,
-                onPress: () => unawaited(_joinNetwork(network)),
-                child: const Text('加入网络'),
+              _TextButton(
+                icon: Icons.login,
+                label: '加入',
+                onTap: () => unawaited(_joinNetwork(network)),
               ),
           ],
         ),
@@ -1417,7 +1415,7 @@ String _formatTotalTraffic(_NetworkTrafficSnapshot? traffic) {
   if (traffic == null) {
     return '流量统计暂不可用';
   }
-  return '下载 ${_formatBytes(traffic.downloadBytes)} / 上传 ${_formatBytes(traffic.uploadBytes)}';
+  return '↓${_formatBytes(traffic.downloadBytes)} ↑${_formatBytes(traffic.uploadBytes)}';
 }
 
 String _formatTrafficRate(double? bytesPerSecond) {
@@ -2377,6 +2375,43 @@ class _NetworkSummaryBar extends StatelessWidget {
           text: _formatTotalTraffic(traffic),
         ),
       ],
+    );
+  }
+}
+
+class _TextButton extends StatelessWidget {
+  const _TextButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
