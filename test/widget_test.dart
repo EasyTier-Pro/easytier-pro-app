@@ -337,7 +337,22 @@ void main() {
     );
     expect(find.text('研发网'), findsNothing);
 
-    await _selectNetworkFromHeader(tester, '研发网');
+    await tester.tap(find.byKey(const ValueKey<String>('network-tab-current')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('network-tab-popover')),
+      findsOneWidget,
+    );
+    expect(find.text('研发网'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('network-tab-popover')),
+        matching: find.text('研发网'),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('研发网'), findsNWidgets(2));
     expect(find.text('办公网'), findsNothing);

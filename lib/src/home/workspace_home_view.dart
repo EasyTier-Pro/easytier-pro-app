@@ -1496,7 +1496,13 @@ class _NetworkTabMenu extends StatelessWidget {
       builder: (context, controller, child) => _NetworkTabButton(
         active: active,
         label: selectedNetwork.name,
-        onSelect: () => onSelectNetwork(selectedNetwork.id),
+        onSelect: () {
+          if (active) {
+            unawaited(controller.toggle());
+          } else {
+            onSelectNetwork(selectedNetwork.id);
+          }
+        },
         onOpenMenu: () => unawaited(controller.toggle()),
       ),
     );
