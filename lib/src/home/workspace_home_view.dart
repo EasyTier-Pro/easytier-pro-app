@@ -1295,7 +1295,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           totalDevices: devices.length,
           onlineDevices: onlineCount,
           traffic: _networkTraffic[network.id],
-          onRefresh: () => unawaited(_refreshNetworkNodes(network)),
         ),
         const SizedBox(height: 20),
         Row(
@@ -1308,6 +1307,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
             ),
             const Spacer(),
+            FButton(
+              variant: .outline,
+              size: .sm,
+              onPress: () => unawaited(_refreshNetworkNodes(network)),
+              child: const Text('刷新节点'),
+            ),
+            const SizedBox(width: 8),
             FBadge(
               variant: .secondary,
               child: Text('${devices.length} 台'),
@@ -2356,13 +2362,11 @@ class _NetworkSummaryBar extends StatelessWidget {
     required this.totalDevices,
     required this.onlineDevices,
     required this.traffic,
-    required this.onRefresh,
   });
 
   final int totalDevices;
   final int onlineDevices;
   final _NetworkTrafficSnapshot? traffic;
-  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -2388,12 +2392,6 @@ class _NetworkSummaryBar extends StatelessWidget {
         ),
         _SummaryItem(
           text: _formatTotalTraffic(traffic),
-        ),
-        FButton(
-          variant: .outline,
-          size: .sm,
-          onPress: onRefresh,
-          child: const Text('刷新节点'),
         ),
       ],
     );
