@@ -1112,42 +1112,46 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           ],
         ),
         const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _NetworkSidebar(
-              totalDevices: devices.length,
-              onlineDevices: onlineCount,
-              traffic: _networkTraffic[network.id],
-              onRefresh: () => unawaited(_loadSingleNetworkDevices(network.id)),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        '设备',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const Spacer(),
-                      FBadge(
-                        variant: .secondary,
-                        child: Text('${devices.length} 台'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _DeviceListPanel(devices: devices),
-                ],
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _NetworkSidebar(
+                totalDevices: devices.length,
+                onlineDevices: onlineCount,
+                traffic: _networkTraffic[network.id],
+                onRefresh: () =>
+                    unawaited(_loadSingleNetworkDevices(network.id)),
               ),
-            ),
-          ],
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '设备',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                        ),
+                        const Spacer(),
+                        FBadge(
+                          variant: .secondary,
+                          child: Text('${devices.length} 台'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(child: _DeviceListPanel(devices: devices)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2066,6 +2070,7 @@ class _NetworkSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: const ValueKey<String>('network-sidebar'),
       width: 260,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(

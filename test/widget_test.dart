@@ -153,6 +153,59 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('network detail sidebar stretches with window height', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 1200));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '办公网'));
+    await tester.pumpAndSettle();
+
+    final sidebarSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-sidebar')),
+    );
+    expect(sidebarSize.height, greaterThan(800));
+  });
+
   testWidgets('shows create network flow when workspace has no networks', (
     WidgetTester tester,
   ) async {
@@ -501,8 +554,11 @@ void main() {
   );
 }
 
-void _useDesktopViewport(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1600, 900);
+void _useDesktopViewport(
+  WidgetTester tester, {
+  Size size = const Size(1600, 900),
+}) {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
