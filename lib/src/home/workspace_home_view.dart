@@ -13,9 +13,20 @@ enum _DashboardView {
   overview,
   network,
   networkDetail,
-  nodes,
-  services,
+  devices,
   settings,
+}
+
+class _AggregatedDevice {
+  const _AggregatedDevice({
+    required this.device,
+    required this.networkName,
+    required this.networkId,
+  });
+
+  final NetworkDevice device;
+  final String networkName;
+  final String networkId;
 }
 
 enum _UserMenuAction { settings, logout }
@@ -132,6 +143,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   int _regionRequestId = 0;
   Timer? _trafficPollTimer;
   bool _isTrafficPollInFlight = false;
+  bool _showCreateFormOnNetworkPage = false;
   Set<String> _trafficPollNetworkIds = const <String>{};
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
@@ -380,6 +392,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         _selectedNetworkId = network.id;
         _newNetworkName = '我的网络';
         _isCreatingNetwork = false;
+        _showCreateFormOnNetworkPage = false;
         _activeView = _DashboardView.overview;
       });
       await _loadSingleNetworkDevices(network.id);
@@ -794,15 +807,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     });
   }
 
-  void _showNodes() {
+  void _showDevices() {
     setState(() {
-      _activeView = _DashboardView.nodes;
-    });
-  }
-
-  void _showServices() {
-    setState(() {
-      _activeView = _DashboardView.services;
+      _activeView = _DashboardView.devices;
     });
   }
 
@@ -851,8 +858,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onlineDeviceCount: _onlineDeviceCount,
             onShowOverview: _showOverview,
             onShowNetwork: _showNetwork,
-            onShowNodes: _showNodes,
-            onShowServices: _showServices,
+            onShowDevices: _showDevices,
             onShowSettings: _showSettings,
             onLogout: widget.onLogout,
             coreStatusListenable: widget.coreLifecycleService.status,
@@ -881,19 +887,21 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       _DashboardView.overview => _buildConnectionWorkspace(context),
       _DashboardView.network => _buildNetworkListPage(context),
       _DashboardView.networkDetail => _buildNetworkDetail(context),
-      _DashboardView.nodes => _buildNodesPage(context),
-      _DashboardView.services => _ServicesPanel(
-        coreLifecycleService: widget.coreLifecycleService,
-      ),
+      _DashboardView.devices => _buildDevicesPage(context),
       _DashboardView.settings => _SettingsPanel(
         user: widget.session.user,
         workspaceName: _workspace?.name ?? '未关联工作区',
         onLogout: widget.onLogout,
+        coreLifecycleService: widget.coreLifecycleService,
       ),
     };
   }
 
   Widget _buildConnectionWorkspace(BuildContext context) {
+    final joinedNetworks = _networks.where((network) {
+      return _joinStateFor(network).phase == _JoinPhase.joined;
+    }).toList(growable: false);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -925,11 +933,21 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             onCreate: _createNetwork,
             onRetryRegions: _loadRegions,
           )
+        else if (joinedNetworks.isEmpty)
+          _OverviewEmptyGuide(
+            onBrowseNetworks: _showNetwork,
+            onCreateNetwork: () {
+              setState(() {
+                _showCreateFormOnNetworkPage = true;
+                _activeView = _DashboardView.network;
+              });
+            },
+          )
         else
           _NetworkJoinList(
-            title: '工作区网络',
-            subtitle: '选择要让本机设备加入的网络。',
-            networks: _networks,
+            title: '已加入的网络',
+            subtitle: '本机设备当前已加入以下网络。',
+            networks: joinedNetworks,
             networkDevices: _networkDevices,
             trafficByNetworkId: _networkTraffic,
             joinStateFor: _joinStateFor,
@@ -957,32 +975,60 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       );
     }
 
-    if (_networks.isEmpty) {
-      return _CreateNetworkPanel(
-        name: _newNetworkName,
-        selectedRegionCode: _selectedRegionCode,
-        regions: _activeRegions,
-        loadingRegions: _isLoadingRegions,
-        creating: _isCreatingNetwork,
-        error: _createError ?? _regionError,
-        onNameChanged: (value) => setState(() => _newNetworkName = value),
-        onRegionChanged: (value) => setState(() => _selectedRegionCode = value),
-        onCreate: _createNetwork,
-        onRetryRegions: _loadRegions,
-      );
-    }
-
-    return _NetworkJoinList(
-      title: '所有网络',
-      subtitle: '每个网络都可以单独加入。',
-      networks: _networks,
-      networkDevices: _networkDevices,
-      trafficByNetworkId: _networkTraffic,
-      joinStateFor: _joinStateFor,
-      onJoin: _joinNetwork,
-      onLeave: _leaveNetwork,
-      onOpen: _openNetworkDetail,
-      onRefresh: _loadNetworks,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_showCreateFormOnNetworkPage || _networks.isEmpty) ...[
+          _CreateNetworkPanel(
+            name: _newNetworkName,
+            selectedRegionCode: _selectedRegionCode,
+            regions: _activeRegions,
+            loadingRegions: _isLoadingRegions,
+            creating: _isCreatingNetwork,
+            error: _createError ?? _regionError,
+            onNameChanged: (value) => setState(() => _newNetworkName = value),
+            onRegionChanged: (value) =>
+                setState(() => _selectedRegionCode = value),
+            onCreate: _createNetwork,
+            onRetryRegions: _loadRegions,
+          ),
+          if (_networks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            FButton(
+              variant: .ghost,
+              size: .sm,
+              onPress: () => setState(() => _showCreateFormOnNetworkPage = false),
+              child: const Text('收起创建面板'),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ] else ...[
+          Row(
+            children: [
+              const Spacer(),
+              FButton(
+                size: .sm,
+                onPress: () => setState(() => _showCreateFormOnNetworkPage = true),
+                child: const Text('创建网络'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (_networks.isNotEmpty)
+          _NetworkJoinList(
+            title: '所有网络',
+            subtitle: '管理工作区中的所有网络，每个网络都可以单独加入或退出。',
+            networks: _networks,
+            networkDevices: _networkDevices,
+            trafficByNetworkId: _networkTraffic,
+            joinStateFor: _joinStateFor,
+            onJoin: _joinNetwork,
+            onLeave: _leaveNetwork,
+            onOpen: _openNetworkDetail,
+            onRefresh: _loadNetworks,
+          ),
+      ],
     );
   }
 
@@ -1038,51 +1084,101 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     );
   }
 
-  Widget _buildNodesPage(BuildContext context) {
-    final network = _selectedNetwork;
-    if (network == null) {
-      if (_networks.isEmpty) {
-        return _StateMessage(
-          message: '当前工作区暂无网络。',
-          action: FButton(onPress: _showOverview, child: const Text('返回首页')),
-        );
+  Widget _buildDevicesPage(BuildContext context) {
+    final allDevices = <_AggregatedDevice>[];
+    final seenDeviceIds = <String>{};
+
+    for (final entry in _networkDevices.entries) {
+      final networkId = entry.key;
+      final network = _networks.where((n) => n.id == networkId).firstOrNull;
+      if (network == null) continue;
+      for (final device in entry.value) {
+        if (!device.attached) continue;
+        final uniqueId = device.deviceId ?? device.id;
+        if (seenDeviceIds.contains(uniqueId)) continue;
+        seenDeviceIds.add(uniqueId);
+        allDevices.add(_AggregatedDevice(
+          device: device,
+          networkName: network.name,
+          networkId: networkId,
+        ));
       }
-      return _StateMessage(
-        message: '请先选择一个网络查看节点。',
-        action: FButton(onPress: _showNetwork, child: const Text('选择网络')),
-      );
     }
 
-    final devices = (_networkDevices[network.id] ?? const <NetworkDevice>[])
-        .where((device) => device.attached)
-        .toList(growable: false);
+    allDevices.sort((a, b) {
+      if (a.device.online && !b.device.online) return -1;
+      if (!a.device.online && b.device.online) return 1;
+      return a.device.name.compareTo(b.device.name);
+    });
+
+    final onlineCount = allDevices.where((d) => d.device.online).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
-          title: '节点',
-          subtitle: '${network.name} 的节点与在线状态。',
-          trailing: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FButton(
-                variant: .outline,
-                size: .sm,
-                onPress: _showNetwork,
-                child: const Text('切换网络'),
-              ),
-              FButton(
-                variant: .outline,
-                size: .sm,
-                onPress: () => unawaited(_loadSingleNetworkDevices(network.id)),
-                child: const Text('刷新节点'),
-              ),
-            ],
+          title: '设备',
+          subtitle: '所有网络中的设备与在线状态。',
+          trailing: FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: () async {
+              for (final network in _networks) {
+                await _loadSingleNetworkDevices(network.id);
+              }
+            },
+            child: const Text('刷新设备'),
           ),
         ),
         const SizedBox(height: 20),
-        _NodeListPanel(nodeCount: devices.length, devices: devices),
+        Row(
+          children: [
+            Text(
+              '设备列表',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const Spacer(),
+            FBadge(
+              variant: .secondary,
+              child: Text('$onlineCount / ${allDevices.length} 台在线'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (allDevices.isEmpty)
+          const SizedBox(
+            height: 200,
+            child: _StateMessage(
+              message: '暂无设备数据。加入网络后即可查看设备。',
+            ),
+          )
+        else
+          FCard.raw(
+            child: FItemGroup(
+              divider: .full,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (final aggregated in allDevices)
+                  FItem(
+                    prefix: _StatusDot(online: aggregated.device.online),
+                    title: Text(aggregated.device.name),
+                    subtitle: Text(
+                      [
+                        '网络: ${aggregated.networkName}',
+                        if (aggregated.device.ipv4 != null &&
+                            aggregated.device.ipv4!.isNotEmpty)
+                          'IP: ${aggregated.device.ipv4}',
+                        'ID: ${aggregated.device.id}',
+                      ].join('  |  '),
+                    ),
+                    suffix: FBadge(
+                      variant: aggregated.device.online ? .secondary : .outline,
+                      child: Text(aggregated.device.online ? '在线' : '离线'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -1145,8 +1241,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.onlineDeviceCount,
     required this.onShowOverview,
     required this.onShowNetwork,
-    required this.onShowNodes,
-    required this.onShowServices,
+    required this.onShowDevices,
     required this.onShowSettings,
     required this.onLogout,
     required this.coreStatusListenable,
@@ -1160,8 +1255,7 @@ class _DashboardHeader extends StatelessWidget {
   final int onlineDeviceCount;
   final VoidCallback onShowOverview;
   final VoidCallback onShowNetwork;
-  final VoidCallback onShowNodes;
-  final VoidCallback onShowServices;
+  final VoidCallback onShowDevices;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
   final ValueListenable<CoreRunStatus> coreStatusListenable;
@@ -1205,19 +1299,10 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           FButton(
-            variant: activeView == _DashboardView.nodes ? .secondary : .ghost,
+            variant: activeView == _DashboardView.devices ? .secondary : .ghost,
             size: .sm,
-            onPress: onShowNodes,
-            child: const Text('节点'),
-          ),
-          const SizedBox(width: 6),
-          FButton(
-            variant: activeView == _DashboardView.services
-                ? .secondary
-                : .ghost,
-            size: .sm,
-            onPress: onShowServices,
-            child: const Text('服务'),
+            onPress: onShowDevices,
+            child: const Text('设备'),
           ),
           const Spacer(),
           _HeaderMetric(
@@ -2057,70 +2142,18 @@ class _DeviceListPanel extends StatelessWidget {
   }
 }
 
-class _NodeListPanel extends StatelessWidget {
-  const _NodeListPanel({required this.nodeCount, required this.devices});
-
-  final int nodeCount;
-  final List<NetworkDevice> devices;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('节点列表', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FBadge(variant: .secondary, child: Text('$nodeCount 个节点')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (devices.isEmpty)
-          const SizedBox(height: 160, child: _StateMessage(message: '该网络暂无节点'))
-        else
-          FCard.raw(
-            child: FItemGroup(
-              divider: .full,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (final device in devices)
-                  FItem(
-                    prefix: _StatusDot(online: device.online),
-                    title: Text(device.name),
-                    subtitle: Text(
-                      [
-                        if (device.machineId != null &&
-                            device.machineId!.isNotEmpty)
-                          'Machine: ${_shortId(device.machineId!)}',
-                        if (device.ipv4 != null && device.ipv4!.isNotEmpty)
-                          'IP: ${device.ipv4}',
-                        'Node: ${device.id}',
-                      ].join('  |  '),
-                    ),
-                    suffix: FBadge(
-                      variant: device.online ? .secondary : .outline,
-                      child: Text(device.online ? '在线' : '离线'),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 class _SettingsPanel extends StatelessWidget {
   const _SettingsPanel({
     required this.user,
     required this.workspaceName,
     required this.onLogout,
+    required this.coreLifecycleService,
   });
 
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
+  final CoreLifecycleService coreLifecycleService;
 
   Future<void> _exportLogs(BuildContext context) async {
     try {
@@ -2215,6 +2248,67 @@ class _SettingsPanel extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         FCard(
+          title: const Text('连接引擎'),
+          subtitle: const Text('核心连接引擎状态与修复入口。'),
+          child: ValueListenableBuilder<CoreRunStatus>(
+            valueListenable: coreLifecycleService.status,
+            builder: (context, status, _) {
+              final running = status.phase == CoreRunPhase.running;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _StatusDot(online: running),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          status.message,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (status.machineId != null &&
+                      status.machineId!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '本机设备: ${status.machineId}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
+                    ),
+                  ],
+                  if (status.lastError != null &&
+                      status.lastError!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      status.lastError!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FButton(
+                        variant: .outline,
+                        onPress: () => unawaited(coreLifecycleService.repair()),
+                        child: const Text('重试/修复'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+        FCard(
           title: const Text('诊断日志'),
           subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
           child: Column(
@@ -2271,61 +2365,62 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _ServicesPanel extends StatelessWidget {
-  const _ServicesPanel({required this.coreLifecycleService});
+class _OverviewEmptyGuide extends StatelessWidget {
+  const _OverviewEmptyGuide({
+    required this.onBrowseNetworks,
+    required this.onCreateNetwork,
+  });
 
-  final CoreLifecycleService coreLifecycleService;
+  final VoidCallback onBrowseNetworks;
+  final VoidCallback onCreateNetwork;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<CoreRunStatus>(
-      valueListenable: coreLifecycleService.status,
-      builder: (context, status, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return FCard.raw(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const _SectionTitle(title: '服务', subtitle: '核心连接引擎状态与修复入口。'),
-            const SizedBox(height: 20),
-            FCard(
-              title: const Text('连接引擎'),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _StatusDot(online: status.phase == CoreRunPhase.running),
-                      const SizedBox(width: 8),
-                      Text(status.message),
-                    ],
-                  ),
-                  if (status.machineId != null &&
-                      status.machineId!.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text('本机设备: ${status.machineId}'),
-                  ],
-                  if (status.lastError != null &&
-                      status.lastError!.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      status.lastError!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  FButton(
-                    variant: .outline,
-                    onPress: () => unawaited(coreLifecycleService.repair()),
-                    child: const Text('重试/修复'),
-                  ),
-                ],
+            Icon(
+              Icons.hub_outlined,
+              size: 48,
+              color: Theme.of(context).colorScheme.primary.withAlpha(76),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '尚未加入任何网络',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '加入一个网络以开始安全组网，或创建一个新网络。',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF737373),
               ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: [
+                FButton(
+                  onPress: onBrowseNetworks,
+                  child: const Text('浏览网络'),
+                ),
+                FButton(
+                  variant: .outline,
+                  onPress: onCreateNetwork,
+                  child: const Text('创建网络'),
+                ),
+              ],
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }

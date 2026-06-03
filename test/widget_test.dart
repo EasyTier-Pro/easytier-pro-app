@@ -47,6 +47,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('本机设备已就绪'), findsOneWidget);
+    expect(find.text('尚未加入任何网络'), findsOneWidget);
+
+    // 进入网络页浏览并加入网络
+    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.pumpAndSettle();
+
     expect(find.text('办公网'), findsOneWidget);
     expect(find.text('研发网'), findsOneWidget);
     expect(find.widgetWithText(FButton, '加入'), findsNWidgets(2));
@@ -130,6 +136,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.widgetWithText(FButton, '加入'));
     await tester.pumpAndSettle();
 
@@ -182,6 +191,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.createdNetworkNames, <String>['我的网络']);
+    expect(find.text('尚未加入任何网络'), findsOneWidget);
+
+    // 进入网络页查看新创建的网络
+    await tester.tap(find.widgetWithText(FButton, '网络'));
+    await tester.pumpAndSettle();
+
     expect(find.text('我的网络'), findsOneWidget);
     expect(find.widgetWithText(FButton, '加入'), findsOneWidget);
   });
@@ -215,6 +230,9 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '网络'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FButton, '加入'));
