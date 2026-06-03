@@ -438,13 +438,13 @@ class _NodeMetaLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final parts = <String>[];
 
-    if (isLocal) parts.add('本机');
-
     if (ipv4?.isNotEmpty == true) {
       parts.add(ipv4!);
     } else {
       parts.add('未分配 IPv4');
     }
+
+    if (isLocal) parts.add('本机');
 
     if (peer != null) {
       final p = peer!;
