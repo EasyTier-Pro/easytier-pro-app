@@ -1348,17 +1348,13 @@ class _DashboardHeader extends StatelessWidget {
                     onPress: onShowOverview,
                     child: const Text('首页'),
                   ),
-                  for (final network in networks) ...[
+                  if (networks.isNotEmpty) ...[
                     const SizedBox(width: 6),
-                    FButton(
-                      variant:
-                          activeView == _DashboardView.network &&
-                              selectedNetworkId == network.id
-                          ? .secondary
-                          : .ghost,
-                      size: .sm,
-                      onPress: () => onSelectNetwork(network.id),
-                      child: Text(network.name),
+                    _NetworkTabMenu(
+                      active: activeView == _DashboardView.network,
+                      networks: networks,
+                      selectedNetworkId: selectedNetworkId,
+                      onSelectNetwork: onSelectNetwork,
                     ),
                   ],
                   const SizedBox(width: 6),
@@ -1433,6 +1429,73 @@ class _DashboardHeader extends StatelessWidget {
             onLogout: onLogout,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NetworkTabMenu extends StatelessWidget {
+  const _NetworkTabMenu({
+    required this.active,
+    required this.networks,
+    required this.selectedNetworkId,
+    required this.onSelectNetwork,
+  });
+
+  final bool active;
+  final List<ConsoleNetwork> networks;
+  final String? selectedNetworkId;
+  final ValueChanged<String> onSelectNetwork;
+
+  @override
+  Widget build(BuildContext context) {
+    var selectedNetwork = networks.first;
+    for (final network in networks) {
+      if (network.id == selectedNetworkId) {
+        selectedNetwork = network;
+        break;
+      }
+    }
+
+    return FPopoverMenu(
+      menuAnchor: Alignment.topLeft,
+      childAnchor: Alignment.bottomLeft,
+      maxHeight: 280,
+      divider: FItemDivider.none,
+      menuBuilder: (context, controller, menu) => [
+        FItemGroup(
+          key: const ValueKey<String>('network-tab-popover'),
+          divider: FItemDivider.none,
+          children: [
+            for (final network in networks)
+              FItem(
+                key: ValueKey<String>('network-tab-option-${network.id}'),
+                title: Text(network.name, overflow: TextOverflow.ellipsis),
+                prefix: SizedBox(
+                  width: 18,
+                  child: network.id == selectedNetwork.id
+                      ? const Icon(Icons.check, size: 16)
+                      : null,
+                ),
+                onPress: () {
+                  unawaited(controller.hide());
+                  onSelectNetwork(network.id);
+                },
+              ),
+          ],
+        ),
+      ],
+      builder: (context, controller, child) => FButton(
+        key: const ValueKey<String>('network-tab-menu'),
+        variant: active ? .secondary : .ghost,
+        size: .sm,
+        onPress: () => unawaited(controller.toggle()),
+        mainAxisSize: MainAxisSize.min,
+        suffix: const Icon(Icons.expand_more, size: 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 132),
+          child: Text(selectedNetwork.name, overflow: TextOverflow.ellipsis),
+        ),
       ),
     );
   }

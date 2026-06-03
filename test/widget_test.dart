@@ -49,7 +49,7 @@ void main() {
     expect(find.text('已在线'), findsOneWidget);
     expect(find.textContaining('尚未加入网络'), findsOneWidget);
     expect(find.text('办公网'), findsNWidgets(2));
-    expect(find.text('研发网'), findsNWidgets(2));
+    expect(find.text('研发网'), findsOneWidget);
     expect(find.byType(Switch), findsNWidgets(2));
 
     await tester.tap(find.byType(Switch).first);
@@ -141,8 +141,7 @@ void main() {
     expect(find.textContaining('1.00 KiB/s'), findsNWidgets(2));
     expect(find.textContaining('2.00 KiB/s'), findsNWidgets(2));
 
-    await tester.tap(find.widgetWithText(FButton, '办公网'));
-    await tester.pumpAndSettle();
+    await _selectNetworkFromHeader(tester, '办公网');
 
     expect(find.text('实时流量'), findsOneWidget);
     expect(find.text('累计流量'), findsOneWidget);
@@ -197,8 +196,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FButton, '办公网'));
-    await tester.pumpAndSettle();
+    await _selectNetworkFromHeader(tester, '办公网');
 
     final sidebarSize = tester.getSize(
       find.byKey(const ValueKey<String>('network-sidebar')),
@@ -251,8 +249,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FButton, '办公网'));
-    await tester.pumpAndSettle();
+    await _selectNetworkFromHeader(tester, '办公网');
 
     final scrollView = tester.widget<SingleChildScrollView>(
       find.byKey(const ValueKey<String>('network-device-list-scroll')),
@@ -295,6 +292,42 @@ void main() {
 
     expect(find.text('我的网络'), findsNWidgets(2));
     expect(find.byType(Switch), findsOneWidget);
+  });
+
+  testWidgets('switches active network from header dropdown', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('network-tab-menu')),
+      findsOneWidget,
+    );
+    expect(find.text('办公网'), findsNWidgets(2));
+    expect(find.text('研发网'), findsOneWidget);
+
+    await _selectNetworkFromHeader(tester, '研发网');
+
+    expect(find.text('研发网'), findsNWidgets(2));
+    expect(find.text('办公网'), findsNothing);
   });
 
   testWidgets('shows approval blocker before attaching a device', (
@@ -618,6 +651,21 @@ void _useDesktopViewport(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+}
+
+Future<void> _selectNetworkFromHeader(
+  WidgetTester tester,
+  String networkName,
+) async {
+  await tester.tap(find.byKey(const ValueKey<String>('network-tab-menu')));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(const ValueKey<String>('network-tab-popover')),
+      matching: find.text(networkName),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 http.Response _jsonResponse(Object body, [int statusCode = 200]) {
