@@ -43,7 +43,7 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
         : Scrollbar(
             key: const ValueKey<String>('network-node-list-scrollbar'),
             controller: _scrollController,
-            thumbVisibility: true,
+            thumbVisibility: false,
             child: SingleChildScrollView(
               key: const ValueKey<String>('network-node-list-scroll'),
               controller: _scrollController,

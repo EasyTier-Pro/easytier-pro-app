@@ -1277,23 +1277,20 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             const SizedBox(width: 8),
             FButton(
               variant: .outline,
-              size: .sm,
               onPress: () => unawaited(_refreshNetworkNodes(network)),
-              child: const Text('刷新'),
+              child: const Text('刷新节点'),
             ),
             const SizedBox(width: 8),
             if (joined)
               FButton(
                 variant: .outline,
-                size: .sm,
                 onPress: () => unawaited(_leaveNetwork(network)),
-                child: const Text('退出'),
+                child: const Text('退出网络'),
               )
             else
               FButton(
-                size: .sm,
                 onPress: () => unawaited(_joinNetwork(network)),
-                child: const Text('加入'),
+                child: const Text('加入网络'),
               ),
           ],
         ),
@@ -2353,26 +2350,26 @@ class _NetworkSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Row(
       children: [
         _SummaryItem(
           icon: Icons.circle,
           iconColor: const Color(0xFF16A34A),
           text: '$onlineDevices / $totalDevices 在线',
         ),
+        const SizedBox(width: 16),
         _SummaryItem(
           icon: Icons.arrow_downward,
           iconColor: const Color(0xFF16A34A),
           text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
         ),
+        const SizedBox(width: 16),
         _SummaryItem(
           icon: Icons.arrow_upward,
           iconColor: const Color(0xFF2563EB),
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
         ),
+        const SizedBox(width: 16),
         _SummaryItem(
           text: _formatTotalTraffic(traffic),
         ),
