@@ -1274,7 +1274,14 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            FButton(
+              variant: .outline,
+              size: .sm,
+              onPress: () => unawaited(_refreshNetworkNodes(network)),
+              child: const Text('刷新节点'),
+            ),
+            const SizedBox(width: 8),
             if (joined)
               FButton(
                 variant: .outline,
@@ -1290,32 +1297,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _NetworkSummaryBar(
           totalDevices: devices.length,
           onlineDevices: onlineCount,
           traffic: _networkTraffic[network.id],
         ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Text(
-              '节点',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const Spacer(),
-            FButton(
-              variant: .outline,
-              size: .sm,
-              onPress: () => unawaited(_refreshNetworkNodes(network)),
-              child: const Text('刷新节点'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Expanded(
           child: NetworkNodeListViewport(
             nodes: devices,
@@ -2412,7 +2400,8 @@ class _SummaryItem extends StatelessWidget {
         Text(
           text,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: const Color(0xFF64748B),
+            color: const Color(0xFF94A3B8),
+            fontSize: 12,
           ),
         ),
       ],
