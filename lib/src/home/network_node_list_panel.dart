@@ -217,7 +217,7 @@ class _NodeCardState extends State<_NodeCard>
                   ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -278,7 +278,7 @@ class _NodeCardState extends State<_NodeCard>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           // IPv4 地址
                           Row(
                             children: [
@@ -302,6 +302,11 @@ class _NodeCardState extends State<_NodeCard>
                               ),
                             ],
                           ),
+                          // 快捷指标行
+                          if (peer != null) ...[
+                            const SizedBox(height: 8),
+                            _QuickMetrics(peer: peer),
+                          ],
                           // 展开详情
                           AnimatedCrossFade(
                             firstChild: const SizedBox.shrink(),
@@ -523,6 +528,72 @@ class _DetailChip extends StatelessWidget {
               fontSize: 12,
               color: Color(0xFF0F172A),
               fontWeight: FontWeight.w600,
+              fontFamily: 'Inter',
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickMetrics extends StatelessWidget {
+  const _QuickMetrics({required this.peer});
+
+  final CorePeerStatus peer;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[];
+
+    final latency = _formatLatency(peer.latencyText);
+    if (latency.isNotEmpty) {
+      items.add(_metricChip(Icons.speed_outlined, latency.replaceFirst('延迟 ', '')));
+    }
+
+    if (peer.tunnelProto.isNotEmpty && peer.tunnelProto != '-') {
+      items.add(_metricChip(Icons.route_outlined, peer.tunnelProto));
+    }
+
+    if (peer.rxBytes.isNotEmpty && peer.rxBytes != '-') {
+      items.add(_metricChip(Icons.arrow_downward_outlined, peer.rxBytes));
+    }
+
+    if (peer.txBytes.isNotEmpty && peer.txBytes != '-') {
+      items.add(_metricChip(Icons.arrow_upward_outlined, peer.txBytes));
+    }
+
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: items,
+    );
+  }
+
+  Widget _metricChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: const Color(0xFF16A34A)),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF15803D),
               fontFamily: 'Inter',
               height: 1.2,
             ),
