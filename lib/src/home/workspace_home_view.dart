@@ -13,6 +13,10 @@ enum _DashboardView { overview, network, devices, settings }
 
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
+const double _networkDetailStackBreakpoint = 720;
+const double _networkSidebarWidth = 260;
+const double _itemListMinWidth = 360;
+
 class _JoinNetworkState {
   const _JoinNetworkState({required this.phase, this.message, this.localIpv4});
 
@@ -1121,46 +1125,76 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         ),
         const SizedBox(height: 24),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _NetworkSidebar(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final sidebar = _NetworkSidebar(
                 totalDevices: devices.length,
                 onlineDevices: onlineCount,
                 traffic: _networkTraffic[network.id],
                 onRefresh: () =>
                     unawaited(_loadSingleNetworkDevices(network.id)),
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              );
+              final listHeader = Row(
+                children: [
+                  Text(
+                    '设备',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const Spacer(),
+                  FBadge(
+                    variant: .secondary,
+                    child: Text('${devices.length} 台'),
+                  ),
+                ],
+              );
+
+              if (constraints.maxWidth < _networkDetailStackBreakpoint) {
+                return SingleChildScrollView(
+                  key: const ValueKey<String>('network-detail-stacked'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _NetworkSidebar(
+                        width: double.infinity,
+                        totalDevices: devices.length,
+                        onlineDevices: onlineCount,
+                        traffic: _networkTraffic[network.id],
+                        onRefresh: () =>
+                            unawaited(_loadSingleNetworkDevices(network.id)),
+                      ),
+                      const SizedBox(height: 20),
+                      listHeader,
+                      const SizedBox(height: 12),
+                      _DeviceListPanel(devices: devices),
+                    ],
+                  ),
+                );
+              }
+
+              return Row(
+                key: const ValueKey<String>('network-detail-wide'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sidebar,
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '设备',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF0F172A),
-                              ),
-                        ),
-                        const Spacer(),
-                        FBadge(
-                          variant: .secondary,
-                          child: Text('${devices.length} 台'),
+                        listHeader,
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: _NetworkDeviceListViewport(devices: devices),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: _NetworkDeviceListViewport(devices: devices),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -1232,7 +1266,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           )
         else
           FCard.raw(
-            child: FItemGroup(
+            child: _ConstrainedFItemGroup(
               divider: .full,
               physics: const NeverScrollableScrollPhysics(),
               children: [
@@ -1337,106 +1371,123 @@ class _DashboardHeader extends StatelessWidget {
         color: Color(0xFFFFFFFF),
         border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
-      child: Row(
-        children: [
-          const _BrandMark(),
-          const SizedBox(width: 8),
-          Text('EasyTier Pro', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(width: 16),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FButton(
-                    variant: activeView == _DashboardView.overview
-                        ? .secondary
-                        : .ghost,
-                    size: .sm,
-                    onPress: onShowOverview,
-                    child: const Text('首页'),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < _networkDetailStackBreakpoint;
+          final dense = constraints.maxWidth < 400;
+
+          return Row(
+            children: [
+              const _BrandMark(),
+              if (dense)
+                const SizedBox(width: 8)
+              else ...[
+                const SizedBox(width: 8),
+                Text(
+                  'EasyTier Pro',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(width: 16),
+              ],
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      FButton(
+                        variant: activeView == _DashboardView.overview
+                            ? .secondary
+                            : .ghost,
+                        size: .sm,
+                        onPress: onShowOverview,
+                        child: const Text('首页'),
+                      ),
+                      if (networks.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        _NetworkTabMenu(
+                          active: activeView == _DashboardView.network,
+                          networks: networks,
+                          selectedNetworkId: selectedNetworkId,
+                          onSelectNetwork: onSelectNetwork,
+                        ),
+                      ],
+                      const SizedBox(width: 6),
+                      FButton(
+                        variant: activeView == _DashboardView.devices
+                            ? .secondary
+                            : .ghost,
+                        size: .sm,
+                        onPress: onShowDevices,
+                        child: const Text('设备'),
+                      ),
+                      const SizedBox(width: 6),
+                      FButton(
+                        variant: activeView == _DashboardView.settings
+                            ? .secondary
+                            : .ghost,
+                        size: .sm,
+                        onPress: onShowSettings,
+                        child: const Text('设置'),
+                      ),
+                    ],
                   ),
-                  if (networks.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    _NetworkTabMenu(
-                      active: activeView == _DashboardView.network,
-                      networks: networks,
-                      selectedNetworkId: selectedNetworkId,
-                      onSelectNetwork: onSelectNetwork,
-                    ),
-                  ],
-                  const SizedBox(width: 6),
-                  FButton(
-                    variant: activeView == _DashboardView.devices
-                        ? .secondary
-                        : .ghost,
-                    size: .sm,
-                    onPress: onShowDevices,
-                    child: const Text('设备'),
-                  ),
-                  const SizedBox(width: 6),
-                  FButton(
-                    variant: activeView == _DashboardView.settings
-                        ? .secondary
-                        : .ghost,
-                    size: .sm,
-                    onPress: onShowSettings,
-                    child: const Text('设置'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          _HeaderMetric(
-            label: '设备',
-            value: '$deviceCount',
-            icon: Icons.devices_other_outlined,
-          ),
-          const SizedBox(width: 10),
-          _HeaderMetric(
-            label: '在线',
-            value: '$onlineDeviceCount',
-            icon: Icons.circle,
-            color: onlineDeviceCount > 0
-                ? const Color(0xFF16A34A)
-                : Colors.grey,
-          ),
-          const SizedBox(width: 10),
-          ValueListenableBuilder<CoreRunStatus>(
-            valueListenable: coreStatusListenable,
-            builder: (context, status, _) {
-              final color = switch (status.phase) {
-                CoreRunPhase.running => const Color(0xFF16A34A),
-                CoreRunPhase.repairing => const Color(0xFFF59E0B),
-                CoreRunPhase.checking => const Color(0xFF2563EB),
-                CoreRunPhase.error => const Color(0xFFDC2626),
-                CoreRunPhase.signedOut => Colors.grey,
-              };
-              return Row(
-                children: [
-                  Icon(Icons.circle, size: 12, color: color),
-                  const SizedBox(width: 5),
-                  Text(
-                    '引擎',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF737373),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(width: 12),
-          _UserMenu(
-            userName: trimmedName,
-            workspaceName: workspaceName,
-            initial: initial,
-            onShowSettings: onShowSettings,
-            onLogout: onLogout,
-          ),
-        ],
+              if (!compact) const SizedBox(width: 16),
+              if (!compact) ...[
+                _HeaderMetric(
+                  label: '设备',
+                  value: '$deviceCount',
+                  icon: Icons.devices_other_outlined,
+                ),
+                const SizedBox(width: 10),
+                _HeaderMetric(
+                  label: '在线',
+                  value: '$onlineDeviceCount',
+                  icon: Icons.circle,
+                  color: onlineDeviceCount > 0
+                      ? const Color(0xFF16A34A)
+                      : Colors.grey,
+                ),
+                const SizedBox(width: 10),
+                ValueListenableBuilder<CoreRunStatus>(
+                  valueListenable: coreStatusListenable,
+                  builder: (context, status, _) {
+                    final color = switch (status.phase) {
+                      CoreRunPhase.running => const Color(0xFF16A34A),
+                      CoreRunPhase.repairing => const Color(0xFFF59E0B),
+                      CoreRunPhase.checking => const Color(0xFF2563EB),
+                      CoreRunPhase.error => const Color(0xFFDC2626),
+                      CoreRunPhase.signedOut => Colors.grey,
+                    };
+                    return Row(
+                      children: [
+                        Icon(Icons.circle, size: 12, color: color),
+                        const SizedBox(width: 5),
+                        Text(
+                          '引擎',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: const Color(0xFF737373),
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+              const SizedBox(width: 12),
+              _UserMenu(
+                userName: trimmedName,
+                workspaceName: workspaceName,
+                initial: initial,
+                onShowSettings: onShowSettings,
+                onLogout: onLogout,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2131,6 +2182,47 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+class _ConstrainedFItemGroup extends StatelessWidget {
+  const _ConstrainedFItemGroup({
+    required this.children,
+    this.divider = FItemDivider.none,
+    this.physics = const ClampingScrollPhysics(),
+  });
+
+  final List<FItemMixin> children;
+  final FItemDivider divider;
+  final ScrollPhysics physics;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedWidth ||
+            constraints.maxWidth >= _itemListMinWidth) {
+          return FItemGroup(
+            divider: divider,
+            physics: physics,
+            children: children,
+          );
+        }
+
+        return SingleChildScrollView(
+          primary: false,
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: _itemListMinWidth,
+            child: FItemGroup(
+              divider: divider,
+              physics: physics,
+              children: children,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _MetricRow extends StatelessWidget {
   const _MetricRow({
     required this.icon,
@@ -2163,12 +2255,14 @@ class _MetricRow extends StatelessWidget {
 
 class _NetworkSidebar extends StatelessWidget {
   const _NetworkSidebar({
+    this.width = _networkSidebarWidth,
     required this.totalDevices,
     required this.onlineDevices,
     required this.traffic,
     required this.onRefresh,
   });
 
+  final double width;
   final int totalDevices;
   final int onlineDevices;
   final _NetworkTrafficSnapshot? traffic;
@@ -2178,7 +2272,7 @@ class _NetworkSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: const ValueKey<String>('network-sidebar'),
-      width: 260,
+      width: width,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FB),
@@ -2300,7 +2394,7 @@ class _DeviceListPanel extends StatelessWidget {
       return const Center(child: _StateMessage(message: '该网络暂无设备'));
     }
     return FCard.raw(
-      child: FItemGroup(
+      child: _ConstrainedFItemGroup(
         divider: .full,
         children: [
           for (final device in devices)
@@ -2397,7 +2491,7 @@ class _SettingsPanel extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 8),
-              FItemGroup(
+              _ConstrainedFItemGroup(
                 divider: .full,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [

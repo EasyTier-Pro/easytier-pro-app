@@ -257,6 +257,71 @@ void main() {
     expect(scrollView.controller?.position.maxScrollExtent, greaterThan(0));
   });
 
+  testWidgets('network detail stacks safely in narrow windows', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1200, 700));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+
+    tester.view.physicalSize = const Size(360, 700);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey<String>('network-detail-stacked')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('network-detail-wide')),
+      findsNothing,
+    );
+
+    final sidebarSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-sidebar')),
+    );
+    expect(sidebarSize.width, closeTo(312, 0.1));
+  });
+
   testWidgets('shows create network flow when workspace has no networks', (
     WidgetTester tester,
   ) async {
