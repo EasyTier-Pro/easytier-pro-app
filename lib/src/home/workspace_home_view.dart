@@ -1313,11 +1313,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               onPress: () => unawaited(_refreshNetworkNodes(network)),
               child: const Text('刷新节点'),
             ),
-            const SizedBox(width: 8),
-            FBadge(
-              variant: .secondary,
-              child: Text('${devices.length} 台'),
-            ),
           ],
         ),
         const SizedBox(height: 12),
