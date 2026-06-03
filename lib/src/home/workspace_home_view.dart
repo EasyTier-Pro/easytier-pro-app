@@ -17,18 +17,6 @@ enum _DashboardView {
   settings,
 }
 
-class _AggregatedDevice {
-  const _AggregatedDevice({
-    required this.device,
-    required this.networkName,
-    required this.networkId,
-  });
-
-  final NetworkDevice device;
-  final String networkName;
-  final String networkId;
-}
-
 enum _UserMenuAction { settings, logout }
 
 enum _JoinPhase { idle, joining, joined, leaving, error }
@@ -125,21 +113,25 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   List<ConsoleNetwork> _networks = const <ConsoleNetwork>[];
   List<ConsoleRegion> _regions = const <ConsoleRegion>[];
+  List<ManagedDevice> _managedDevices = const <ManagedDevice>[];
   Map<String, List<NetworkDevice>> _networkDevices =
       const <String, List<NetworkDevice>>{};
   Map<String, _JoinNetworkState> _joinStates =
       const <String, _JoinNetworkState>{};
   String? _selectedNetworkId;
   String? _networkError;
+  String? _deviceError;
   String? _regionError;
   String? _createError;
   bool _isLoadingNetworks = false;
+  bool _isLoadingDevices = false;
   bool _isLoadingRegions = false;
   bool _isCreatingNetwork = false;
   _DashboardView _activeView = _DashboardView.overview;
   String _newNetworkName = '我的网络';
   String? _selectedRegionCode;
   int _networkRequestId = 0;
+  int _deviceRequestId = 0;
   int _regionRequestId = 0;
   Timer? _trafficPollTimer;
   bool _isTrafficPollInFlight = false;
@@ -166,31 +158,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   int get _totalDeviceCount {
-    final seen = <String>{};
-    for (final devices in _networkDevices.values) {
-      for (final device in devices) {
-        if (!device.attached) {
-          continue;
-        }
-        seen.add(device.deviceId ?? device.id);
-      }
-    }
-    return seen.length;
+    return _managedDevices.length;
   }
 
   int get _onlineDeviceCount {
-    final seen = <String>{};
-    for (final devices in _networkDevices.values) {
-      for (final device in devices) {
-        if (!device.attached) {
-          continue;
-        }
-        if (device.online) {
-          seen.add(device.deviceId ?? device.id);
-        }
-      }
-    }
-    return seen.length;
+    return _managedDevices.where((device) => device.online).length;
   }
 
   @override
@@ -216,7 +188,47 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   Future<void> _loadInitialData() async {
-    await Future.wait([_loadRegions(), _loadNetworks()]);
+    await Future.wait([_loadRegions(), _loadNetworks(), _loadManagedDevices()]);
+  }
+
+  Future<void> _loadManagedDevices() async {
+    final workspace = _workspace;
+    if (workspace == null) {
+      setState(() {
+        _deviceError = '当前账号未关联工作区。';
+        _managedDevices = const <ManagedDevice>[];
+        _isLoadingDevices = false;
+      });
+      return;
+    }
+
+    final requestId = ++_deviceRequestId;
+    setState(() {
+      _isLoadingDevices = true;
+      _deviceError = null;
+    });
+
+    try {
+      final devices = await widget.authService.fetchManagedDevices(
+        accessToken: widget.session.tokenSet.accessToken,
+        workspaceId: workspace.id,
+      );
+      if (!mounted || requestId != _deviceRequestId) {
+        return;
+      }
+      setState(() {
+        _managedDevices = devices;
+        _isLoadingDevices = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _deviceRequestId) {
+        return;
+      }
+      setState(() {
+        _isLoadingDevices = false;
+        _deviceError = _normalizeError(error);
+      });
+    }
   }
 
   Future<void> _loadRegions() async {
@@ -523,6 +535,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         accessToken: widget.session.tokenSet.accessToken,
         workspaceId: workspace.id,
       );
+      if (mounted) {
+        setState(() {
+          _managedDevices = devices;
+          _deviceError = null;
+          _isLoadingDevices = false;
+        });
+      }
       for (final device in devices) {
         if (device.machineId == machineId) {
           return device;
@@ -811,6 +830,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(() {
       _activeView = _DashboardView.devices;
     });
+    if (!_isLoadingDevices) {
+      unawaited(_loadManagedDevices());
+    }
   }
 
   void _showSettings() {
@@ -1108,71 +1130,66 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   Widget _buildDevicesPage(BuildContext context) {
-    final allDevices = <_AggregatedDevice>[];
-    final seenDeviceIds = <String>{};
-
-    for (final entry in _networkDevices.entries) {
-      final networkId = entry.key;
-      final network = _networks.where((n) => n.id == networkId).firstOrNull;
-      if (network == null) continue;
-      for (final device in entry.value) {
-        if (!device.attached) continue;
-        final uniqueId = device.deviceId ?? device.id;
-        if (seenDeviceIds.contains(uniqueId)) continue;
-        seenDeviceIds.add(uniqueId);
-        allDevices.add(_AggregatedDevice(
-          device: device,
-          networkName: network.name,
-          networkId: networkId,
-        ));
-      }
-    }
-
-    allDevices.sort((a, b) {
-      if (a.device.online && !b.device.online) return -1;
-      if (!a.device.online && b.device.online) return 1;
-      return a.device.name.compareTo(b.device.name);
+    final devices = List<ManagedDevice>.of(_managedDevices);
+    devices.sort((a, b) {
+      if (a.online && !b.online) return -1;
+      if (!a.online && b.online) return 1;
+      if (a.approved && !b.approved) return -1;
+      if (!a.approved && b.approved) return 1;
+      return a.hostname.compareTo(b.hostname);
     });
 
-    final onlineCount = allDevices.where((d) => d.device.online).length;
+    final onlineCount = devices.where((device) => device.online).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
           title: '设备',
-          subtitle: '所有网络中的设备与在线状态。',
+          subtitle: '工作区中的所有设备与在线状态。',
           trailing: FButton(
             variant: .outline,
             size: .sm,
-            onPress: () async {
-              for (final network in _networks) {
-                await _loadSingleNetworkDevices(network.id);
-              }
-            },
-            child: const Text('刷新设备'),
+            onPress: _isLoadingDevices
+                ? null
+                : () => unawaited(_loadManagedDevices()),
+            child: Text(_isLoadingDevices ? '刷新中' : '刷新设备'),
           ),
         ),
         const SizedBox(height: 20),
+        if (_deviceError != null) ...[
+          SizedBox(
+            height: 120,
+            child: _StateMessage(
+              message: _deviceError!,
+              action: FButton(
+                variant: .outline,
+                size: .sm,
+                onPress: _isLoadingDevices
+                    ? null
+                    : () => unawaited(_loadManagedDevices()),
+                child: const Text('重试'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
         Row(
           children: [
-            Text(
-              '设备列表',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text('设备列表', style: Theme.of(context).textTheme.titleLarge),
             const Spacer(),
             FBadge(
               variant: .secondary,
-              child: Text('$onlineCount / ${allDevices.length} 台在线'),
+              child: Text('$onlineCount / ${devices.length} 台在线'),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        if (allDevices.isEmpty)
-          const SizedBox(
+        if (devices.isEmpty)
+          SizedBox(
             height: 200,
             child: _StateMessage(
-              message: '暂无设备数据。加入网络后即可查看设备。',
+              message: _isLoadingDevices ? '正在读取设备列表。' : '暂无设备数据。',
             ),
           )
         else
@@ -1181,22 +1198,21 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               divider: .full,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                for (final aggregated in allDevices)
+                for (final device in devices)
                   FItem(
-                    prefix: _StatusDot(online: aggregated.device.online),
-                    title: Text(aggregated.device.name),
+                    prefix: _StatusDot(online: device.online),
+                    title: Text(device.hostname),
                     subtitle: Text(
                       [
-                        '网络: ${aggregated.networkName}',
-                        if (aggregated.device.ipv4 != null &&
-                            aggregated.device.ipv4!.isNotEmpty)
-                          'IP: ${aggregated.device.ipv4}',
-                        'ID: ${aggregated.device.id}',
+                        '审批: ${_approvalLabel(device)}',
+                        '连接: ${_connectivityLabel(device)}',
+                        '机器: ${_shortId(device.machineId)}',
+                        'ID: ${device.id}',
                       ].join('  |  '),
                     ),
                     suffix: FBadge(
-                      variant: aggregated.device.online ? .secondary : .outline,
-                      child: Text(aggregated.device.online ? '在线' : '离线'),
+                      variant: device.online ? .secondary : .outline,
+                      child: Text(_connectivityLabel(device)),
                     ),
                   ),
               ],
@@ -2779,6 +2795,27 @@ class _StatusDot extends StatelessWidget {
       ),
     );
   }
+}
+
+String _approvalLabel(ManagedDevice device) {
+  return switch (device.approvalState.toLowerCase()) {
+    'approved' => '已批准',
+    'pending' => '待批准',
+    'rejected' => '已拒绝',
+    '' => '未知',
+    _ => device.approvalState,
+  };
+}
+
+String _connectivityLabel(ManagedDevice device) {
+  return switch (device.connectivityState.toLowerCase()) {
+    'online' => '在线',
+    'connected' => '在线',
+    'offline' => '离线',
+    'disconnected' => '离线',
+    '' => '未知',
+    _ => device.connectivityState,
+  };
 }
 
 String _shortId(String value) {

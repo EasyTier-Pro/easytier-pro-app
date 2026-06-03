@@ -237,6 +237,65 @@ void main() {
     expect(authService.attachedNetworkIds, isEmpty);
   });
 
+  testWidgets('shows workspace devices instead of single-network nodes', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+        ManagedDevice(
+          id: 'device-2',
+          machineId: 'machine-2',
+          hostname: 'laptop-2',
+          approvalState: 'pending',
+          connectivityState: 'offline',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'node-alias',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '设备'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('desktop-1'), findsOneWidget);
+    expect(find.text('laptop-2'), findsOneWidget);
+    expect(find.text('node-alias'), findsNothing);
+    expect(find.text('1 / 2 台在线'), findsOneWidget);
+  });
+
   test('parses installer machine_id from finished event', () {
     final machineId = CoreLifecycleService.parseMachineIdFromDesktopEvent(
       const <String, dynamic>{
