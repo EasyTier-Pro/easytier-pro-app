@@ -56,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
-    expect(find.textContaining('已加入 1 个网络'), findsOneWidget);
+    expect(find.textContaining('1 个网络'), findsOneWidget);
     expect(find.textContaining('10.144.0.2'), findsOneWidget);
     expect(find.byType(Switch), findsNWidgets(2));
 

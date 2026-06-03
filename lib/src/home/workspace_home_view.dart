@@ -1391,6 +1391,45 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+class _TrafficPill extends StatelessWidget {
+  const _TrafficPill({
+    required this.icon,
+    required this.label,
+    required this.bgColor,
+    required this.textColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color bgColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: textColor,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({
     required this.statusListenable,
@@ -1461,7 +1500,7 @@ class _StatusBadge extends StatelessWidget {
               ? status.lastError!
               : '连接引擎遇到问题';
         } else if (joinedCount > 0) {
-          subtitle = '已加入 $joinedCount 个网络 · ↓ ${_formatTrafficRate(downloadRate)} / ↑ ${_formatTrafficRate(uploadRate)}';
+          subtitle = '$joinedCount 个网络';
         } else {
           subtitle = machineId?.isNotEmpty == true
               ? '设备 ${_shortId(machineId!)} · 尚未加入网络'
@@ -1512,6 +1551,22 @@ class _StatusBadge extends StatelessWidget {
                   ],
                 ),
               ),
+              if (joinedCount > 0 && !error) ...[
+                const SizedBox(width: 12),
+                _TrafficPill(
+                  icon: Icons.arrow_downward,
+                  label: _formatTrafficRate(downloadRate),
+                  bgColor: const Color(0xFFF0FDF4),
+                  textColor: const Color(0xFF16A34A),
+                ),
+                const SizedBox(width: 8),
+                _TrafficPill(
+                  icon: Icons.arrow_upward,
+                  label: _formatTrafficRate(uploadRate),
+                  bgColor: const Color(0xFFEFF6FF),
+                  textColor: const Color(0xFF2563EB),
+                ),
+              ],
             ],
           ),
         );
