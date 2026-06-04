@@ -2753,7 +2753,7 @@ class _SettingsPanel extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: wide ? double.infinity : halfWidth,
+                  width: halfWidth,
                   child: FCard(
                     title: const Text('诊断日志'),
                     subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
