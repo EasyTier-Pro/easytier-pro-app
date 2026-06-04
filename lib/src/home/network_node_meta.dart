@@ -72,6 +72,8 @@ class _NodeMetaLine extends StatelessWidget {
             color: const Color(0xFF94A3B8),
             fontFamily: 'Inter',
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

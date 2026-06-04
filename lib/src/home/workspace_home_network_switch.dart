@@ -337,16 +337,18 @@ class _NetworkSwitchTile extends StatelessWidget {
                                       ],
                                     )
                                   else
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         _StatusChip(
                                           label:
                                               '$onlineCount / ${attachedDevices.length} 在线',
                                           active: onlineCount > 0,
                                         ),
-                                        if (cidrText.isNotEmpty) ...[
-                                          const SizedBox(width: 8),
+                                        if (cidrText.isNotEmpty)
                                           SelectableTextHitBoundary(
                                             child: Text(
                                               'CIDR $cidrText',
@@ -361,7 +363,6 @@ class _NetworkSwitchTile extends StatelessWidget {
                                                   ),
                                             ),
                                           ),
-                                        ],
                                       ],
                                     ),
                                   if (failed && state.message != null) ...[

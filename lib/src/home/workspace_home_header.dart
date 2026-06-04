@@ -289,22 +289,31 @@ class _TrafficPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: textColor.withAlpha(51)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withAlpha(38)),
+        boxShadow: [
+          BoxShadow(
+            color: textColor.withAlpha(13),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: textColor),
+          Icon(icon, size: 13, color: textColor),
           const SizedBox(width: 6),
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: textColor,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              letterSpacing: 0.3,
             ),
           ),
         ],
@@ -407,73 +416,137 @@ class _StatusBadge extends StatelessWidget {
               : '正在初始化设备...';
         }
 
+        final statusBody = Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: ringColor, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: ringColor.withAlpha(20),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(child: Icon(icon, color: ringColor, size: 22)),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                      fontSize: 16,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        final trafficPills = joinedCount > 0 && !error && !needsElevation
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _TrafficPill(
+                    icon: Icons.arrow_downward,
+                    label: _formatTrafficRate(downloadRate),
+                    bgColor: const Color(0xFFF0FDF4),
+                    textColor: const Color(0xFF16A34A),
+                  ),
+                  const SizedBox(width: 8),
+                  _TrafficPill(
+                    icon: Icons.arrow_upward,
+                    label: _formatTrafficRate(uploadRate),
+                    bgColor: const Color(0xFFEFF6FF),
+                    textColor: const Color(0xFF2563EB),
+                  ),
+                ],
+              )
+            : null;
+
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: ringColor, width: 3),
-                ),
-                child: Center(child: Icon(icon, color: ringColor, size: 22)),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withAlpha(6),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 420;
+
+              if (narrow && trafficPills != null) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF64748B),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    statusBody,
+                    const SizedBox(height: 12),
+                    trafficPills,
                   ],
-                ),
-              ),
-              if (needsElevation && onElevate != null) ...[
-                const SizedBox(width: 12),
-                FButton(
-                  variant: .primary,
-                  size: .sm,
-                  onPress: () => unawaited(onElevate!()),
-                  child: const Text('以管理员身份运行'),
-                ),
-              ] else if (joinedCount > 0 && !error && !needsElevation) ...[
-                const SizedBox(width: 12),
-                _TrafficPill(
-                  icon: Icons.arrow_downward,
-                  label: _formatTrafficRate(downloadRate),
-                  bgColor: const Color(0xFFF0FDF4),
-                  textColor: const Color(0xFF16A34A),
-                ),
-                const SizedBox(width: 8),
-                _TrafficPill(
-                  icon: Icons.arrow_upward,
-                  label: _formatTrafficRate(uploadRate),
-                  bgColor: const Color(0xFFEFF6FF),
-                  textColor: const Color(0xFF2563EB),
-                ),
-              ],
-            ],
+                );
+              }
+
+              final elevationButton = needsElevation && onElevate != null
+                  ? FButton(
+                      variant: .primary,
+                      size: .sm,
+                      onPress: () => unawaited(onElevate!()),
+                      child: const Text('以管理员身份运行'),
+                    )
+                  : null;
+
+              if (narrow && elevationButton != null) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    statusBody,
+                    const SizedBox(height: 12),
+                    elevationButton,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: statusBody),
+                  if (elevationButton != null) ...[
+                    const SizedBox(width: 14),
+                    elevationButton,
+                  ] else if (trafficPills != null) ...[
+                    const SizedBox(width: 14),
+                    trafficPills,
+                  ],
+                ],
+              );
+            },
           ),
         );
       },

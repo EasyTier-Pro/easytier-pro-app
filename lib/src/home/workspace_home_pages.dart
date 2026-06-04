@@ -162,35 +162,60 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
+                  final narrow = constraints.maxWidth < 480;
+
                   final title = Text(
                     network.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: narrow
+                        ? Theme.of(context).textTheme.titleLarge
+                        : Theme.of(context).textTheme.headlineSmall,
                     overflow: TextOverflow.ellipsis,
                   );
                   final actions = Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: narrow ? 6 : 8,
+                    runSpacing: narrow ? 6 : 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      FButton(
-                        variant: .outline,
-                        onPress: deleting
-                            ? null
-                            : () => unawaited(_refreshNetworkNodes(network)),
-                        child: const Text('刷新节点'),
-                      ),
-                      if (joined)
+                      if (narrow)
+                        Tooltip(
+                          message: '刷新节点',
+                          child: FButton(
+                            variant: .ghost,
+                            size: .sm,
+                            onPress: deleting
+                                ? null
+                                : () =>
+                                      unawaited(_refreshNetworkNodes(network)),
+                            mainAxisSize: MainAxisSize.min,
+                            child: const Icon(Icons.refresh, size: 16),
+                          ),
+                        )
+                      else
                         FButton(
                           variant: .outline,
                           onPress: deleting
                               ? null
+                              : () => unawaited(_refreshNetworkNodes(network)),
+                          mainAxisSize: MainAxisSize.min,
+                          child: const Text('刷新节点'),
+                        ),
+                      if (joined)
+                        FButton(
+                          variant: .outline,
+                          size: narrow ? .sm : .md,
+                          onPress: deleting
+                              ? null
                               : () => unawaited(_leaveNetwork(network)),
+                          mainAxisSize: MainAxisSize.min,
                           child: const Text('退出网络'),
                         )
                       else
                         FButton(
+                          size: narrow ? .sm : .md,
                           onPress: deleting
                               ? null
                               : () => unawaited(_joinNetwork(network)),
+                          mainAxisSize: MainAxisSize.min,
                           child: const Text('加入网络'),
                         ),
                       _NetworkMoreMenu(
@@ -201,10 +226,10 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                     ],
                   );
 
-                  if (constraints.maxWidth < 520) {
+                  if (narrow) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [title, const SizedBox(height: 12), actions],
+                      children: [title, const SizedBox(height: 10), actions],
                     );
                   }
 

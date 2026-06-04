@@ -92,28 +92,51 @@ class _NetworkSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        _SummaryItem(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow =
+            constraints.hasBoundedWidth && constraints.maxWidth < 480;
+
+        final onlineItem = _SummaryItem(
           icon: Icons.circle,
           iconColor: const Color(0xFF16A34A),
           text: '$onlineDevices / $totalDevices 在线',
-        ),
-        _SummaryItem(
+        );
+        final downloadItem = _SummaryItem(
           icon: Icons.arrow_downward,
           iconColor: const Color(0xFF16A34A),
           text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
-        ),
-        _SummaryItem(
+        );
+        final uploadItem = _SummaryItem(
           icon: Icons.arrow_upward,
           iconColor: const Color(0xFF2563EB),
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
-        ),
-        _SummaryItem(text: _formatTotalTraffic(traffic)),
-      ],
+        );
+        final totalItem = _SummaryItem(text: _formatTotalTraffic(traffic));
+
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [onlineItem, downloadItem, uploadItem],
+              ),
+              const SizedBox(height: 4),
+              totalItem,
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [onlineItem, downloadItem, uploadItem, totalItem],
+        );
+      },
     );
   }
 }
