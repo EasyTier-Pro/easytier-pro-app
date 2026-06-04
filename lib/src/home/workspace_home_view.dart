@@ -1157,6 +1157,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
           joinedCount: joinedNetworks.length,
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,
+          onElevate: widget.coreLifecycleService.repairWithElevation,
         ),
         const SizedBox(height: 24),
         if (_networkError != null)
@@ -1803,12 +1804,14 @@ class _StatusBadge extends StatelessWidget {
     required this.joinedCount,
     required this.downloadRate,
     required this.uploadRate,
+    this.onElevate,
   });
 
   final ValueListenable<CoreRunStatus> statusListenable;
   final int joinedCount;
   final double downloadRate;
   final double uploadRate;
+  final Future<void> Function()? onElevate;
 
   @override
   Widget build(BuildContext context) {
@@ -1880,7 +1883,7 @@ class _StatusBadge extends StatelessWidget {
         } else if (needsElevation) {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!
-              : '连接引擎安装需要提升权限，请前往设置页处理';
+              : '连接引擎安装需要提升权限';
         } else if (joinedCount > 0) {
           subtitle = '$joinedCount 个网络';
         } else {
@@ -1931,7 +1934,15 @@ class _StatusBadge extends StatelessWidget {
                   ],
                 ),
               ),
-              if (joinedCount > 0 && !error && !needsElevation) ...[
+              if (needsElevation && onElevate != null) ...[
+                const SizedBox(width: 12),
+                FButton(
+                  variant: .primary,
+                  size: .sm,
+                  onPress: () => unawaited(onElevate!()),
+                  child: const Text('以管理员身份运行'),
+                ),
+              ] else if (joinedCount > 0 && !error && !needsElevation) ...[
                 const SizedBox(width: 12),
                 _TrafficPill(
                   icon: Icons.arrow_downward,
