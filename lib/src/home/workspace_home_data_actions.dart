@@ -248,28 +248,6 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     }
   }
 
-  Future<void> _showNetworkMoreMenu(ConsoleNetwork network) async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
-              title: const Text('删除网络'),
-              onTap: () => Navigator.of(sheetContext).pop('delete'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == 'delete') {
-      await _showDeleteNetworkDialog(network);
-    }
-  }
-
   Future<void> _showDeleteNetworkDialog(ConsoleNetwork network) async {
     if (_deletingNetworkIds.contains(network.id)) {
       return;

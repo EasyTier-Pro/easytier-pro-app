@@ -191,11 +191,10 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                               : () => unawaited(_joinNetwork(network)),
                           child: const Text('加入网络'),
                         ),
-                      IconButton(
-                        icon: const Icon(Icons.more_vert),
-                        onPressed: deleting
-                            ? null
-                            : () => unawaited(_showNetworkMoreMenu(network)),
+                      _NetworkMoreMenu(
+                        enabled: !deleting,
+                        onDelete: () =>
+                            unawaited(_showDeleteNetworkDialog(network)),
                       ),
                     ],
                   );
@@ -335,6 +334,59 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _NetworkMoreMenu extends StatelessWidget {
+  const _NetworkMoreMenu({required this.enabled, required this.onDelete});
+
+  final bool enabled;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return FPopoverMenu(
+      menuAnchor: Alignment.topRight,
+      childAnchor: Alignment.bottomRight,
+      divider: FItemDivider.none,
+      menuBuilder: (context, controller, menu) => [
+        FItemGroup(
+          divider: FItemDivider.none,
+          children: [
+            FItem(
+              key: const ValueKey<String>('network-more-delete'),
+              prefix: const Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Color(0xFFDC2626),
+              ),
+              title: Text(
+                '删除网络...',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onPress: () {
+                unawaited(controller.hide());
+                onDelete();
+              },
+            ),
+          ],
+        ),
+      ],
+      builder: (context, controller, child) => Tooltip(
+        message: '更多操作',
+        child: FButton(
+          key: const ValueKey<String>('network-more-menu-button'),
+          variant: .ghost,
+          size: .sm,
+          onPress: enabled ? () => unawaited(controller.toggle()) : null,
+          mainAxisSize: MainAxisSize.min,
+          child: const Icon(Icons.more_vert, size: 18),
+        ),
+      ),
     );
   }
 }

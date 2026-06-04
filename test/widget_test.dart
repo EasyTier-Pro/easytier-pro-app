@@ -784,8 +784,7 @@ void main() {
     await tester.pumpAndSettle();
     await _selectNetworkFromHeader(tester, '办公网');
 
-    await tester.tap(find.widgetWithText(FButton, '删除网络'));
-    await tester.pumpAndSettle();
+    await _openNetworkDeleteDialog(tester);
 
     expect(find.textContaining('删除后不可恢复'), findsOneWidget);
     expect(find.textContaining('所有节点会自动踢出网络'), findsOneWidget);
@@ -799,8 +798,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(authService.deletedNetworkIds, isEmpty);
 
-    await tester.tap(find.widgetWithText(FButton, '删除网络'));
-    await tester.pumpAndSettle();
+    await _openNetworkDeleteDialog(tester);
     await tester.tap(
       find.descendant(
         of: find.byType(FDialog),
@@ -1313,6 +1311,19 @@ Future<void> _selectNetworkFromHeader(
     ),
   );
   await _pumpAppMotionFrames(tester);
+}
+
+Future<void> _openNetworkDeleteDialog(WidgetTester tester) async {
+  await tester.tap(
+    find.byKey(const ValueKey<String>('network-more-menu-button')),
+  );
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const ValueKey<String>('network-more-delete')),
+    findsOneWidget,
+  );
+  await tester.tap(find.byKey(const ValueKey<String>('network-more-delete')));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpAppMotionFrames(WidgetTester tester) async {
