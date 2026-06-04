@@ -112,6 +112,7 @@ class _DashboardHeader extends StatelessWidget {
                       CoreRunPhase.running => const Color(0xFF16A34A),
                       CoreRunPhase.repairing => const Color(0xFFF59E0B),
                       CoreRunPhase.checking => const Color(0xFF2563EB),
+                      CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
                       CoreRunPhase.error => const Color(0xFFDC2626),
                       CoreRunPhase.signedOut => Colors.grey,
                     };
