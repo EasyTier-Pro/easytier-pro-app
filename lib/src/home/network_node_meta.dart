@@ -63,27 +63,12 @@ class _NodeMetaLine extends StatelessWidget {
       parts.add('运行态未知');
     }
 
-    final summary = parts.join('  ·  ');
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            summary,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF94A3B8),
-              fontFamily: 'Inter',
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        AppCopyButton(
-          value: summary,
-          label: '节点摘要',
-          size: 22,
-          iconSize: 13,
-          color: const Color(0xFF94A3B8),
-        ),
-      ],
+    return Text(
+      parts.join('  ·  '),
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: const Color(0xFF94A3B8),
+        fontFamily: 'Inter',
+      ),
     );
   }
 }
@@ -95,7 +80,6 @@ class _RuntimeStatusNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = '运行态暂不可用：$message';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -103,26 +87,11 @@ class _RuntimeStatusNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFFDE68A)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF92400E)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          AppCopyButton(
-            value: message,
-            label: '运行态错误',
-            size: 22,
-            iconSize: 13,
-            color: const Color(0xFF92400E),
-          ),
-        ],
+      child: Text(
+        '运行态暂不可用：$message',
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: const Color(0xFF92400E)),
       ),
     );
   }

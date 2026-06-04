@@ -11,7 +11,6 @@ import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
-import '../shared/copyable_text.dart';
 import 'network_node_list_panel.dart';
 
 part 'workspace_home_models.dart';

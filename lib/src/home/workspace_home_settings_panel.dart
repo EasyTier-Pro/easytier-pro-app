@@ -64,9 +64,6 @@ class _SettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emailText = user.email.isEmpty ? '未提供邮箱' : user.email;
-    final displayName = user.effectiveName.isEmpty ? '用户' : user.effectiveName;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -84,51 +81,15 @@ class _SettingsPanel extends StatelessWidget {
                   FItem(
                     prefix: const Icon(Icons.person_outline),
                     title: const Text('用户'),
-                    subtitle: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            emailText,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (user.email.isNotEmpty)
-                          AppCopyButton(
-                            value: user.email,
-                            label: '邮箱',
-                            size: 22,
-                            iconSize: 13,
-                          ),
-                      ],
-                    ),
-                    details: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(displayName),
-                        AppCopyButton(
-                          value: displayName,
-                          label: '用户名',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
+                    subtitle: Text(user.email.isEmpty ? '未提供邮箱' : user.email),
+                    details: Text(
+                      user.effectiveName.isEmpty ? '用户' : user.effectiveName,
                     ),
                   ),
                   FItem(
                     prefix: const Icon(Icons.apartment_outlined),
                     title: const Text('工作区'),
-                    details: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(workspaceName),
-                        AppCopyButton(
-                          value: workspaceName,
-                          label: '工作区',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
-                    ),
+                    details: Text(workspaceName),
                   ),
                 ],
               ),
@@ -174,64 +135,28 @@ class _SettingsPanel extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ),
-                      AppCopyButton(
-                        value: status.message,
-                        label: '引擎状态',
-                        size: 22,
-                        iconSize: 13,
-                      ),
                     ],
                   ),
                   if (status.machineId != null &&
                       status.machineId!.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '本机设备: ${status.machineId}',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFF737373)),
-                          ),
-                        ),
-                        AppCopyButton(
-                          value: status.machineId!,
-                          label: '本机设备 ID',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
+                    Text(
+                      '本机设备: ${status.machineId}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
                     ),
                   ],
                   if (status.lastError != null &&
                       status.lastError!.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            status.lastError!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color:
-                                      status.phase ==
-                                          CoreRunPhase.needsElevation
-                                      ? const Color(0xFFB45309)
-                                      : const Color(0xFFDC2626),
-                                ),
-                          ),
-                        ),
-                        AppCopyButton(
-                          value: status.lastError!,
-                          label: '引擎错误',
-                          size: 22,
-                          iconSize: 13,
-                          color: status.phase == CoreRunPhase.needsElevation
-                              ? const Color(0xFFB45309)
-                              : const Color(0xFFDC2626),
-                        ),
-                      ],
+                    Text(
+                      status.lastError!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: status.phase == CoreRunPhase.needsElevation
+                            ? const Color(0xFFB45309)
+                            : const Color(0xFFDC2626),
+                      ),
                     ),
                   ],
                   if (status.phase == CoreRunPhase.needsElevation) ...[
@@ -301,9 +226,6 @@ class _SettingsPanel extends StatelessWidget {
                   }
                   final start = entries.length > 8 ? entries.length - 8 : 0;
                   final recent = entries.sublist(start);
-                  final recentText = recent
-                      .map((entry) => entry.humanLine)
-                      .join('\n');
                   return Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -312,24 +234,11 @@ class _SettingsPanel extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFE5E7EB)),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            recentText,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(fontFamily: 'monospace'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        AppCopyButton(
-                          value: recentText,
-                          label: '最近日志',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
+                    child: Text(
+                      recent.map((entry) => entry.humanLine).join('\n'),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
                     ),
                   );
                 },

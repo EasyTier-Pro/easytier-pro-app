@@ -63,12 +63,6 @@ class _NodeCardState extends State<_NodeCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        AppCopyButton(
-                          value: widget.node.name,
-                          label: '设备名称',
-                          size: 22,
-                          iconSize: 13,
-                        ),
                         const SizedBox(width: 12),
                         Text(
                           isOnline ? '在线' : '离线',

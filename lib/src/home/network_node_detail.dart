@@ -127,14 +127,6 @@ class _DetailChip extends StatelessWidget {
               height: 1.2,
             ),
           ),
-          const SizedBox(width: 2),
-          AppCopyButton(
-            value: value,
-            label: label,
-            size: 20,
-            iconSize: 12,
-            color: const Color(0xFF94A3B8),
-          ),
         ],
       ),
     );

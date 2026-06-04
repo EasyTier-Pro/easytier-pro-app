@@ -162,18 +162,10 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final title = Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          network.name,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      AppCopyButton(value: network.name, label: '网络名称'),
-                    ],
+                  final title = Text(
+                    network.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    overflow: TextOverflow.ellipsis,
                   );
                   final actions = Wrap(
                     spacing: 8,
@@ -227,26 +219,11 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 },
               ),
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  AppCopyButton(
-                    value:
-                        '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
-                    label: '网络摘要',
-                    size: 22,
-                    iconSize: 13,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                ],
+              Text(
+                '${_workspace?.name ?? '未关联工作区'} · $regionText · $cidrText',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
               ),
               const SizedBox(height: 12),
               _NetworkSummaryBar(
@@ -341,22 +318,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 for (final device in devices)
                   FItem(
                     prefix: _StatusDot(online: device.online),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            device.hostname,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        AppCopyButton(
-                          value: device.hostname,
-                          label: '设备名称',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
-                    ),
+                    title: Text(device.hostname),
                     subtitle: Text(
                       [
                         '审批: ${_approvalLabel(device)}',
@@ -364,23 +326,6 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                         '机器: ${_shortId(device.machineId)}',
                         'ID: ${device.id}',
                       ].join('  |  '),
-                    ),
-                    details: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AppCopyButton(
-                          value: device.machineId,
-                          label: '机器 ID',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                        AppCopyButton(
-                          value: device.id,
-                          label: '设备 ID',
-                          size: 22,
-                          iconSize: 13,
-                        ),
-                      ],
                     ),
                     suffix: FBadge(
                       variant: device.online ? .secondary : .outline,
