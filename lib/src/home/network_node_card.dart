@@ -81,17 +81,15 @@ class _NodeCardState extends State<_NodeCard> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        SelectableTextHitBoundary(
-                          child: Text(
-                            isOnline ? '在线' : '离线',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: isOnline
-                                      ? const Color(0xFF16A34A)
-                                      : const Color(0xFF9CA3AF),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
+                        Text(
+                          isOnline ? '在线' : '离线',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: isOnline
+                                    ? const Color(0xFF16A34A)
+                                    : const Color(0xFF9CA3AF),
+                                fontWeight: FontWeight.w500,
+                              ),
                         ),
                         const SizedBox(width: 4),
                         Icon(
@@ -111,9 +109,7 @@ class _NodeCardState extends State<_NodeCard> {
                     // 展开详情
                     AnimatedCrossFade(
                       firstChild: const SizedBox.shrink(),
-                      secondChild: SelectableTextHitBoundary(
-                        child: _NodeDetailPanel(peer: peer),
-                      ),
+                      secondChild: _NodeDetailPanel(peer: peer),
                       crossFadeState: _expanded
                           ? CrossFadeState.showSecond
                           : CrossFadeState.showFirst,

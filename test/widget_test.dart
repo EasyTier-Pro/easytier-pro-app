@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -590,6 +590,7 @@ void main() {
     final initialHeight = tester.getSize(cardFinder).height;
 
     final nodeNameRect = tester.getRect(find.text('desktop-1'));
+    expect(_hasSelectionAreaAncestor(tester, find.text('desktop-1')), isTrue);
     expect(nodeNameRect.width, lessThan(tester.getSize(cardFinder).width / 3));
     appTextSelectionController.hasSelection.value = true;
     expect(appTextSelectionController.hasSelection.value, isTrue);
@@ -882,6 +883,55 @@ void main() {
 
     expect(find.text('研发网'), findsNWidgets(2));
     expect(find.text('办公网'), findsNothing);
+  });
+
+  testWidgets('navigation and dropdown labels are not selectable', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'Office', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: 'Research', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _hasSelectionAreaAncestor(
+        tester,
+        find.byKey(const ValueKey<String>('network-tab-label')),
+      ),
+      isFalse,
+    );
+    expect(
+      _hasSelectionAreaAncestor(tester, find.byType(FButton).first),
+      isFalse,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('network-tab-dropdown')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _hasSelectionAreaAncestor(
+        tester,
+        find.byKey(const ValueKey<String>('network-tab-option-net-2')),
+      ),
+      isFalse,
+    );
   });
 
   testWidgets('confirms before deleting a network and hides it locally', (
@@ -1426,6 +1476,19 @@ void _useDesktopViewport(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+}
+
+bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
+  final element = tester.element(finder);
+  var found = false;
+  element.visitAncestorElements((ancestor) {
+    if (ancestor.widget is SelectionArea) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
 }
 
 Future<void> _selectNetworkFromHeader(

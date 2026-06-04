@@ -15,11 +15,13 @@ class _NodeDetailPanel extends StatelessWidget {
         const Divider(height: 1, color: Color(0xFFE5E7EB)),
         const SizedBox(height: 16),
         if (p == null)
-          Text(
-            '运行态信息暂不可用',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF94A3B8),
-              fontStyle: FontStyle.italic,
+          SelectableTextHitBoundary(
+            child: Text(
+              '运行态信息暂不可用',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF94A3B8),
+                fontStyle: FontStyle.italic,
+              ),
             ),
           )
         else
@@ -117,14 +119,16 @@ class _DetailChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF0F172A),
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Inter',
-              height: 1.2,
+          SelectableTextHitBoundary(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Inter',
+                height: 1.2,
+              ),
             ),
           ),
         ],

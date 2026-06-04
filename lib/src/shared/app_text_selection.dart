@@ -7,15 +7,32 @@ import 'package:flutter/rendering.dart';
 class AppTextSelectionController {
   AppTextSelectionController();
 
-  final GlobalKey<SelectionAreaState> selectionAreaKey =
-      GlobalKey<SelectionAreaState>();
   final ValueNotifier<bool> hasSelection = ValueNotifier<bool>(false);
+  GlobalKey<SelectionAreaState>? _activeSelectionAreaKey;
 
-  void handleSelectionChanged(SelectedContent? content) {
-    hasSelection.value = content?.plainText.isNotEmpty == true;
+  void handleSelectionChanged(
+    GlobalKey<SelectionAreaState> selectionAreaKey,
+    SelectedContent? content,
+  ) {
+    final hasContent = content?.plainText.isNotEmpty == true;
+    if (hasContent) {
+      _activeSelectionAreaKey = selectionAreaKey;
+      hasSelection.value = true;
+      return;
+    }
+    if (_activeSelectionAreaKey == selectionAreaKey) {
+      _activeSelectionAreaKey = null;
+      hasSelection.value = false;
+    }
   }
 
   void clearSelection() {
+    final selectionAreaKey = _activeSelectionAreaKey;
+    _activeSelectionAreaKey = null;
+    if (selectionAreaKey == null) {
+      hasSelection.value = false;
+      return;
+    }
     final state = selectionAreaKey.currentState;
     if (state == null || !state.mounted) {
       hasSelection.value = false;
@@ -25,7 +42,15 @@ class AppTextSelectionController {
     hasSelection.value = false;
   }
 
+  void detach(GlobalKey<SelectionAreaState> selectionAreaKey) {
+    if (_activeSelectionAreaKey == selectionAreaKey) {
+      _activeSelectionAreaKey = null;
+      hasSelection.value = false;
+    }
+  }
+
   void reset() {
+    _activeSelectionAreaKey = null;
     hasSelection.value = false;
   }
 }
@@ -33,16 +58,18 @@ class AppTextSelectionController {
 final AppTextSelectionController appTextSelectionController =
     AppTextSelectionController();
 
-class AppSelectionArea extends StatefulWidget {
-  const AppSelectionArea({super.key, required this.child});
+class AppTextSelectionTapCleaner extends StatefulWidget {
+  const AppTextSelectionTapCleaner({super.key, required this.child});
 
   final Widget child;
 
   @override
-  State<AppSelectionArea> createState() => _AppSelectionAreaState();
+  State<AppTextSelectionTapCleaner> createState() =>
+      _AppTextSelectionTapCleanerState();
 }
 
-class _AppSelectionAreaState extends State<AppSelectionArea> {
+class _AppTextSelectionTapCleanerState
+    extends State<AppTextSelectionTapCleaner> {
   static const double _tapSlop = 6;
 
   Offset? _tapStart;
@@ -58,16 +85,12 @@ class _AppSelectionAreaState extends State<AppSelectionArea> {
 
   @override
   Widget build(BuildContext context) {
-    return SelectionArea(
-      key: appTextSelectionController.selectionAreaKey,
-      onSelectionChanged: appTextSelectionController.handleSelectionChanged,
-      child: Listener(
-        onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
-        onPointerUp: _handlePointerUp,
-        onPointerCancel: (_) => _resetTapTracking(),
-        child: widget.child,
-      ),
+    return Listener(
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: (_) => _resetTapTracking(),
+      child: widget.child,
     );
   }
 

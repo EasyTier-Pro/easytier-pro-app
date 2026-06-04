@@ -135,7 +135,9 @@ class _MyAppState extends State<MyApp> {
       builder: (context, child) => FTheme(
         data: _foruiThemeData,
         child: FToaster(
-          child: AppSelectionArea(child: child ?? const SizedBox.shrink()),
+          child: AppTextSelectionTapCleaner(
+            child: child ?? const SizedBox.shrink(),
+          ),
         ),
       ),
       theme: ThemeData(

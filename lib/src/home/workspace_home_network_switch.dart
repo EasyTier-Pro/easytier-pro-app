@@ -400,22 +400,20 @@ class _NetworkSwitchTile extends StatelessWidget {
                                     onChange: (_) => onToggle?.call(),
                                   ),
                                 const SizedBox(height: 6),
-                                SelectableTextHitBoundary(
-                                  child: Text(
-                                    isLoading
-                                        ? '处理中'
-                                        : joined
-                                        ? '已连接'
-                                        : '未连接',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: joined
-                                              ? const Color(0xFF16A34A)
-                                              : const Color(0xFF94A3B8),
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 11,
-                                        ),
-                                  ),
+                                Text(
+                                  isLoading
+                                      ? '处理中'
+                                      : joined
+                                      ? '已连接'
+                                      : '未连接',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: joined
+                                            ? const Color(0xFF16A34A)
+                                            : const Color(0xFF94A3B8),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
                                 ),
                               ],
                             ),
@@ -489,15 +487,13 @@ class _MiniTrafficPill extends StatelessWidget {
         children: [
           Icon(icon, size: 10, color: color),
           const SizedBox(width: 3),
-          SelectableTextHitBoundary(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-                letterSpacing: 0.2,
-              ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 0.2,
             ),
           ),
         ],
@@ -523,14 +519,12 @@ class _StatusChip extends StatelessWidget {
           color: active ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
         ),
       ),
-      child: SelectableTextHitBoundary(
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: active ? const Color(0xFF15803D) : const Color(0xFF64748B),
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-          ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: active ? const Color(0xFF15803D) : const Color(0xFF64748B),
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
         ),
       ),
     );
