@@ -62,36 +62,67 @@ class _SettingsPanel extends StatelessWidget {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
-        const SizedBox(height: 20),
-        FCard(
-          title: const Text('账号'),
+  Future<void> _showLogsDialog(BuildContext context) async {
+    await showFDialog<void>(
+      context: context,
+      builder: (dialogContext, _, animation) => FDialog.raw(
+        animation: animation,
+        constraints: const BoxConstraints(
+          minWidth: 600,
+          maxWidth: 800,
+          maxHeight: 520,
+        ),
+        builder: (context, _) => Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
-              _ConstrainedFItemGroup(
-                divider: .full,
-                physics: const NeverScrollableScrollPhysics(),
+              Row(
                 children: [
-                  FItem(
-                    prefix: const Icon(Icons.person_outline),
-                    title: const Text('用户'),
-                    subtitle: Text(user.email.isEmpty ? '未提供邮箱' : user.email),
-                    details: Text(
-                      user.effectiveName.isEmpty ? '用户' : user.effectiveName,
-                    ),
-                  ),
-                  FItem(
-                    prefix: const Icon(Icons.apartment_outlined),
-                    title: const Text('工作区'),
-                    details: Text(workspaceName),
+                  Text('诊断日志', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  FButton(
+                    variant: .ghost,
+                    size: .sm,
+                    onPress: () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: const Icon(Icons.close, size: 18),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ValueListenableBuilder<List<AppLogEntry>>(
+                  valueListenable: AppLogger.instance.recentEntries,
+                  builder: (context, entries, _) {
+                    if (entries.isEmpty) {
+                      return const Center(child: Text('暂无日志'));
+                    }
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F9FB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          entries.map((entry) => entry.humanLine).join('\n'),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontFamily: 'monospace',
+                                color: const Color(0xFF374151),
+                              ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -100,153 +131,218 @@ class _SettingsPanel extends StatelessWidget {
                 children: [
                   FButton(
                     variant: .outline,
-                    onPress: () => unawaited(onLogout()),
-                    child: const Text('退出登录'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        FCard(
-          title: const Text('连接引擎'),
-          subtitle: const Text('核心连接引擎状态与修复入口。'),
-          child: ValueListenableBuilder<CoreRunStatus>(
-            valueListenable: coreLifecycleService.status,
-            builder: (context, status, _) {
-              final running = status.phase == CoreRunPhase.running;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _StatusDot(
-                        online: running,
-                        color: status.phase == CoreRunPhase.needsElevation
-                            ? const Color(0xFFF59E0B)
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          status.message,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (status.machineId != null &&
-                      status.machineId!.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      '本机设备: ${status.machineId}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                  if (status.lastError != null &&
-                      status.lastError!.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      status.lastError!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: status.phase == CoreRunPhase.needsElevation
-                            ? const Color(0xFFB45309)
-                            : const Color(0xFFDC2626),
-                      ),
-                    ),
-                  ],
-                  if (status.phase == CoreRunPhase.needsElevation) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      '创建虚拟网卡需要管理员权限，请点击下方按钮以管理员身份运行安装程序。',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      if (status.phase == CoreRunPhase.needsElevation)
-                        FButton(
-                          variant: .primary,
-                          onPress: () => unawaited(
-                            coreLifecycleService.repairWithElevation(),
-                          ),
-                          child: const Text('以管理员身份运行'),
-                        ),
-                      FButton(
-                        variant: .outline,
-                        onPress: () => unawaited(coreLifecycleService.repair()),
-                        child: const Text('重试/修复'),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 20),
-        FCard(
-          title: const Text('诊断日志'),
-          subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FButton(
-                    variant: .outline,
-                    onPress: () => unawaited(_exportLogs(context)),
+                    size: .sm,
+                    onPress: () => unawaited(_exportLogs(dialogContext)),
                     child: const Text('导出诊断日志'),
                   ),
                   FButton(
                     variant: .outline,
-                    onPress: () => unawaited(_copyLogDirectory(context)),
+                    size: .sm,
+                    onPress: () => unawaited(_copyLogDirectory(dialogContext)),
                     child: const Text('复制日志目录'),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              ValueListenableBuilder<List<AppLogEntry>>(
-                valueListenable: AppLogger.instance.recentEntries,
-                builder: (context, entries, _) {
-                  if (entries.isEmpty) {
-                    return const Text('暂无日志');
-                  }
-                  final start = entries.length > 8 ? entries.length - 8 : 0;
-                  final recent = entries.sublist(start);
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FB),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Text(
-                      recent.map((entry) => entry.humanLine).join('\n'),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 720;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
+            const SizedBox(height: 20),
+            MasonryGridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: wide ? 2 : 1,
+              mainAxisSpacing: 20,
+              crossAxisSpacing: 20,
+              itemCount: 3,
+              itemBuilder: (context, index) {
+                return switch (index) {
+                  0 => FCard(
+                    title: const Text('账号'),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        _ConstrainedFItemGroup(
+                          divider: .full,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            FItem(
+                              prefix: const Icon(Icons.person_outline),
+                              title: const Text('用户'),
+                              subtitle: Text(
+                                user.email.isEmpty ? '未提供邮箱' : user.email,
+                              ),
+                              details: Text(
+                                user.effectiveName.isEmpty
+                                    ? '用户'
+                                    : user.effectiveName,
+                              ),
+                            ),
+                            FItem(
+                              prefix: const Icon(Icons.apartment_outlined),
+                              title: const Text('工作区'),
+                              details: Text(workspaceName),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            FButton(
+                              variant: .outline,
+                              onPress: () => unawaited(onLogout()),
+                              child: const Text('退出登录'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  1 => FCard(
+                    title: const Text('连接引擎'),
+                    subtitle: const Text('核心连接引擎状态与修复入口。'),
+                    child: ValueListenableBuilder<CoreRunStatus>(
+                      valueListenable: coreLifecycleService.status,
+                      builder: (context, status, _) {
+                        final running = status.phase == CoreRunPhase.running;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                _StatusDot(
+                                  online: running,
+                                  color:
+                                      status.phase ==
+                                          CoreRunPhase.needsElevation
+                                      ? const Color(0xFFF59E0B)
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    status.message,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (status.machineId != null &&
+                                status.machineId!.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                '本机设备: ${status.machineId}',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFF737373)),
+                              ),
+                            ],
+                            if (status.lastError != null &&
+                                status.lastError!.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                status.lastError!,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color:
+                                          status.phase ==
+                                              CoreRunPhase.needsElevation
+                                          ? const Color(0xFFB45309)
+                                          : const Color(0xFFDC2626),
+                                    ),
+                              ),
+                            ],
+                            if (status.phase ==
+                                CoreRunPhase.needsElevation) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                '创建虚拟网卡需要管理员权限，请点击下方按钮以管理员身份运行安装程序。',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFF737373)),
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                if (status.phase == CoreRunPhase.needsElevation)
+                                  FButton(
+                                    variant: .primary,
+                                    onPress: () => unawaited(
+                                      coreLifecycleService
+                                          .repairWithElevation(),
+                                    ),
+                                    child: const Text('以管理员身份运行'),
+                                  ),
+                                FButton(
+                                  variant: .outline,
+                                  onPress: () =>
+                                      unawaited(coreLifecycleService.repair()),
+                                  child: const Text('重试/修复'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  _ => FCard(
+                    title: const Text('诊断日志'),
+                    subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            FButton(
+                              variant: .outline,
+                              onPress: () =>
+                                  unawaited(_showLogsDialog(context)),
+                              child: const Text('查看日志'),
+                            ),
+                            FButton(
+                              variant: .outline,
+                              onPress: () => unawaited(_exportLogs(context)),
+                              child: const Text('导出诊断日志'),
+                            ),
+                            FButton(
+                              variant: .outline,
+                              onPress: () =>
+                                  unawaited(_copyLogDirectory(context)),
+                              child: const Text('复制日志目录'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                };
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
