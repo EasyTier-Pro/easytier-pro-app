@@ -8,107 +8,7 @@ import '../auth/console_auth_service.dart';
 import 'core_peer_status.dart';
 import '../logging/app_logger.dart';
 
-enum CoreRunPhase { signedOut, checking, repairing, running, error, needsElevation }
-
-class _ElevationRequiredException implements Exception {
-  const _ElevationRequiredException([this.message = '需要管理员权限']);
-  final String message;
-  @override
-  String toString() => message;
-}
-
-class _DesktopCoreStatus {
-  const _DesktopCoreStatus({
-    required this.ready,
-    required this.installed,
-    required this.running,
-    this.machineId,
-    this.version,
-    this.serviceState,
-    this.cliPath,
-  });
-
-  final bool ready;
-  final bool installed;
-  final bool running;
-  final String? machineId;
-  final String? version;
-  final String? serviceState;
-  final String? cliPath;
-
-  static _DesktopCoreStatus fromEvent(Map<String, dynamic> event) {
-    final data = event['data'];
-    final values = data is Map<String, dynamic>
-        ? data
-        : const <String, dynamic>{};
-    return _DesktopCoreStatus(
-      ready: _readBool(values['ready']),
-      installed: _readBool(values['installed']),
-      running: _readBool(values['running']),
-      machineId: _readString(values['machine_id']),
-      version: _readString(values['version']),
-      serviceState: _readString(values['service_state']),
-      cliPath: _readString(values['cli_path']),
-    );
-  }
-
-  static bool _readBool(Object? value) {
-    if (value is bool) {
-      return value;
-    }
-    final text = value?.toString().toLowerCase().trim();
-    return text == 'true' || text == '1';
-  }
-
-  static String? _readString(Object? value) {
-    final text = value?.toString().trim() ?? '';
-    return text.isEmpty ? null : text;
-  }
-}
-
-class CoreNetworkTrafficTotals {
-  const CoreNetworkTrafficTotals({
-    required this.runtimeNetworkName,
-    required this.downloadBytes,
-    required this.uploadBytes,
-    required this.sampledAt,
-  });
-
-  final String runtimeNetworkName;
-  final int downloadBytes;
-  final int uploadBytes;
-  final DateTime sampledAt;
-}
-
-class _MutableNetworkTrafficTotals {
-  int downloadBytes = 0;
-  int uploadBytes = 0;
-  bool hasDownloadBytes = false;
-  bool hasUploadBytes = false;
-}
-
-class CoreRunStatus {
-  const CoreRunStatus({
-    required this.phase,
-    required this.message,
-    this.lastError,
-    this.machineId,
-    this.details,
-  });
-
-  final CoreRunPhase phase;
-  final String message;
-  final String? lastError;
-  final String? machineId;
-  final String? details;
-
-  bool get isRunning => phase == CoreRunPhase.running;
-
-  static const CoreRunStatus signedOut = CoreRunStatus(
-    phase: CoreRunPhase.signedOut,
-    message: '未登录',
-  );
-}
+part 'core_lifecycle_models.dart';
 
 class CoreLifecycleService {
   CoreLifecycleService({required this.authService})
@@ -200,7 +100,10 @@ class CoreLifecycleService {
     return _enqueue(() async {
       final session = _session;
       if (session == null) {
-        _logger.warn('core', 'Elevation repair requested without active session');
+        _logger.warn(
+          'core',
+          'Elevation repair requested without active session',
+        );
         status.value = CoreRunStatus.signedOut;
         return;
       }
@@ -233,10 +136,18 @@ class CoreLifecycleService {
 
         final tempDir = Directory.systemTemp;
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final inputFile = File('${tempDir.path}${Platform.pathSeparator}et_bootstrap_$timestamp.json');
-        final outputFile = File('${tempDir.path}${Platform.pathSeparator}et_output_$timestamp.json');
-        final errorFile = File('${tempDir.path}${Platform.pathSeparator}et_error_$timestamp.json');
-        final batFile = File('${tempDir.path}${Platform.pathSeparator}et_elevated_$timestamp.bat');
+        final inputFile = File(
+          '${tempDir.path}${Platform.pathSeparator}et_bootstrap_$timestamp.json',
+        );
+        final outputFile = File(
+          '${tempDir.path}${Platform.pathSeparator}et_output_$timestamp.json',
+        );
+        final errorFile = File(
+          '${tempDir.path}${Platform.pathSeparator}et_error_$timestamp.json',
+        );
+        final batFile = File(
+          '${tempDir.path}${Platform.pathSeparator}et_elevated_$timestamp.bat',
+        );
 
         final request = {
           'bootstrap_token': bootstrap.bootstrapToken,
@@ -247,7 +158,8 @@ class CoreLifecycleService {
 
         final installerPath = _resolveInstallerExecutable();
         final installerDir = File(installerPath).parent.path;
-        final batContent = '''@echo off
+        final batContent =
+            '''@echo off
 chcp 65001 >nul
 cd /d "$installerDir"
 "$installerPath" desktop install --json < "${inputFile.path}" > "${outputFile.path}" 2> "${errorFile.path}"
@@ -257,10 +169,7 @@ cd /d "$installerDir"
         _logger.info(
           'core.desktop',
           'Launching elevated installer via PowerShell',
-          context: {
-            'bat_file': batFile.path,
-            'installer': installerPath,
-          },
+          context: {'bat_file': batFile.path, 'installer': installerPath},
         );
 
         final powershellResult = await _runElevatedWithPowerShell(batFile.path);
@@ -299,7 +208,8 @@ cd /d "$installerDir"
               orElse: () => const <String, dynamic>{},
             );
             if (errorEvent.isNotEmpty) {
-              final data = errorEvent['data'] as Map<String, dynamic>? ?? const {};
+              final data =
+                  errorEvent['data'] as Map<String, dynamic>? ?? const {};
               throw StateError(data['message']?.toString() ?? '提权安装返回错误');
             }
 
@@ -321,16 +231,21 @@ cd /d "$installerDir"
                   machineId: machineId,
                   details: 'EasyTier ${bootstrap.version}',
                 );
-                await _cleanupElevationTempFiles(
-                  [inputFile, outputFile, errorFile, batFile],
-                );
+                await _cleanupElevationTempFiles([
+                  inputFile,
+                  outputFile,
+                  errorFile,
+                  batFile,
+                ]);
                 return;
               }
             }
           }
         }
 
-        final errorText = errorFile.existsSync() ? await errorFile.readAsString() : '';
+        final errorText = errorFile.existsSync()
+            ? await errorFile.readAsString()
+            : '';
         if (errorText.isNotEmpty) {
           throw StateError(errorText);
         }
@@ -656,11 +571,7 @@ cd /d "$installerDir"
     );
     late final Process process;
     try {
-      process = await Process.start(executable, [
-        'desktop',
-        command,
-        '--json',
-      ]);
+      process = await Process.start(executable, ['desktop', command, '--json']);
     } on ProcessException catch (e) {
       if (_isElevationRequired(0, e.message)) {
         throw _ElevationRequiredException(e.message);
