@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -2615,19 +2616,21 @@ class _SettingsPanel extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 720;
-        final halfWidth = wide ? (constraints.maxWidth - 20) / 2 : double.infinity;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 20,
-              runSpacing: 20,
-              children: [
-                SizedBox(
-                  width: halfWidth,
-                  child: FCard(
+            MasonryGridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: wide ? 2 : 1,
+              mainAxisSpacing: 20,
+              crossAxisSpacing: 20,
+              itemCount: 3,
+              itemBuilder: (context, index) {
+                return switch (index) {
+                  0 => FCard(
                     title: const Text('账号'),
                     child: Column(
                       children: [
@@ -2666,10 +2669,7 @@ class _SettingsPanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: halfWidth,
-                  child: FCard(
+                  1 => FCard(
                     title: const Text('连接引擎'),
                     subtitle: const Text('核心连接引擎状态与修复入口。'),
                     child: ValueListenableBuilder<CoreRunStatus>(
@@ -2751,10 +2751,7 @@ class _SettingsPanel extends StatelessWidget {
                       },
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: halfWidth,
-                  child: FCard(
+                  _ => FCard(
                     title: const Text('诊断日志'),
                     subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
                     child: Column(
@@ -2785,8 +2782,8 @@ class _SettingsPanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-              ],
+                };
+              },
             ),
           ],
         );
