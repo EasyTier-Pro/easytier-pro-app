@@ -162,21 +162,21 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final narrow = constraints.maxWidth < 480;
+                  final compact = constraints.maxWidth < 520;
 
                   final title = Text(
                     network.name,
-                    style: narrow
+                    style: compact
                         ? Theme.of(context).textTheme.titleLarge
                         : Theme.of(context).textTheme.headlineSmall,
                     overflow: TextOverflow.ellipsis,
                   );
                   final actions = Wrap(
-                    spacing: narrow ? 6 : 8,
-                    runSpacing: narrow ? 6 : 8,
+                    spacing: compact ? 6 : 8,
+                    runSpacing: compact ? 6 : 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      if (narrow)
+                      if (compact)
                         Tooltip(
                           message: '刷新节点',
                           child: FButton(
@@ -202,7 +202,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                       if (joined)
                         FButton(
                           variant: .outline,
-                          size: narrow ? .sm : .md,
+                          size: compact ? .sm : .md,
                           onPress: deleting
                               ? null
                               : () => unawaited(_leaveNetwork(network)),
@@ -211,7 +211,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                         )
                       else
                         FButton(
-                          size: narrow ? .sm : .md,
+                          size: compact ? .sm : .md,
                           onPress: deleting
                               ? null
                               : () => unawaited(_joinNetwork(network)),
@@ -225,13 +225,6 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                       ),
                     ],
                   );
-
-                  if (narrow) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [title, const SizedBox(height: 10), actions],
-                    );
-                  }
 
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
