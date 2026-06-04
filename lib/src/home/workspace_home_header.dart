@@ -84,15 +84,6 @@ class _DashboardHeader extends StatelessWidget {
                         onPress: onShowDevices,
                         child: const Text('设备'),
                       ),
-                      const SizedBox(width: 6),
-                      FButton(
-                        variant: activeView == _DashboardView.settings
-                            ? .secondary
-                            : .ghost,
-                        size: .sm,
-                        onPress: onShowSettings,
-                        child: const Text('设置'),
-                      ),
                     ],
                   ),
                 ),
