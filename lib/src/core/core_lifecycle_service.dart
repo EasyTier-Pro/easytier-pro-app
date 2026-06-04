@@ -654,11 +654,19 @@ cd /d "$installerDir"
       'Executing desktop command',
       context: {'command': command, 'executable': executable},
     );
-    final process = await Process.start(executable, [
-      'desktop',
-      command,
-      '--json',
-    ]);
+    late final Process process;
+    try {
+      process = await Process.start(executable, [
+        'desktop',
+        command,
+        '--json',
+      ]);
+    } on ProcessException catch (e) {
+      if (_isElevationRequired(0, e.message)) {
+        throw _ElevationRequiredException(e.message);
+      }
+      rethrow;
+    }
 
     final stdoutFuture = process.stdout
         .transform(utf8.decoder)
