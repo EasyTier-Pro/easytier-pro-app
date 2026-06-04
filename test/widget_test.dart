@@ -690,7 +690,7 @@ void main() {
     expect(find.byType(FSwitch), findsOneWidget);
   });
 
-  testWidgets('places network refresh control in right action group', (
+  testWidgets('places network refresh control after create action', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester);
@@ -721,7 +721,7 @@ void main() {
     );
 
     expect(refreshCenter.dx, greaterThan(titleCenter.dx));
-    expect(refreshCenter.dx, lessThan(createCenter.dx));
+    expect(refreshCenter.dx, greaterThan(createCenter.dx));
     expect((refreshCenter.dy - createCenter.dy).abs(), lessThanOrEqualTo(0.5));
   });
 

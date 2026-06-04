@@ -105,10 +105,6 @@ class _NetworkActionGroup extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (onRefresh != null || refreshing) ...[
-          _NetworkRefreshButton(refreshing: refreshing, onRefresh: onRefresh),
-          const SizedBox(width: 4),
-        ],
         FButton(
           key: const ValueKey<String>('network-create-button'),
           variant: .ghost,
@@ -124,6 +120,10 @@ class _NetworkActionGroup extends StatelessWidget {
             ],
           ),
         ),
+        if (onRefresh != null || refreshing) ...[
+          const SizedBox(width: 4),
+          _NetworkRefreshButton(refreshing: refreshing, onRefresh: onRefresh),
+        ],
       ],
     );
   }
