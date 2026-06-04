@@ -278,6 +278,17 @@ void main() {
     await tester.sendEventToBinding(
       mouse.hover(tester.getCenter(scrollFinder)),
     );
+    final beforePrecisionOffset = controller.offset;
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 8)));
+    await tester.pump();
+
+    expect(controller.offset, greaterThan(beforePrecisionOffset + 8));
+
+    controller.jumpTo(controller.position.minScrollExtent);
+    await tester.pump();
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(scrollFinder)),
+    );
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, -240)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));

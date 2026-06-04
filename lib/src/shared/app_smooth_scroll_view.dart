@@ -151,6 +151,8 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
   });
 
   static const double _edgeTolerance = 0.5;
+  static const double _precisionScrollThreshold = 16;
+  static const double _precisionScrollScale = 2.5;
   double? _targetPixels;
   int _lastWheelDirection = 0;
 
@@ -160,10 +162,10 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
       return;
     }
 
-    if (delta.abs() < 16) {
+    if (delta.abs() < _precisionScrollThreshold) {
       _targetPixels = null;
       _lastWheelDirection = 0;
-      super.pointerScroll(delta);
+      super.pointerScroll(delta * _precisionScrollScale);
       return;
     }
 
