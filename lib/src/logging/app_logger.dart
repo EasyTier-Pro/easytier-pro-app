@@ -187,7 +187,6 @@ class AppLogger {
       _recent.toList(growable: false),
     );
 
-    debugPrint(entry.humanLine);
     _fileWriteSerial = _fileWriteSerial.then((_) => _writeToFile(entry));
   }
 
