@@ -52,12 +52,12 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           onElevate: widget.coreLifecycleService.repairWithElevation,
         ),
         const SizedBox(height: 24),
-        if (_networkError != null)
+        if (_networkError != null && _networks.isEmpty)
           _StateMessage(
             message: _networkError!,
             action: FButton(onPress: _loadNetworks, child: const Text('重试')),
           )
-        else if (_isLoadingNetworks)
+        else if (_isLoadingNetworks && _networks.isEmpty)
           const SizedBox(height: 260, child: Center(child: FCircularProgress()))
         else if (_networks.isEmpty)
           _CreateNetworkPanel(
@@ -87,6 +87,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             onLeave: _leaveNetwork,
             onOpen: _openNetworkDetail,
             onCreate: _showCreateNetworkDialog,
+            refreshing: _isLoadingNetworks,
+            onRefresh: () => unawaited(_loadNetworks()),
           ),
       ],
     );

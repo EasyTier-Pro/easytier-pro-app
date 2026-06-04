@@ -10,6 +10,8 @@ class _NetworkSwitchList extends StatelessWidget {
     required this.onLeave,
     required this.onOpen,
     required this.onCreate,
+    required this.refreshing,
+    this.onRefresh,
   });
 
   final List<ConsoleNetwork> networks;
@@ -20,6 +22,8 @@ class _NetworkSwitchList extends StatelessWidget {
   final Future<void> Function(ConsoleNetwork) onLeave;
   final void Function(ConsoleNetwork) onOpen;
   final VoidCallback onCreate;
+  final bool refreshing;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +39,13 @@ class _NetworkSwitchList extends StatelessWidget {
                 color: const Color(0xFF0F172A),
               ),
             ),
+            if (onRefresh != null || refreshing) ...[
+              const SizedBox(width: 6),
+              _NetworkRefreshButton(
+                refreshing: refreshing,
+                onRefresh: onRefresh,
+              ),
+            ],
             const Spacer(),
             FButton(
               variant: .ghost,
@@ -79,6 +90,45 @@ class _NetworkSwitchList extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _NetworkRefreshButton extends StatelessWidget {
+  const _NetworkRefreshButton({required this.refreshing, this.onRefresh});
+
+  final bool refreshing;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = !refreshing && onRefresh != null;
+
+    return Tooltip(
+      message: refreshing ? '正在刷新网络' : '刷新网络',
+      child: SizedBox.square(
+        dimension: 28,
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            foregroundColor: const Color(0xFF64748B),
+            disabledForegroundColor: const Color(0xFF94A3B8),
+            hoverColor: const Color(0xFFF1F5F9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          onPressed: enabled ? onRefresh : null,
+          icon: refreshing
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh, size: 18),
+        ),
+      ),
     );
   }
 }
