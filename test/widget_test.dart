@@ -364,7 +364,7 @@ void main() {
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
     expect(listSize.width, closeTo(312, 0.1));
-    expect(find.widgetWithText(FButton, '刷新节点'), findsOneWidget);
+    expect(find.byTooltip('刷新节点'), findsOneWidget);
   });
 
   testWidgets('network detail remains stable before narrow width', (
