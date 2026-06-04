@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../shared/app_motion.dart';
@@ -315,7 +316,11 @@ class _NodeOsIcon extends StatelessWidget {
                   width: isLocal ? 1.5 : 1,
                 ),
               ),
-              child: Icon(style.icon, size: 17, color: style.iconColor),
+              child: Center(
+                child: style.faIcon == null
+                    ? Icon(style.materialIcon, size: 17, color: style.iconColor)
+                    : FaIcon(style.faIcon, size: 17, color: style.iconColor),
+              ),
             ),
             Positioned(
               right: 1,
@@ -341,21 +346,26 @@ class _NodeOsIcon extends StatelessWidget {
 
 class _NodeOsIconStyle {
   const _NodeOsIconStyle({
-    required this.icon,
+    this.faIcon,
+    this.materialIcon,
     required this.iconColor,
     required this.backgroundColor,
   });
 
-  final IconData icon;
+  final FaIconData? faIcon;
+  final IconData? materialIcon;
   final Color iconColor;
   final Color backgroundColor;
 }
 
 _NodeOsIconStyle _osIconStyle(String os, String distribution) {
   final value = '${os.trim()} ${distribution.trim()}'.toLowerCase();
-  if (value.contains('windows') || value == 'win32' || value == 'win') {
+  if (value.contains('windows') ||
+      value.contains('win32') ||
+      value.contains('win64') ||
+      value == 'win') {
     return const _NodeOsIconStyle(
-      icon: Icons.desktop_windows_outlined,
+      faIcon: FontAwesomeIcons.windows,
       iconColor: Color(0xFF2563EB),
       backgroundColor: Color(0xFFEFF6FF),
     );
@@ -364,21 +374,21 @@ _NodeOsIconStyle _osIconStyle(String os, String distribution) {
       value.contains('iphone') ||
       value.contains('ipad')) {
     return const _NodeOsIconStyle(
-      icon: Icons.phone_iphone_outlined,
+      faIcon: FontAwesomeIcons.apple,
       iconColor: Color(0xFF7C3AED),
       backgroundColor: Color(0xFFF5F3FF),
     );
   }
   if (value.contains('mac') || value.contains('darwin')) {
     return const _NodeOsIconStyle(
-      icon: Icons.laptop_mac_outlined,
+      faIcon: FontAwesomeIcons.apple,
       iconColor: Color(0xFF475569),
       backgroundColor: Color(0xFFF8FAFC),
     );
   }
   if (value.contains('android')) {
     return const _NodeOsIconStyle(
-      icon: Icons.android_outlined,
+      faIcon: FontAwesomeIcons.android,
       iconColor: Color(0xFF16A34A),
       backgroundColor: Color(0xFFF0FDF4),
     );
@@ -390,13 +400,13 @@ _NodeOsIconStyle _osIconStyle(String os, String distribution) {
       value.contains('fedora') ||
       value.contains('arch')) {
     return const _NodeOsIconStyle(
-      icon: Icons.terminal_outlined,
+      faIcon: FontAwesomeIcons.linux,
       iconColor: Color(0xFF0F766E),
       backgroundColor: Color(0xFFF0FDFA),
     );
   }
   return const _NodeOsIconStyle(
-    icon: Icons.devices_other_outlined,
+    materialIcon: Icons.devices_other_outlined,
     iconColor: Color(0xFF64748B),
     backgroundColor: Color(0xFFF8FAFC),
   );
