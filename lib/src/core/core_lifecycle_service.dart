@@ -342,10 +342,10 @@ cd /d "$installerDir"
           context: {'error': error.toString()},
         );
         if (error is _ElevationRequiredException) {
-          status.value = CoreRunStatus(
+          status.value = const CoreRunStatus(
             phase: CoreRunPhase.needsElevation,
             message: '需要管理员权限以安装连接引擎',
-            lastError: _normalizeError(error),
+            lastError: '创建虚拟网卡需要提升权限',
           );
           return;
         }
@@ -593,10 +593,10 @@ cd /d "$installerDir"
         context: {'error': error.toString()},
       );
       if (error is _ElevationRequiredException) {
-        status.value = CoreRunStatus(
+        status.value = const CoreRunStatus(
           phase: CoreRunPhase.needsElevation,
           message: '需要管理员权限以安装连接引擎',
-          lastError: _normalizeError(error),
+          lastError: '创建虚拟网卡需要提升权限',
         );
         return;
       }
