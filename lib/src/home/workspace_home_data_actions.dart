@@ -248,6 +248,138 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     }
   }
 
+  Future<void> _showDeleteNetworkDialog(ConsoleNetwork network) async {
+    if (_deletingNetworkIds.contains(network.id)) {
+      return;
+    }
+
+    final accepted = await showFDialog<bool>(
+      context: context,
+      builder: (dialogContext, _, animation) => FDialog.adaptive(
+        animation: animation,
+        title: const Text('删除网络'),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('网络「${network.name}」删除后不可恢复。'),
+            const SizedBox(height: 8),
+            const Text('网络中的所有节点会自动踢出网络，现有连接会中断。'),
+          ],
+        ),
+        actions: [
+          FButton(
+            variant: .destructive,
+            onPress: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除网络'),
+          ),
+          FButton(
+            variant: .outline,
+            onPress: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted == true) {
+      await _deleteNetwork(network);
+    }
+  }
+
+  Future<void> _deleteNetwork(ConsoleNetwork network) async {
+    final workspace = _workspace;
+    if (workspace == null) {
+      _showNetworkActionToast('当前账号未关联工作区。', destructive: true);
+      return;
+    }
+    if (_deletingNetworkIds.contains(network.id)) {
+      return;
+    }
+
+    _updateState(() {
+      _deletingNetworkIds = {..._deletingNetworkIds, network.id};
+    });
+
+    try {
+      await widget.authService.deleteNetwork(
+        accessToken: widget.session.tokenSet.accessToken,
+        workspaceId: workspace.id,
+        networkId: network.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      _removeDeletedNetworkLocally(network);
+      _showNetworkActionToast('网络已删除，相关节点会自动退出。');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateState(() {
+        _deletingNetworkIds = {..._deletingNetworkIds}..remove(network.id);
+      });
+      _showNetworkActionToast(
+        '删除网络失败：${_normalizeError(error)}',
+        destructive: true,
+      );
+    }
+  }
+
+  void _removeDeletedNetworkLocally(ConsoleNetwork network) {
+    final networkId = network.id;
+    final runtimeNetworkName = network.runtimeNetworkName.trim();
+    final selectedRemoved = _selectedNetworkId == networkId;
+    final nextNetworks = _networks
+        .where((item) => item.id != networkId)
+        .toList(growable: false);
+
+    _updateState(() {
+      _networks = nextNetworks;
+      _deletingNetworkIds = {..._deletingNetworkIds}..remove(networkId);
+      if (selectedRemoved) {
+        _selectedNetworkId = nextNetworks.isEmpty
+            ? null
+            : nextNetworks.first.id;
+        if (_activeView == _DashboardView.network) {
+          _activeView = _DashboardView.overview;
+        }
+      }
+
+      _networkDevices = Map<String, List<NetworkDevice>>.from(_networkDevices)
+        ..remove(networkId);
+      _joinStates = Map<String, _JoinNetworkState>.from(_joinStates)
+        ..remove(networkId);
+      _networkTraffic = Map<String, _NetworkTrafficSnapshot>.from(
+        _networkTraffic,
+      )..remove(networkId);
+      _networkPeerStatuses = Map<String, Map<String, CorePeerStatus>>.from(
+        _networkPeerStatuses,
+      )..remove(networkId);
+      _peerStatusErrors = Map<String, String>.from(_peerStatusErrors)
+        ..remove(networkId);
+      _trafficPollNetworkIds = {..._trafficPollNetworkIds}..remove(networkId);
+      if (_peerPollNetworkId == networkId) {
+        _peerPollNetworkId = null;
+      }
+      if (runtimeNetworkName.isNotEmpty) {
+        _previousTrafficTotals = Map<String, CoreNetworkTrafficTotals>.from(
+          _previousTrafficTotals,
+        )..remove(runtimeNetworkName);
+      }
+    });
+    _refreshTrafficPolling();
+    _refreshPeerPolling();
+  }
+
+  void _showNetworkActionToast(String message, {bool destructive = false}) {
+    showFToast(
+      context: context,
+      variant: destructive ? .destructive : .primary,
+      title: Text(message),
+    );
+  }
+
   Future<void> _showCreateNetworkDialog() async {
     await showFDialog<void>(
       context: context,

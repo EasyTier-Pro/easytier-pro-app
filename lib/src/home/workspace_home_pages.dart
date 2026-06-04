@@ -133,6 +133,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
     final onlineCount = devices.where((device) => device.online).length;
     final state = _joinStateFor(network);
     final joined = state.phase == _JoinPhase.joined;
+    final deleting = _deletingNetworkIds.contains(network.id);
     final peerStatuses =
         _networkPeerStatuses[network.id] ?? const <String, CorePeerStatus>{};
     final peerStatusError = _peerStatusErrors[network.id];
@@ -170,20 +171,41 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                     children: [
                       FButton(
                         variant: .outline,
-                        onPress: () => unawaited(_refreshNetworkNodes(network)),
+                        onPress: deleting
+                            ? null
+                            : () => unawaited(_refreshNetworkNodes(network)),
                         child: const Text('刷新节点'),
                       ),
                       if (joined)
                         FButton(
                           variant: .outline,
-                          onPress: () => unawaited(_leaveNetwork(network)),
+                          onPress: deleting
+                              ? null
+                              : () => unawaited(_leaveNetwork(network)),
                           child: const Text('退出网络'),
                         )
                       else
                         FButton(
-                          onPress: () => unawaited(_joinNetwork(network)),
+                          onPress: deleting
+                              ? null
+                              : () => unawaited(_joinNetwork(network)),
                           child: const Text('加入网络'),
                         ),
+                      FButton(
+                        variant: .destructive,
+                        onPress: deleting
+                            ? null
+                            : () =>
+                                  unawaited(_showDeleteNetworkDialog(network)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.delete_outline, size: 16),
+                            const SizedBox(width: 4),
+                            Text(deleting ? '删除中...' : '删除网络'),
+                          ],
+                        ),
+                      ),
                     ],
                   );
 

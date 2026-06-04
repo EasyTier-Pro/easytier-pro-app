@@ -22,6 +22,12 @@ abstract class AuthService {
     String? ipv4Cidr,
   });
 
+  Future<void> deleteNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  });
+
   Future<List<NetworkDevice>> fetchNetworkDevices({
     required String accessToken,
     required String workspaceId,

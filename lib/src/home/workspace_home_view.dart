@@ -68,6 +68,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool _isLoadingDevices = false;
   bool _isLoadingRegions = false;
   bool _isCreatingNetwork = false;
+  Set<String> _deletingNetworkIds = const <String>{};
   _DashboardView _activeView = _DashboardView.overview;
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';

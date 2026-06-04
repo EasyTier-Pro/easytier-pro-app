@@ -233,6 +233,24 @@ class ConsoleAuthService implements AuthService {
     return network;
   }
 
+  @override
+  Future<void> deleteNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    final response = await _httpClient.delete(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId',
+      ),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw AuthException('删除网络失败：${_extractErrorMessage(response.body)}');
+    }
+  }
+
   static ConsoleNetwork? _networkFromJson(Map<String, dynamic> item) {
     final id = item['id']?.toString() ?? '';
     final runtimeNetworkName = item['network_name']?.toString().trim() ?? '';

@@ -754,6 +754,69 @@ void main() {
     expect(find.text('办公网'), findsNothing);
   });
 
+  testWidgets('confirms before deleting a network and hides it locally', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(id: 'node-1', name: 'desktop-1', online: true),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _selectNetworkFromHeader(tester, '办公网');
+
+    await tester.tap(find.widgetWithText(FButton, '删除网络'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('删除后不可恢复'), findsOneWidget);
+    expect(find.textContaining('所有节点会自动踢出网络'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.widgetWithText(FButton, '取消'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(authService.deletedNetworkIds, isEmpty);
+
+    await tester.tap(find.widgetWithText(FButton, '删除网络'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.widgetWithText(FButton, '删除网络'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(authService.deletedNetworkIds, <String>['net-1']);
+    expect(authService.networks.map((network) => network.id), <String>[
+      'net-2',
+    ]);
+    expect(authService.networkDevices.containsKey('net-1'), isFalse);
+    expect(find.text('办公网'), findsNothing);
+  });
+
   testWidgets('keeps network tab width stable for short and long names', (
     WidgetTester tester,
   ) async {
@@ -1130,89 +1193,99 @@ void main() {
     expect(nodes.single.osDistribution, 'Ubuntu');
   });
 
-  test(
-    'create network and attach device use tenant scoped console API',
-    () async {
-      SharedPreferences.setMockInitialValues({});
-      final preferences = await SharedPreferences.getInstance();
-      final requests = <http.Request>[];
-      final service = ConsoleAuthService(
-        tokenStore: OAuthTokenStore(preferences),
-        consoleBaseUrl: 'https://console.test',
-        httpClient: MockClient((request) async {
-          requests.add(request);
-          if (request.url.path == '/api/v1/tenants/tenant-1/networks') {
-            return _jsonResponse({
-              'id': 'net-1',
-              'name': '我的网络',
-              'network_name': 'nt-runtime',
-              'ipv4_cidr': '10.200.0.0/16',
-              'regions': ['ap-east'],
-            }, 201);
-          }
-          if (request.url.path ==
-              '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
-            return _jsonResponse({
-              'resource': {'id': 'node-1'},
-              'operation': {'id': 'op-1'},
-            }, 201);
-          }
-          if (request.url.path ==
-              '/api/v1/tenants/tenant-1/nodes/node-1/remove') {
-            return _jsonResponse({
-              'resource': {'id': 'node-1'},
-              'operation': {'id': 'op-2'},
-            });
-          }
-          return http.Response('{}', 404);
-        }),
-      );
+  test('network lifecycle operations use tenant scoped console API', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/v1/tenants/tenant-1/networks') {
+          return _jsonResponse({
+            'id': 'net-1',
+            'name': '我的网络',
+            'network_name': 'nt-runtime',
+            'ipv4_cidr': '10.200.0.0/16',
+            'regions': ['ap-east'],
+          }, 201);
+        }
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
+          return _jsonResponse({
+            'resource': {'id': 'node-1'},
+            'operation': {'id': 'op-1'},
+          }, 201);
+        }
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/nodes/node-1/remove') {
+          return _jsonResponse({
+            'resource': {'id': 'node-1'},
+            'operation': {'id': 'op-2'},
+          });
+        }
+        if (request.url.path == '/api/v1/tenants/tenant-1/networks/net-1') {
+          return _jsonResponse({
+            'resource': {'id': 'net-1'},
+            'operation': {'id': 'op-3'},
+          });
+        }
+        return http.Response('{}', 404);
+      }),
+    );
 
-      final network = await service.createNetwork(
-        accessToken: 'token',
-        workspaceId: 'tenant-1',
-        name: '我的网络',
-        regions: const ['ap-east'],
-        ipv4Cidr: '10.200.0.0/16',
-      );
-      final attach = await service.attachDeviceToNetwork(
-        accessToken: 'token',
-        workspaceId: 'tenant-1',
-        networkId: 'net-1',
-        deviceId: 'device-1',
-      );
-      await service.removeNetworkNode(
-        accessToken: 'token',
-        workspaceId: 'tenant-1',
-        nodeId: 'node-1',
-      );
+    final network = await service.createNetwork(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      name: '我的网络',
+      regions: const ['ap-east'],
+      ipv4Cidr: '10.200.0.0/16',
+    );
+    final attach = await service.attachDeviceToNetwork(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      networkId: 'net-1',
+      deviceId: 'device-1',
+    );
+    await service.removeNetworkNode(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      nodeId: 'node-1',
+    );
+    await service.deleteNetwork(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      networkId: 'net-1',
+    );
 
-      expect(network.id, 'net-1');
-      expect(network.runtimeNetworkName, 'nt-runtime');
-      expect(network.ipv4Cidr, '10.200.0.0/16');
-      expect(attach.nodeId, 'node-1');
-      expect(attach.operationId, 'op-1');
-      expect(requests[0].method, 'POST');
-      expect(requests[0].url.path, '/api/v1/tenants/tenant-1/networks');
-      expect(jsonDecode(requests[0].body), <String, Object>{
-        'name': '我的网络',
-        'regions': ['ap-east'],
-        'ipv4_cidr': '10.200.0.0/16',
-      });
-      expect(
-        requests[1].url.path,
-        '/api/v1/tenants/tenant-1/networks/net-1/nodes',
-      );
-      expect(jsonDecode(requests[1].body), <String, Object>{
-        'device_id': 'device-1',
-      });
-      expect(requests[2].method, 'POST');
-      expect(
-        requests[2].url.path,
-        '/api/v1/tenants/tenant-1/nodes/node-1/remove',
-      );
-    },
-  );
+    expect(network.id, 'net-1');
+    expect(network.runtimeNetworkName, 'nt-runtime');
+    expect(network.ipv4Cidr, '10.200.0.0/16');
+    expect(attach.nodeId, 'node-1');
+    expect(attach.operationId, 'op-1');
+    expect(requests[0].method, 'POST');
+    expect(requests[0].url.path, '/api/v1/tenants/tenant-1/networks');
+    expect(jsonDecode(requests[0].body), <String, Object>{
+      'name': '我的网络',
+      'regions': ['ap-east'],
+      'ipv4_cidr': '10.200.0.0/16',
+    });
+    expect(
+      requests[1].url.path,
+      '/api/v1/tenants/tenant-1/networks/net-1/nodes',
+    );
+    expect(jsonDecode(requests[1].body), <String, Object>{
+      'device_id': 'device-1',
+    });
+    expect(requests[2].method, 'POST');
+    expect(
+      requests[2].url.path,
+      '/api/v1/tenants/tenant-1/nodes/node-1/remove',
+    );
+    expect(requests[3].method, 'DELETE');
+    expect(requests[3].url.path, '/api/v1/tenants/tenant-1/networks/net-1');
+  });
 }
 
 void _useDesktopViewport(
@@ -1271,6 +1344,7 @@ class _FakeAuthService implements AuthService {
   final Map<String, List<NetworkDevice>> networkDevices;
   final List<String> attachedNetworkIds = <String>[];
   final List<String> removedNodeIds = <String>[];
+  final List<String> deletedNetworkIds = <String>[];
   final List<String> createdNetworkNames = <String>[];
   final List<String?> createdNetworkIPv4Cidrs = <String?>[];
   int networkDeviceFetchCount = 0;
@@ -1348,6 +1422,17 @@ class _FakeAuthService implements AuthService {
     networks.add(network);
     networkDevices[network.id] = const <NetworkDevice>[];
     return network;
+  }
+
+  @override
+  Future<void> deleteNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    deletedNetworkIds.add(networkId);
+    networks.removeWhere((network) => network.id == networkId);
+    networkDevices.remove(networkId);
   }
 
   @override
