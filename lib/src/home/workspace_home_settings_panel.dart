@@ -48,7 +48,7 @@ class _SettingsPanel extends StatelessWidget {
     }
   }
 
-  Future<void> _copyLogDirectory(BuildContext context) async {
+  Future<void> _openLogDirectory(BuildContext context) async {
     final path = AppLogger.instance.logDirectoryPath;
     if (path == null || path.isEmpty) {
       if (context.mounted) {
@@ -56,9 +56,20 @@ class _SettingsPanel extends StatelessWidget {
       }
       return;
     }
-    await Clipboard.setData(ClipboardData(text: path));
-    if (context.mounted) {
-      _showToast(context, '日志目录已复制: $path');
+    try {
+      late final List<String> command;
+      if (Platform.isWindows) {
+        command = ['explorer', path];
+      } else if (Platform.isMacOS) {
+        command = ['open', path];
+      } else {
+        command = ['xdg-open', path];
+      }
+      await Process.run(command.first, command.skip(1).toList());
+    } catch (error) {
+      if (context.mounted) {
+        _showToast(context, '打开日志目录失败', destructive: true);
+      }
     }
   }
 
@@ -138,8 +149,8 @@ class _SettingsPanel extends StatelessWidget {
                   FButton(
                     variant: .outline,
                     size: .sm,
-                    onPress: () => unawaited(_copyLogDirectory(dialogContext)),
-                    child: const Text('复制日志目录'),
+                    onPress: () => unawaited(_openLogDirectory(dialogContext)),
+                    child: const Text('打开日志目录'),
                   ),
                 ],
               ),
@@ -158,7 +169,7 @@ class _SettingsPanel extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
+            const _SectionTitle(title: '设置'),
             const SizedBox(height: 20),
             MasonryGridView.count(
               shrinkWrap: true,
@@ -214,7 +225,6 @@ class _SettingsPanel extends StatelessWidget {
                   ),
                   1 => FCard(
                     title: const Text('连接引擎'),
-                    subtitle: const Text('核心连接引擎状态与修复入口。'),
                     child: ValueListenableBuilder<CoreRunStatus>(
                       valueListenable: coreLifecycleService.status,
                       builder: (context, status, _) {
@@ -248,7 +258,7 @@ class _SettingsPanel extends StatelessWidget {
                                 status.machineId!.isNotEmpty) ...[
                               const SizedBox(height: 10),
                               Text(
-                                '本机设备: ${status.machineId}',
+                                'ID: ${status.machineId}',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFF737373)),
                               ),
@@ -272,7 +282,7 @@ class _SettingsPanel extends StatelessWidget {
                                 CoreRunPhase.needsElevation) ...[
                               const SizedBox(height: 10),
                               Text(
-                                '创建虚拟网卡需要管理员权限，请点击下方按钮以管理员身份运行安装程序。',
+                                '需要管理员权限',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFF737373)),
                               ),
@@ -306,7 +316,6 @@ class _SettingsPanel extends StatelessWidget {
                   ),
                   _ => FCard(
                     title: const Text('诊断日志'),
-                    subtitle: const Text('用于排查连接引擎红灯、安装失败和权限问题。'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -329,8 +338,8 @@ class _SettingsPanel extends StatelessWidget {
                             FButton(
                               variant: .outline,
                               onPress: () =>
-                                  unawaited(_copyLogDirectory(context)),
-                              child: const Text('复制日志目录'),
+                                  unawaited(_openLogDirectory(context)),
+                              child: const Text('打开日志目录'),
                             ),
                           ],
                         ),
