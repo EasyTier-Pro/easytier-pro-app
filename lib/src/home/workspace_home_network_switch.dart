@@ -216,190 +216,193 @@ class _NetworkSwitchTile extends StatelessWidget {
         : failed
         ? const Color(0xFFFEF2F2)
         : const Color(0xFFFAFBFC);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onOpen,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: joined
-                  ? const Color(0xFFE2E8F0)
-                  : const Color(0xFFE2E8F0).withAlpha(180),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withAlpha(4),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: joined
+                    ? const Color(0xFFE2E8F0)
+                    : const Color(0xFFE2E8F0).withAlpha(180),
+                width: 1.2,
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: IntrinsicHeight(
-              child: Row(
-                children: [
-                  Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(14),
-                        bottomLeft: Radius.circular(14),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.language_outlined,
-                                      size: 16,
-                                      color: joined
-                                          ? const Color(0xFF334155)
-                                          : const Color(0xFF94A3B8),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      network.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF0F172A),
-                                            fontSize: 14,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                if (joined &&
-                                    localIpv4 != null &&
-                                    localIpv4.isNotEmpty)
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 6,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      _IpBadge(ip: localIpv4),
-                                      if (traffic != null) ...[
-                                        _MiniTrafficPill(
-                                          icon: Icons.arrow_downward,
-                                          label: _formatTrafficRate(
-                                            traffic!.downloadBytesPerSecond,
-                                          ),
-                                          color: const Color(0xFF16A34A),
-                                        ),
-                                        _MiniTrafficPill(
-                                          icon: Icons.arrow_upward,
-                                          label: _formatTrafficRate(
-                                            traffic!.uploadBytesPerSecond,
-                                          ),
-                                          color: const Color(0xFF2563EB),
-                                        ),
-                                      ],
-                                    ],
-                                  )
-                                else
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _StatusChip(
-                                        label:
-                                            '$onlineCount / ${attachedDevices.length} 在线',
-                                        active: onlineCount > 0,
-                                      ),
-                                      if (cidrText.isNotEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'CIDR $cidrText',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: const Color(0xFFCBD5E1),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                if (failed && state.message != null) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    state.message!,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFFDC2626),
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (isLoading)
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: FCircularProgress(size: .sm),
-                                )
-                              else
-                                FSwitch(
-                                  value: switchValue,
-                                  enabled: onToggle != null,
-                                  onChange: (_) => onToggle?.call(),
-                                ),
-                              const SizedBox(height: 6),
-                              Text(
-                                isLoading
-                                    ? '处理中'
-                                    : joined
-                                    ? '已连接'
-                                    : '未连接',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: joined
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFF94A3B8),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withAlpha(4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
           ),
         ),
-      ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(14),
+                      bottomLeft: Radius.circular(14),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: GestureDetector(
+                                      onTap: onOpen,
+                                      child: Icon(
+                                        Icons.language_outlined,
+                                        size: 16,
+                                        color: joined
+                                            ? const Color(0xFF334155)
+                                            : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    network.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0F172A),
+                                          fontSize: 14,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (joined &&
+                                  localIpv4 != null &&
+                                  localIpv4.isNotEmpty)
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    _IpBadge(ip: localIpv4),
+                                    if (traffic != null) ...[
+                                      _MiniTrafficPill(
+                                        icon: Icons.arrow_downward,
+                                        label: _formatTrafficRate(
+                                          traffic!.downloadBytesPerSecond,
+                                        ),
+                                        color: const Color(0xFF16A34A),
+                                      ),
+                                      _MiniTrafficPill(
+                                        icon: Icons.arrow_upward,
+                                        label: _formatTrafficRate(
+                                          traffic!.uploadBytesPerSecond,
+                                        ),
+                                        color: const Color(0xFF2563EB),
+                                      ),
+                                    ],
+                                  ],
+                                )
+                              else
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _StatusChip(
+                                      label:
+                                          '$onlineCount / ${attachedDevices.length} 在线',
+                                      active: onlineCount > 0,
+                                    ),
+                                    if (cidrText.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'CIDR $cidrText',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: const Color(0xFFCBD5E1),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              if (failed && state.message != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  state.message!,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFFDC2626),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (isLoading)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: FCircularProgress(size: .sm),
+                              )
+                            else
+                              FSwitch(
+                                value: switchValue,
+                                enabled: onToggle != null,
+                                onChange: (_) => onToggle?.call(),
+                              ),
+                            const SizedBox(height: 6),
+                            Text(
+                              isLoading
+                                  ? '处理中'
+                                  : joined
+                                  ? '已连接'
+                                  : '未连接',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: joined
+                                        ? const Color(0xFF16A34A)
+                                        : const Color(0xFF94A3B8),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

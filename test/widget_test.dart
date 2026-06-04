@@ -512,6 +512,95 @@ void main() {
     expect(find.textContaining('Peer: 999'), findsNothing);
   });
 
+  testWidgets('tapping selectable node text does not expand node card', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      peerSamples: const <Map<String, CorePeerStatus>>[
+        <String, CorePeerStatus>{
+          '10.144.0.2': CorePeerStatus(
+            cidr: '10.144.0.2/24',
+            ipv4: '10.144.0.2',
+            hostname: 'desktop-1',
+            cost: 'p2p',
+            latencyText: '3.45',
+            lossText: '0.0%',
+            rxBytes: '17.33 kB',
+            txBytes: '20.42 kB',
+            tunnelProto: 'udp',
+            natType: 'FullCone',
+            peerId: '390879727',
+            version: '2.6.4',
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await _pumpAppMotionFrames(tester);
+
+    final cardFinder = find.byKey(
+      const ValueKey<String>('network-node-node-1'),
+    );
+    final initialHeight = tester.getSize(cardFinder).height;
+
+    final nodeNameRect = tester.getRect(find.text('desktop-1'));
+    await tester.tapAt(Offset(nodeNameRect.left + 24, nodeNameRect.center.dy));
+    await _pumpAppMotionFrames(tester);
+
+    expect(tester.getSize(cardFinder).height, closeTo(initialHeight, 0.1));
+
+    final cardRect = tester.getRect(cardFinder);
+    await tester.tapAt(Offset(cardRect.right - 16, cardRect.top + 24));
+    await _pumpAppMotionFrames(tester);
+
+    expect(tester.getSize(cardFinder).height, greaterThan(initialHeight));
+  });
+
   testWidgets('network detail keeps nodes visible when peer read fails', (
     WidgetTester tester,
   ) async {

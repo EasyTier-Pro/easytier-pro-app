@@ -25,15 +25,18 @@ class _NodeCardState extends State<_NodeCard> {
         duration: appMotionMedium,
         curve: appMotionCurve,
         alignment: Alignment.topCenter,
-        child: GestureDetector(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+              ),
             ),
-            child: IntrinsicHeight(
+            IntrinsicHeight(
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -75,10 +78,13 @@ class _NodeCardState extends State<_NodeCard> {
                               ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(
-                          _expanded ? Icons.expand_less : Icons.expand_more,
-                          size: 18,
-                          color: const Color(0xFF94A3B8),
+                        GestureDetector(
+                          onTap: () => setState(() => _expanded = !_expanded),
+                          child: Icon(
+                            _expanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                            color: const Color(0xFF94A3B8),
+                          ),
                         ),
                       ],
                     ),
@@ -103,7 +109,7 @@ class _NodeCardState extends State<_NodeCard> {
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
