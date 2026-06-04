@@ -219,6 +219,8 @@ void main() {
         ipv4: '10.144.0.${number + 1}',
         deviceId: 'device-$number',
         machineId: 'machine-$number',
+        os: index.isEven ? 'windows' : 'linux',
+        osDistribution: index.isEven ? 'Windows 11' : 'Ubuntu',
       );
     });
     final authService = _FakeAuthService(
@@ -1044,6 +1046,9 @@ void main() {
               'hostname': 'desktop-1',
               'approval_state': 'approved',
               'connectivity_state': 'online',
+              'os': 'windows',
+              'os_version': '11',
+              'os_distribution': 'Windows 11 Pro',
               'lifecycle_state': 'active',
               'desired_state': 'present',
             },
@@ -1082,7 +1087,47 @@ void main() {
     expect(devices.single.machineId, 'machine-1');
     expect(devices.single.approved, isTrue);
     expect(devices.single.online, isTrue);
+    expect(devices.single.os, 'windows');
+    expect(devices.single.osVersion, '11');
+    expect(devices.single.osDistribution, 'Windows 11 Pro');
     expect(devices.single.removed, isFalse);
+  });
+
+  test('console service preserves node operating system metadata', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
+          return _jsonResponse([
+            {
+              'id': 'node-1',
+              'hostname': 'desktop-1',
+              'machine_id': 'machine-1',
+              'connectivity_state': 'online',
+              'ipv4_addr': '10.144.0.2',
+              'os': 'linux',
+              'os_version': '6.8.0',
+              'os_distribution': 'Ubuntu',
+            },
+          ]);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+
+    final nodes = await service.fetchNetworkDevices(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      networkId: 'net-1',
+    );
+
+    expect(nodes.single.os, 'linux');
+    expect(nodes.single.osVersion, '6.8.0');
+    expect(nodes.single.osDistribution, 'Ubuntu');
   });
 
   test(
@@ -1343,6 +1388,9 @@ class _FakeAuthService implements AuthService {
         ipv4: networkId == 'net-1' ? '10.144.0.2' : '10.145.0.2',
         deviceId: device.id,
         machineId: device.machineId,
+        os: device.os,
+        osVersion: device.osVersion,
+        osDistribution: device.osDistribution,
       ),
     ];
     return AttachNetworkResult(nodeId: 'node-$networkId');

@@ -153,6 +153,9 @@ class NetworkDevice {
     this.ipv4,
     this.deviceId,
     this.machineId,
+    this.os = '',
+    this.osVersion = '',
+    this.osDistribution = '',
     this.connectivityState = '',
     this.desiredState = '',
     this.lifecycleState = '',
@@ -164,6 +167,9 @@ class NetworkDevice {
   final String? ipv4;
   final String? deviceId;
   final String? machineId;
+  final String os;
+  final String osVersion;
+  final String osDistribution;
   final String connectivityState;
   final String desiredState;
   final String lifecycleState;
@@ -186,6 +192,9 @@ class ManagedDevice {
     required this.hostname,
     required this.approvalState,
     required this.connectivityState,
+    this.os = '',
+    this.osVersion = '',
+    this.osDistribution = '',
     this.lifecycleState = '',
     this.desiredState = '',
   });
@@ -195,6 +204,9 @@ class ManagedDevice {
   final String hostname;
   final String approvalState;
   final String connectivityState;
+  final String os;
+  final String osVersion;
+  final String osDistribution;
   final String lifecycleState;
   final String desiredState;
 
@@ -604,6 +616,9 @@ class ConsoleAuthService implements AuthService {
             hostname: hostname,
             approvalState: item['approval_state']?.toString() ?? '',
             connectivityState: item['connectivity_state']?.toString() ?? '',
+            os: item['os']?.toString() ?? item['os_type']?.toString() ?? '',
+            osVersion: item['os_version']?.toString() ?? '',
+            osDistribution: item['os_distribution']?.toString() ?? '',
             lifecycleState: item['lifecycle_state']?.toString() ?? '',
             desiredState: item['desired_state']?.toString() ?? '',
           );
@@ -662,6 +677,20 @@ class ConsoleAuthService implements AuthService {
           final machineId =
               item['machine_id']?.toString() ??
               device?['machine_id']?.toString();
+          final os =
+              item['os']?.toString() ??
+              item['os_type']?.toString() ??
+              device?['os']?.toString() ??
+              device?['os_type']?.toString() ??
+              '';
+          final osVersion =
+              item['os_version']?.toString() ??
+              device?['os_version']?.toString() ??
+              '';
+          final osDistribution =
+              item['os_distribution']?.toString() ??
+              device?['os_distribution']?.toString() ??
+              '';
           final desiredState = item['desired_state']?.toString() ?? '';
           final lifecycleState = item['lifecycle_state']?.toString() ?? '';
 
@@ -674,6 +703,9 @@ class ConsoleAuthService implements AuthService {
             machineId: machineId == null || machineId.isEmpty
                 ? null
                 : machineId,
+            os: os,
+            osVersion: osVersion,
+            osDistribution: osDistribution,
             connectivityState: status,
             desiredState: desiredState,
             lifecycleState: lifecycleState,
