@@ -690,7 +690,7 @@ void main() {
     expect(find.byType(FSwitch), findsOneWidget);
   });
 
-  testWidgets('aligns network refresh control with overview title', (
+  testWidgets('places network refresh control in right action group', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester);
@@ -712,14 +712,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final titleCenter = tester.getCenter(
-      find.byKey(const ValueKey<String>('network-switch-title')),
-    );
+    final titleCenter = tester.getCenter(find.text('网络'));
     final refreshCenter = tester.getCenter(
       find.byKey(const ValueKey<String>('network-refresh-button')),
     );
+    final createCenter = tester.getCenter(
+      find.byKey(const ValueKey<String>('network-create-button')),
+    );
 
-    expect((titleCenter.dy - refreshCenter.dy).abs(), lessThanOrEqualTo(0.5));
+    expect(refreshCenter.dx, greaterThan(titleCenter.dx));
+    expect(refreshCenter.dx, lessThan(createCenter.dx));
+    expect((refreshCenter.dy - createCenter.dy).abs(), lessThanOrEqualTo(0.5));
   });
 
   testWidgets('switches active network from header dropdown', (

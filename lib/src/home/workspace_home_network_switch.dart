@@ -33,22 +33,22 @@ class _NetworkSwitchList extends StatelessWidget {
         Row(
           children: [
             Text(
-              key: const ValueKey<String>('network-switch-title'),
               '网络',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: const Color(0xFF0F172A),
               ),
             ),
+            const Spacer(),
             if (onRefresh != null || refreshing) ...[
-              const SizedBox(width: 6),
               _NetworkRefreshButton(
                 refreshing: refreshing,
                 onRefresh: onRefresh,
               ),
+              const SizedBox(width: 6),
             ],
-            const Spacer(),
             FButton(
+              key: const ValueKey<String>('network-create-button'),
               variant: .ghost,
               size: .sm,
               onPress: onCreate,
@@ -104,32 +104,27 @@ class _NetworkRefreshButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = !refreshing && onRefresh != null;
-    final color = enabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
 
     return Tooltip(
       message: refreshing ? '正在刷新网络' : '刷新网络',
-      child: Semantics(
-        button: true,
-        enabled: enabled,
-        label: refreshing ? '正在刷新网络' : '刷新网络',
-        child: SizedBox.square(
-          dimension: 24,
-          child: FTappable.static(
-            key: const ValueKey<String>('network-refresh-button'),
-            behavior: HitTestBehavior.opaque,
-            onPress: enabled ? onRefresh : null,
-            child: Center(
-              child: refreshing
-                  ? const SizedBox.square(
-                      dimension: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Transform.translate(
-                      offset: const Offset(0, -1),
-                      child: Icon(Icons.refresh, size: 18, color: color),
-                    ),
-            ),
-          ),
+      child: FButton(
+        key: const ValueKey<String>('network-refresh-button'),
+        variant: .ghost,
+        size: .sm,
+        onPress: enabled ? onRefresh : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (refreshing)
+              const SizedBox.square(
+                dimension: 14,
+                child: FCircularProgress(size: .sm),
+              )
+            else
+              const Icon(Icons.refresh, size: 16),
+            const SizedBox(width: 4),
+            Text(refreshing ? '刷新中' : '刷新'),
+          ],
         ),
       ),
     );
