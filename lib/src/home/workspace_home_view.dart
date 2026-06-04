@@ -2518,11 +2518,105 @@ class _SettingsPanel extends StatelessWidget {
     }
   }
 
+  Future<void> _showLogsDialog(BuildContext context) async {
+    await showFDialog<void>(
+      context: context,
+      builder: (dialogContext, _, animation) => FDialog.raw(
+        animation: animation,
+        constraints: const BoxConstraints(
+          minWidth: 600,
+          maxWidth: 800,
+          maxHeight: 520,
+        ),
+        builder: (context, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '诊断日志',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const Spacer(),
+                  FButton(
+                    variant: .ghost,
+                    size: .sm,
+                    onPress: () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: const Icon(Icons.close, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ValueListenableBuilder<List<AppLogEntry>>(
+                  valueListenable: AppLogger.instance.recentEntries,
+                  builder: (context, entries, _) {
+                    if (entries.isEmpty) {
+                      return const Center(child: Text('暂无日志'));
+                    }
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F9FB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          entries.map((entry) => entry.humanLine).join('\n'),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            color: const Color(0xFF374151),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FButton(
+                    variant: .outline,
+                    size: .sm,
+                    onPress: () => unawaited(_exportLogs(dialogContext)),
+                    child: const Text('导出诊断日志'),
+                  ),
+                  FButton(
+                    variant: .outline,
+                    size: .sm,
+                    onPress: () => unawaited(_copyLogDirectory(dialogContext)),
+                    child: const Text('复制日志目录'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 640),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         const _SectionTitle(title: '设置', subtitle: '查看当前账号与桌面端辅助操作。'),
         const SizedBox(height: 20),
         FCard(
@@ -2661,6 +2755,11 @@ class _SettingsPanel extends StatelessWidget {
                 children: [
                   FButton(
                     variant: .outline,
+                    onPress: () => unawaited(_showLogsDialog(context)),
+                    child: const Text('查看日志'),
+                  ),
+                  FButton(
+                    variant: .outline,
                     onPress: () => unawaited(_exportLogs(context)),
                     child: const Text('导出诊断日志'),
                   ),
@@ -2671,37 +2770,12 @@ class _SettingsPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              ValueListenableBuilder<List<AppLogEntry>>(
-                valueListenable: AppLogger.instance.recentEntries,
-                builder: (context, entries, _) {
-                  if (entries.isEmpty) {
-                    return const Text('暂无日志');
-                  }
-                  final start = entries.length > 8 ? entries.length - 8 : 0;
-                  final recent = entries.sublist(start);
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FB),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Text(
-                      recent.map((entry) => entry.humanLine).join('\n'),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         ),
       ],
-    );
+    ),
+  );
   }
 }
 
