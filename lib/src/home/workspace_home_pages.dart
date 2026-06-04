@@ -191,20 +191,11 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                               : () => unawaited(_joinNetwork(network)),
                           child: const Text('加入网络'),
                         ),
-                      FButton(
-                        variant: .destructive,
-                        onPress: deleting
+                      IconButton(
+                        icon: const Icon(Icons.more_vert),
+                        onPressed: deleting
                             ? null
-                            : () =>
-                                  unawaited(_showDeleteNetworkDialog(network)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.delete_outline, size: 16),
-                            const SizedBox(width: 4),
-                            Text(deleting ? '删除中...' : '删除网络'),
-                          ],
-                        ),
+                            : () => unawaited(_showNetworkMoreMenu(network)),
                       ),
                     ],
                   );
