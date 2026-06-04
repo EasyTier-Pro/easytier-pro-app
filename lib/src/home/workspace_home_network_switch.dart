@@ -275,16 +275,26 @@ class _NetworkSwitchTile extends StatelessWidget {
                                           : const Color(0xFF94A3B8),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      network.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF0F172A),
-                                            fontSize: 14,
-                                          ),
+                                    Flexible(
+                                      child: Text(
+                                        network.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF0F172A),
+                                              fontSize: 14,
+                                            ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    AppCopyButton(
+                                      value: network.name,
+                                      label: '网络名称',
+                                      size: 22,
+                                      iconSize: 13,
                                     ),
                                   ],
                                 ),
@@ -338,18 +348,40 @@ class _NetworkSwitchTile extends StatelessWidget {
                                                 fontWeight: FontWeight.w500,
                                               ),
                                         ),
+                                        AppCopyButton(
+                                          value: cidrText,
+                                          label: 'CIDR',
+                                          size: 20,
+                                          iconSize: 12,
+                                          color: const Color(0xFFCBD5E1),
+                                        ),
                                       ],
                                     ],
                                   ),
                                 if (failed && state.message != null) ...[
                                   const SizedBox(height: 6),
-                                  Text(
-                                    state.message!,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFFDC2626),
-                                          fontWeight: FontWeight.w500,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          state.message!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: const Color(0xFFDC2626),
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                         ),
+                                      ),
+                                      AppCopyButton(
+                                        value: state.message!,
+                                        label: '连接错误',
+                                        size: 22,
+                                        iconSize: 13,
+                                        color: const Color(0xFFDC2626),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ],
@@ -418,15 +450,27 @@ class _IpBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFBBF7D0)),
       ),
-      child: Text(
-        ip,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF15803D),
-          fontSize: 11,
-          letterSpacing: 0.3,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            ip,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF15803D),
+              fontSize: 11,
+              letterSpacing: 0.3,
+            ),
+          ),
+          AppCopyButton(
+            value: ip,
+            label: '本机 IPv4',
+            size: 18,
+            iconSize: 11,
+            color: const Color(0xFF15803D),
+          ),
+        ],
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 import '../home/workspace_home_view.dart';
+import '../shared/copyable_text.dart';
 import 'console_auth_service.dart';
 
 enum AuthStage {
@@ -205,6 +206,7 @@ class _AuthGateState extends State<AuthGate> {
               ),
               AuthStage.waitingForApproval => _DeviceAuthView(
                 key: const ValueKey<String>('device-auth'),
+                deviceAuthInfo: _deviceAuthInfo,
                 statusMessage: _statusMessage,
                 onOpenBrowser: _deviceAuthInfo == null
                     ? null
@@ -295,10 +297,12 @@ class _LoadingView extends StatelessWidget {
 class _DeviceAuthView extends StatelessWidget {
   const _DeviceAuthView({
     super.key,
+    required this.deviceAuthInfo,
     required this.statusMessage,
     required this.onOpenBrowser,
   });
 
+  final DeviceAuthInfo? deviceAuthInfo;
   final String? statusMessage;
   final VoidCallback? onOpenBrowser;
 
@@ -316,10 +320,73 @@ class _DeviceAuthView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。'),
+            if (deviceAuthInfo != null) ...[
+              const SizedBox(height: 16),
+              _AuthCopyRow(
+                label: '用户代码',
+                value: deviceAuthInfo!.userCode,
+                monospace: true,
+              ),
+              const SizedBox(height: 10),
+              _AuthCopyRow(
+                label: '授权链接',
+                value: deviceAuthInfo!.verificationUriComplete,
+                monospace: true,
+              ),
+            ],
             const SizedBox(height: 24),
             FButton(onPress: onOpenBrowser, child: const Text('重新打开浏览器')),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AuthCopyRow extends StatelessWidget {
+  const _AuthCopyRow({
+    required this.label,
+    required this.value,
+    this.monospace = false,
+  });
+
+  final String label;
+  final String value;
+  final bool monospace;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: const Color(0xFF334155),
+      fontFamily: monospace ? 'monospace' : null,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(value, style: textStyle)),
+          const SizedBox(width: 4),
+          AppCopyButton(value: value, label: label),
+        ],
       ),
     );
   }
@@ -341,7 +408,14 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: Text(message)),
+                const SizedBox(width: 8),
+                AppCopyButton(value: message, label: '登录错误'),
+              ],
+            ),
             const SizedBox(height: 24),
             FButton(
               onPress: () => unawaited(onRetry()),

@@ -133,7 +133,9 @@ class _MyAppState extends State<MyApp> {
       scrollBehavior: const AppScrollBehavior(),
       builder: (context, child) => FTheme(
         data: _foruiThemeData,
-        child: FToaster(child: child ?? const SizedBox.shrink()),
+        child: FToaster(
+          child: SelectionArea(child: child ?? const SizedBox.shrink()),
+        ),
       ),
       theme: ThemeData(
         colorScheme: colorScheme,
