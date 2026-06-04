@@ -1596,6 +1596,7 @@ class _DashboardHeader extends StatelessWidget {
                       CoreRunPhase.repairing => const Color(0xFFF59E0B),
                       CoreRunPhase.checking => const Color(0xFF2563EB),
                       CoreRunPhase.error => const Color(0xFFDC2626),
+                      CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
                       CoreRunPhase.signedOut => Colors.grey,
                     };
                     return Row(
@@ -1818,9 +1819,12 @@ class _StatusBadge extends StatelessWidget {
         final error = status.phase == CoreRunPhase.error;
         final checking = status.phase == CoreRunPhase.checking;
         final signedOut = status.phase == CoreRunPhase.signedOut;
+        final needsElevation = status.phase == CoreRunPhase.needsElevation;
 
         final ringColor = error
             ? const Color(0xFFDC2626)
+            : needsElevation
+            ? const Color(0xFFF59E0B)
             : checking || signedOut
             ? const Color(0xFF9CA3AF)
             : running
@@ -1829,6 +1833,8 @@ class _StatusBadge extends StatelessWidget {
 
         final bgColor = error
             ? const Color(0xFFFEE2E2)
+            : needsElevation
+            ? const Color(0xFFFEF3C7)
             : checking || signedOut
             ? const Color(0xFFF3F4F6)
             : running
@@ -1837,6 +1843,8 @@ class _StatusBadge extends StatelessWidget {
 
         final borderColor = error
             ? const Color(0xFFFECACA)
+            : needsElevation
+            ? const Color(0xFFFDE68A)
             : checking || signedOut
             ? const Color(0xFFE5E7EB)
             : running
@@ -1845,6 +1853,8 @@ class _StatusBadge extends StatelessWidget {
 
         final icon = error
             ? Icons.error_outline
+            : needsElevation
+            ? Icons.admin_panel_settings_outlined
             : checking
             ? Icons.sync
             : running
@@ -1853,6 +1863,8 @@ class _StatusBadge extends StatelessWidget {
 
         final title = error
             ? '引擎异常'
+            : needsElevation
+            ? '需要管理员权限'
             : checking
             ? '正在检查'
             : running
@@ -1865,6 +1877,10 @@ class _StatusBadge extends StatelessWidget {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!
               : '连接引擎遇到问题';
+        } else if (needsElevation) {
+          subtitle = status.lastError?.isNotEmpty == true
+              ? status.lastError!
+              : '连接引擎安装需要提升权限，请前往设置页处理';
         } else if (joinedCount > 0) {
           subtitle = '$joinedCount 个网络';
         } else {
@@ -1915,7 +1931,7 @@ class _StatusBadge extends StatelessWidget {
                   ],
                 ),
               ),
-              if (joinedCount > 0 && !error) ...[
+              if (joinedCount > 0 && !error && !needsElevation) ...[
                 const SizedBox(width: 12),
                 _TrafficPill(
                   icon: Icons.arrow_downward,
@@ -2551,7 +2567,12 @@ class _SettingsPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _StatusDot(online: running),
+                      _StatusDot(
+                        online: running,
+                        color: status.phase == CoreRunPhase.needsElevation
+                            ? const Color(0xFFF59E0B)
+                            : null,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -2577,7 +2598,18 @@ class _SettingsPanel extends StatelessWidget {
                     Text(
                       status.lastError!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFDC2626),
+                        color: status.phase == CoreRunPhase.needsElevation
+                            ? const Color(0xFFB45309)
+                            : const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                  if (status.phase == CoreRunPhase.needsElevation) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '创建虚拟网卡需要管理员权限，请点击下方按钮以管理员身份运行安装程序。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
                       ),
                     ),
                   ],
@@ -2586,6 +2618,12 @@ class _SettingsPanel extends StatelessWidget {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
+                      if (status.phase == CoreRunPhase.needsElevation)
+                        FButton(
+                          variant: .primary,
+                          onPress: () => unawaited(coreLifecycleService.repairWithElevation()),
+                          child: const Text('以管理员身份运行'),
+                        ),
                       FButton(
                         variant: .outline,
                         onPress: () => unawaited(coreLifecycleService.repair()),
@@ -2923,9 +2961,10 @@ class _StateMessage extends StatelessWidget {
 }
 
 class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.online});
+  const _StatusDot({required this.online, this.color});
 
   final bool online;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -2933,7 +2972,7 @@ class _StatusDot extends StatelessWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(
-        color: online ? const Color(0xFF16A34A) : Colors.grey,
+        color: color ?? (online ? const Color(0xFF16A34A) : Colors.grey),
         shape: BoxShape.circle,
       ),
     );

@@ -8,7 +8,14 @@ import '../auth/console_auth_service.dart';
 import 'core_peer_status.dart';
 import '../logging/app_logger.dart';
 
-enum CoreRunPhase { signedOut, checking, repairing, running, error }
+enum CoreRunPhase { signedOut, checking, repairing, running, error, needsElevation }
+
+class _ElevationRequiredException implements Exception {
+  const _ElevationRequiredException([this.message = '需要管理员权限']);
+  final String message;
+  @override
+  String toString() => message;
+}
 
 class _DesktopCoreStatus {
   const _DesktopCoreStatus({
@@ -187,6 +194,214 @@ class CoreLifecycleService {
       _logger.info('core', 'Manual repair requested');
       await _ensureRunning(forceReinstall: true);
     });
+  }
+
+  Future<void> repairWithElevation() {
+    return _enqueue(() async {
+      final session = _session;
+      if (session == null) {
+        _logger.warn('core', 'Elevation repair requested without active session');
+        status.value = CoreRunStatus.signedOut;
+        return;
+      }
+      if (!Platform.isWindows) {
+        _logger.warn('core', 'Elevation repair is only supported on Windows');
+        await _ensureRunning(forceReinstall: true);
+        return;
+      }
+
+      final workspace = session.user.currentWorkspace;
+      if (workspace == null) {
+        status.value = const CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '当前账号未绑定工作区',
+        );
+        return;
+      }
+
+      status.value = const CoreRunStatus(
+        phase: CoreRunPhase.repairing,
+        message: '正在以管理员身份安装连接引擎...',
+      );
+      _logger.info('core', 'Elevation repair requested');
+
+      try {
+        final bootstrap = await authService.prepareCoreBootstrap(
+          accessToken: session.tokenSet.accessToken,
+          workspaceId: workspace.id,
+        );
+
+        final tempDir = Directory.systemTemp;
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final inputFile = File('${tempDir.path}${Platform.pathSeparator}et_bootstrap_$timestamp.json');
+        final outputFile = File('${tempDir.path}${Platform.pathSeparator}et_output_$timestamp.json');
+        final errorFile = File('${tempDir.path}${Platform.pathSeparator}et_error_$timestamp.json');
+        final batFile = File('${tempDir.path}${Platform.pathSeparator}et_elevated_$timestamp.bat');
+
+        final request = {
+          'bootstrap_token': bootstrap.bootstrapToken,
+          'version': bootstrap.version,
+          'config_server': bootstrap.configServer,
+        };
+        await inputFile.writeAsString(jsonEncode(request), encoding: utf8);
+
+        final installerPath = _resolveInstallerExecutable();
+        final installerDir = File(installerPath).parent.path;
+        final batContent = '''@echo off
+chcp 65001 >nul
+cd /d "$installerDir"
+"$installerPath" desktop install --json < "${inputFile.path}" > "${outputFile.path}" 2> "${errorFile.path}"
+''';
+        await batFile.writeAsString(batContent, encoding: utf8);
+
+        _logger.info(
+          'core.desktop',
+          'Launching elevated installer via PowerShell',
+          context: {
+            'bat_file': batFile.path,
+            'installer': installerPath,
+          },
+        );
+
+        final powershellResult = await _runElevatedWithPowerShell(batFile.path);
+        _logger.info(
+          'core.desktop',
+          'Elevated installer process completed',
+          context: {
+            'exit_code': powershellResult,
+            'output_exists': outputFile.existsSync(),
+            'error_exists': errorFile.existsSync(),
+          },
+        );
+
+        if (outputFile.existsSync()) {
+          final outputText = await outputFile.readAsString();
+          final lines = const LineSplitter().convert(outputText);
+          final events = lines
+              .where((line) => line.trim().isNotEmpty)
+              .map((line) {
+                try {
+                  final decoded = jsonDecode(line);
+                  if (decoded is Map<String, dynamic>) {
+                    return decoded;
+                  }
+                } catch (_) {
+                  // ignore
+                }
+                return null;
+              })
+              .whereType<Map<String, dynamic>>()
+              .toList(growable: false);
+
+          if (events.isNotEmpty) {
+            final errorEvent = events.firstWhere(
+              (event) => event['event'] == 'error',
+              orElse: () => const <String, dynamic>{},
+            );
+            if (errorEvent.isNotEmpty) {
+              final data = errorEvent['data'] as Map<String, dynamic>? ?? const {};
+              throw StateError(data['message']?.toString() ?? '提权安装返回错误');
+            }
+
+            for (var index = events.length - 1; index >= 0; index--) {
+              final event = events[index];
+              if (event['event'] == 'finished') {
+                final machineId = parseMachineIdFromDesktopEvent(event);
+                _rememberCliPath(parseCliPathFromDesktopEvent(event));
+                _logger.info(
+                  'core',
+                  'Elevated install completed',
+                  context: {'machine_id': machineId ?? ''},
+                );
+                status.value = CoreRunStatus(
+                  phase: CoreRunPhase.running,
+                  message: machineId == null || machineId.isEmpty
+                      ? '连接引擎运行中'
+                      : '本机设备已就绪',
+                  machineId: machineId,
+                  details: 'EasyTier ${bootstrap.version}',
+                );
+                await _cleanupElevationTempFiles(
+                  [inputFile, outputFile, errorFile, batFile],
+                );
+                return;
+              }
+            }
+          }
+        }
+
+        final errorText = errorFile.existsSync() ? await errorFile.readAsString() : '';
+        if (errorText.isNotEmpty) {
+          throw StateError(errorText);
+        }
+        throw StateError('提权安装没有返回有效结果');
+      } catch (error) {
+        _logger.error(
+          'core',
+          'Elevation repair failed',
+          context: {'error': error.toString()},
+        );
+        if (error is _ElevationRequiredException) {
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.needsElevation,
+            message: '需要管理员权限以安装连接引擎',
+            lastError: _normalizeError(error),
+          );
+          return;
+        }
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '连接引擎启动失败',
+          lastError: _normalizeError(error),
+        );
+      }
+    });
+  }
+
+  Future<int> _runElevatedWithPowerShell(String batPath) async {
+    final args = [
+      '-Command',
+      'Start-Process -FilePath "cmd.exe" -ArgumentList \'/c\',"$batPath" -Verb runAs -Wait',
+    ];
+
+    final executables = ['powershell.exe', 'pwsh.exe'];
+
+    for (final exe in executables) {
+      try {
+        final result = await Process.run(exe, args);
+        _logger.debug(
+          'core.desktop',
+          'PowerShell elevation attempt',
+          context: {
+            'executable': exe,
+            'exit_code': result.exitCode,
+            'stderr': result.stderr.toString().trim(),
+          },
+        );
+        return result.exitCode;
+      } on ProcessException catch (e) {
+        _logger.warn(
+          'core.desktop',
+          'PowerShell executable not available',
+          context: {'executable': exe, 'error': e.toString()},
+        );
+        continue;
+      }
+    }
+
+    throw StateError('找不到可用的 PowerShell 来执行提权操作');
+  }
+
+  Future<void> _cleanupElevationTempFiles(List<File> files) async {
+    for (final file in files) {
+      try {
+        if (file.existsSync()) {
+          await file.delete();
+        }
+      } catch (_) {
+        // ignore cleanup errors
+      }
+    }
   }
 
   Future<Map<String, CoreNetworkTrafficTotals>>
@@ -377,6 +592,14 @@ class CoreLifecycleService {
         'Ensure running failed',
         context: {'error': error.toString()},
       );
+      if (error is _ElevationRequiredException) {
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.needsElevation,
+          message: '需要管理员权限以安装连接引擎',
+          lastError: _normalizeError(error),
+        );
+        return;
+      }
       status.value = CoreRunStatus(
         phase: CoreRunPhase.error,
         message: '连接引擎启动失败',
@@ -409,6 +632,9 @@ class CoreLifecycleService {
       );
       return desktopStatus;
     } catch (error) {
+      if (error is _ElevationRequiredException) {
+        rethrow;
+      }
       _logger.warn(
         'core.desktop',
         'Desktop status unavailable, falling back to install',
@@ -504,6 +730,9 @@ class CoreLifecycleService {
           'stderr': stderrText,
         },
       );
+      if (_isElevationRequired(exitCode, stderrText)) {
+        throw _ElevationRequiredException(stderrText);
+      }
       throw StateError(
         stderrText.isEmpty
             ? 'desktop $command 执行失败 (exit=$exitCode)'
@@ -769,6 +998,16 @@ class CoreLifecycleService {
       buffer.write(segment2);
     }
     return buffer.toString();
+  }
+
+  static bool _isElevationRequired(int exitCode, String stderrText) {
+    if (exitCode == 740) {
+      return true;
+    }
+    final text = stderrText.toLowerCase();
+    return text.contains('请求的操作需要提升') ||
+        text.contains('elevation required') ||
+        text.contains('requires elevation');
   }
 
   String _normalizeError(Object error) {

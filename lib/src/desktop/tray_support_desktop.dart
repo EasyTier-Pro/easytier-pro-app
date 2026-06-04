@@ -91,6 +91,7 @@ class _DesktopTraySupport extends TraySupport
       CoreRunPhase.checking => '检查中',
       CoreRunPhase.repairing => '修复中',
       CoreRunPhase.error => '异常',
+      CoreRunPhase.needsElevation => '需提权',
       CoreRunPhase.signedOut => '未登录',
     };
     _logger.info(
