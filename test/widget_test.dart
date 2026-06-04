@@ -13,6 +13,7 @@ import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
+import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
   testWidgets('starts core after login and joins networks independently', (
@@ -590,9 +591,13 @@ void main() {
 
     final nodeNameRect = tester.getRect(find.text('desktop-1'));
     expect(nodeNameRect.width, lessThan(tester.getSize(cardFinder).width / 3));
+    appTextSelectionController.hasSelection.value = true;
+    expect(appTextSelectionController.hasSelection.value, isTrue);
+
     await tester.tapAt(Offset(nodeNameRect.left + 24, nodeNameRect.center.dy));
     await _pumpAppMotionFrames(tester);
 
+    expect(appTextSelectionController.hasSelection.value, isFalse);
     expect(tester.getSize(cardFinder).height, closeTo(initialHeight, 0.1));
 
     final cardRect = tester.getRect(cardFinder);

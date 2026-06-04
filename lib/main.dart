@@ -11,6 +11,7 @@ import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/tray_support.dart';
 import 'src/logging/app_logger.dart';
 import 'src/shared/app_motion.dart';
+import 'src/shared/app_text_selection.dart';
 
 const Color _appBackground = Color(0xFFF8F9FB);
 const Color _cardBackground = Color(0xFFFFFFFF);
@@ -134,7 +135,7 @@ class _MyAppState extends State<MyApp> {
       builder: (context, child) => FTheme(
         data: _foruiThemeData,
         child: FToaster(
-          child: SelectionArea(child: child ?? const SizedBox.shrink()),
+          child: AppSelectionArea(child: child ?? const SizedBox.shrink()),
         ),
       ),
       theme: ThemeData(
