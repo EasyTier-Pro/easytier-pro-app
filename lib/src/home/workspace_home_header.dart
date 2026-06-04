@@ -47,21 +47,11 @@ class _DashboardHeader extends StatelessWidget {
         builder: (context, constraints) {
           final compact =
               constraints.maxWidth < _dashboardHeaderCompactBreakpoint;
-          final dense = constraints.maxWidth < _dashboardHeaderDenseBreakpoint;
 
           return Row(
             children: [
               const _BrandMark(),
-              if (dense)
-                const SizedBox(width: 8)
-              else ...[
-                const SizedBox(width: 8),
-                Text(
-                  'EasyTier Pro',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(width: 16),
-              ],
+              const SizedBox(width: 12),
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
