@@ -68,6 +68,7 @@ flutter:
   assets:
     - assets/images/easytier.png
     - windows/runner/resources/app_icon.ico
+    - windows/runner/resources/tray_icon.ico
     - web/favicon.png
 
   # To add assets to your application, add an assets section, like this:

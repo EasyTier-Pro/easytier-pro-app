@@ -13,7 +13,7 @@ class _DesktopTraySupport extends TraySupport
   _DesktopTraySupport();
 
   static const String _trayTooltip = 'EasyTier Pro';
-  static const String _trayIconPath = 'windows/runner/resources/app_icon.ico';
+  static const String _trayIconPath = 'windows/runner/resources/tray_icon.ico';
   static const String _trayIconPathFallback = 'web/favicon.png';
 
   bool _initialized = false;
