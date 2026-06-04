@@ -388,18 +388,11 @@ class _NetworkSwitchTile extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                if (isLoading)
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: FCircularProgress(size: .sm),
-                                  )
-                                else
-                                  FSwitch(
-                                    value: switchValue,
-                                    enabled: onToggle != null,
-                                    onChange: (_) => onToggle?.call(),
-                                  ),
+                                _LoadingSwitch(
+                                  value: switchValue,
+                                  loading: isLoading,
+                                  onChange: (_) => onToggle?.call(),
+                                ),
                                 const SizedBox(height: 6),
                                 Text(
                                   isLoading
@@ -409,7 +402,9 @@ class _NetworkSwitchTile extends StatelessWidget {
                                       : '未连接',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
-                                        color: joined
+                                        color: isLoading
+                                            ? const Color(0xFF64748B)
+                                            : joined
                                             ? const Color(0xFF16A34A)
                                             : const Color(0xFF94A3B8),
                                         fontWeight: FontWeight.w600,
@@ -428,6 +423,45 @@ class _NetworkSwitchTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LoadingSwitch extends StatelessWidget {
+  const _LoadingSwitch({
+    required this.value,
+    required this.loading,
+    this.onChange,
+  });
+
+  final bool value;
+  final bool loading;
+  final ValueChanged<bool>? onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 51,
+      height: 31,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          FSwitch(
+            value: value,
+            enabled: !loading && onChange != null,
+            onChange: onChange,
+          ),
+          if (loading)
+            Center(
+              child: FCircularProgress(
+                size: .xs,
+                style: const FCircularProgressStyleDelta.delta(
+                  iconStyle: IconThemeDataDelta.delta(color: Colors.white),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
