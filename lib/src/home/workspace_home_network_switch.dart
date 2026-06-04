@@ -33,6 +33,7 @@ class _NetworkSwitchList extends StatelessWidget {
         Row(
           children: [
             Text(
+              key: const ValueKey<String>('network-switch-title'),
               '网络',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
@@ -103,30 +104,32 @@ class _NetworkRefreshButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = !refreshing && onRefresh != null;
+    final color = enabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
 
     return Tooltip(
       message: refreshing ? '正在刷新网络' : '刷新网络',
-      child: SizedBox.square(
-        dimension: 28,
-        child: IconButton(
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-          visualDensity: VisualDensity.compact,
-          style: IconButton.styleFrom(
-            foregroundColor: const Color(0xFF64748B),
-            disabledForegroundColor: const Color(0xFF94A3B8),
-            hoverColor: const Color(0xFFF1F5F9),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: refreshing ? '正在刷新网络' : '刷新网络',
+        child: SizedBox.square(
+          dimension: 24,
+          child: FTappable.static(
+            key: const ValueKey<String>('network-refresh-button'),
+            behavior: HitTestBehavior.opaque,
+            onPress: enabled ? onRefresh : null,
+            child: Center(
+              child: refreshing
+                  ? const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Transform.translate(
+                      offset: const Offset(0, -1),
+                      child: Icon(Icons.refresh, size: 18, color: color),
+                    ),
             ),
           ),
-          onPressed: enabled ? onRefresh : null,
-          icon: refreshing
-              ? const SizedBox.square(
-                  dimension: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh, size: 18),
         ),
       ),
     );

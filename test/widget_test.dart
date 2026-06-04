@@ -690,6 +690,38 @@ void main() {
     expect(find.byType(FSwitch), findsOneWidget);
   });
 
+  testWidgets('aligns network refresh control with overview title', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final titleCenter = tester.getCenter(
+      find.byKey(const ValueKey<String>('network-switch-title')),
+    );
+    final refreshCenter = tester.getCenter(
+      find.byKey(const ValueKey<String>('network-refresh-button')),
+    );
+
+    expect((titleCenter.dy - refreshCenter.dy).abs(), lessThanOrEqualTo(0.5));
+  });
+
   testWidgets('switches active network from header dropdown', (
     WidgetTester tester,
   ) async {
