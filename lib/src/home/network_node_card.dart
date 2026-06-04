@@ -12,6 +12,7 @@ class _NodeCard extends StatefulWidget {
 
 class _NodeCardState extends State<_NodeCard> {
   bool _expanded = false;
+  bool _tapStartedInsideText = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,18 +26,26 @@ class _NodeCardState extends State<_NodeCard> {
         duration: appMotionMedium,
         curve: appMotionCurve,
         alignment: Alignment.topCenter,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                ),
-              ),
+        child: GestureDetector(
+          onTapDown: (details) {
+            _tapStartedInsideText = tapStartedInsideSelectableText(
+              context,
+              details.globalPosition,
+            );
+          },
+          onTap: () {
+            if (_tapStartedInsideText) {
+              return;
+            }
+            setState(() => _expanded = !_expanded);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            IntrinsicHeight(
+            child: IntrinsicHeight(
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -56,35 +65,39 @@ class _NodeCardState extends State<_NodeCard> {
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: Text(
-                            widget.node.name,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: SelectableTextHitBoundary(
+                              child: Text(
+                                widget.node.name,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          isOnline ? '在线' : '离线',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isOnline
-                                    ? const Color(0xFF16A34A)
-                                    : const Color(0xFF9CA3AF),
-                                fontWeight: FontWeight.w500,
-                              ),
+                        SelectableTextHitBoundary(
+                          child: Text(
+                            isOnline ? '在线' : '离线',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: isOnline
+                                      ? const Color(0xFF16A34A)
+                                      : const Color(0xFF9CA3AF),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
                         ),
                         const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () => setState(() => _expanded = !_expanded),
-                          child: Icon(
-                            _expanded ? Icons.expand_less : Icons.expand_more,
-                            size: 18,
-                            color: const Color(0xFF94A3B8),
-                          ),
+                        Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 18,
+                          color: const Color(0xFF94A3B8),
                         ),
                       ],
                     ),
@@ -98,7 +111,9 @@ class _NodeCardState extends State<_NodeCard> {
                     // 展开详情
                     AnimatedCrossFade(
                       firstChild: const SizedBox.shrink(),
-                      secondChild: _NodeDetailPanel(peer: peer),
+                      secondChild: SelectableTextHitBoundary(
+                        child: _NodeDetailPanel(peer: peer),
+                      ),
                       crossFadeState: _expanded
                           ? CrossFadeState.showSecond
                           : CrossFadeState.showFirst,
@@ -109,7 +124,7 @@ class _NodeCardState extends State<_NodeCard> {
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

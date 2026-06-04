@@ -589,6 +589,7 @@ void main() {
     final initialHeight = tester.getSize(cardFinder).height;
 
     final nodeNameRect = tester.getRect(find.text('desktop-1'));
+    expect(nodeNameRect.width, lessThan(tester.getSize(cardFinder).width / 3));
     await tester.tapAt(Offset(nodeNameRect.left + 24, nodeNameRect.center.dy));
     await _pumpAppMotionFrames(tester);
 

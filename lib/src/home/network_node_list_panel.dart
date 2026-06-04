@@ -4,6 +4,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
+import '../shared/selectable_text_hit_boundary.dart';
 
 part 'network_node_card.dart';
 part 'network_node_os_icon.dart';

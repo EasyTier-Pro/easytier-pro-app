@@ -63,11 +63,16 @@ class _NodeMetaLine extends StatelessWidget {
       parts.add('运行态未知');
     }
 
-    return Text(
-      parts.join('  ·  '),
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: const Color(0xFF94A3B8),
-        fontFamily: 'Inter',
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SelectableTextHitBoundary(
+        child: Text(
+          parts.join('  ·  '),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF94A3B8),
+            fontFamily: 'Inter',
+          ),
+        ),
       ),
     );
   }
