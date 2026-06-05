@@ -2,8 +2,8 @@ part of 'workspace_home_view.dart';
 
 class _CreateNetworkForm extends StatelessWidget {
   const _CreateNetworkForm({
-    required this.name,
-    required this.ipv4Cidr,
+    required this.nameController,
+    required this.ipv4CidrController,
     required this.selectedRegionCode,
     required this.regions,
     required this.loadingRegions,
@@ -16,8 +16,8 @@ class _CreateNetworkForm extends StatelessWidget {
     required this.onRetryRegions,
   });
 
-  final String name;
-  final String ipv4Cidr;
+  final TextEditingController nameController;
+  final TextEditingController ipv4CidrController;
   final String? selectedRegionCode;
   final List<ConsoleRegion> regions;
   final bool loadingRegions;
@@ -34,6 +34,7 @@ class _CreateNetworkForm extends StatelessWidget {
     final canCreate = regions.isNotEmpty && !loadingRegions && !creating;
     final hasError = error != null && error!.isNotEmpty;
     final noRegions = !loadingRegions && regions.isEmpty;
+    final ipv4Cidr = ipv4CidrController.text;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,9 +45,8 @@ class _CreateNetworkForm extends StatelessWidget {
           label: '网络名称',
           description: '用于识别该网络的名称，如「办公网」。',
           child: FTextField(
-            key: ValueKey<String>(name),
             control: FTextFieldControl.managed(
-              initial: TextEditingValue(text: name),
+              controller: nameController,
               onChange: (value) => onNameChanged(value.text),
             ),
             size: .sm,
@@ -62,9 +62,8 @@ class _CreateNetworkForm extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               FTextField(
-                key: ValueKey<String>('cidr:$ipv4Cidr'),
                 control: FTextFieldControl.managed(
-                  initial: TextEditingValue(text: ipv4Cidr),
+                  controller: ipv4CidrController,
                   onChange: (value) => onIPv4CidrChanged(value.text),
                 ),
                 size: .sm,
@@ -126,7 +125,9 @@ class _CreateNetworkForm extends StatelessWidget {
               FButton(
                 variant: .ghost,
                 size: .sm,
-                onPress: loadingRegions ? null : () => unawaited(onRetryRegions()),
+                onPress: loadingRegions
+                    ? null
+                    : () => unawaited(onRetryRegions()),
                 child: const Icon(Icons.refresh, size: 16),
               ),
             ],
@@ -144,11 +145,7 @@ class _CreateNetworkForm extends StatelessWidget {
         ],
         if (noRegions || hasError) ...[
           const SizedBox(height: 20),
-          _ErrorBanner(
-            message: noRegions
-                ? '当前没有可用区域，暂时无法创建网络。'
-                : error!,
-          ),
+          _ErrorBanner(message: noRegions ? '当前没有可用区域，暂时无法创建网络。' : error!),
         ],
         const SizedBox(height: 20),
         SizedBox(
@@ -243,14 +240,10 @@ class _CidrPresetChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: active
-                ? const Color(0xFFE2E8F0)
-                : const Color(0xFFF8FAFC),
+            color: active ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: active
-                  ? const Color(0xFFCBD5E1)
-                  : const Color(0xFFE2E8F0),
+              color: active ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0),
             ),
           ),
           child: Text(
@@ -258,9 +251,7 @@ class _CidrPresetChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: active
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFF475569),
+              color: active ? const Color(0xFF1E293B) : const Color(0xFF475569),
             ),
           ),
         ),
@@ -334,8 +325,8 @@ class _ErrorBanner extends StatelessWidget {
 
 class _CreateNetworkPanel extends StatelessWidget {
   const _CreateNetworkPanel({
-    required this.name,
-    required this.ipv4Cidr,
+    required this.nameController,
+    required this.ipv4CidrController,
     required this.selectedRegionCode,
     required this.regions,
     required this.loadingRegions,
@@ -348,8 +339,8 @@ class _CreateNetworkPanel extends StatelessWidget {
     required this.onRetryRegions,
   });
 
-  final String name;
-  final String ipv4Cidr;
+  final TextEditingController nameController;
+  final TextEditingController ipv4CidrController;
   final String? selectedRegionCode;
   final List<ConsoleRegion> regions;
   final bool loadingRegions;
@@ -369,21 +360,18 @@ class _CreateNetworkPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '创建第一个网络',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text('创建第一个网络', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(
               '当前工作区还没有网络。先创建网络，然后把本机设备加入进去。',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF737373),
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF737373)),
             ),
             const SizedBox(height: 24),
             _CreateNetworkForm(
-              name: name,
-              ipv4Cidr: ipv4Cidr,
+              nameController: nameController,
+              ipv4CidrController: ipv4CidrController,
               selectedRegionCode: selectedRegionCode,
               regions: regions,
               loadingRegions: loadingRegions,

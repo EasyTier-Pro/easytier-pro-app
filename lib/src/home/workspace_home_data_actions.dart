@@ -192,7 +192,10 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     await _pollNetworkPeers(network);
   }
 
-  Future<void> _createNetwork({VoidCallback? onSuccess}) async {
+  Future<void> _createNetwork({
+    VoidCallback? onSuccess,
+    VoidCallback? onStateChanged,
+  }) async {
     final workspace = _workspace;
     final regionCode = _selectedRegionCode;
     final name = _newNetworkName.trim();
@@ -201,12 +204,14 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       _updateState(() {
         _createError = '请选择可用区域后再创建网络。';
       });
+      onStateChanged?.call();
       return;
     }
     if (name.isEmpty) {
       _updateState(() {
         _createError = '请输入网络名称。';
       });
+      onStateChanged?.call();
       return;
     }
 
@@ -214,6 +219,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       _isCreatingNetwork = true;
       _createError = null;
     });
+    onStateChanged?.call();
 
     try {
       final network = await widget.authService.createNetwork(
@@ -229,11 +235,12 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       _updateState(() {
         _networks = [..._networks, network];
         _selectedNetworkId = network.id;
-        _newNetworkName = '我的网络';
-        _newNetworkIPv4Cidr = '';
+        _setNewNetworkName('我的网络');
+        _setNewNetworkIPv4Cidr('');
         _isCreatingNetwork = false;
         _activeView = _DashboardView.overview;
       });
+      onStateChanged?.call();
       await _loadSingleNetworkDevices(network.id);
       unawaited(_loadNetworks());
       onSuccess?.call();
@@ -245,6 +252,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         _isCreatingNetwork = false;
         _createError = _normalizeError(error);
       });
+      onStateChanged?.call();
     }
   }
 
@@ -381,90 +389,117 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
   }
 
   Future<void> _showCreateNetworkDialog() async {
-    await showFDialog<void>(
-      context: context,
-      builder: (dialogContext, _, animation) => FDialog.raw(
-        animation: animation,
-        constraints: const BoxConstraints(minWidth: 420, maxWidth: 560),
-        builder: (context, _) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: AppSmoothScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.language_outlined,
-                        size: 22,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+    var dialogOpen = true;
+    try {
+      await showFDialog<void>(
+        context: context,
+        builder: (dialogContext, _, animation) => FDialog.raw(
+          animation: animation,
+          constraints: const BoxConstraints(minWidth: 420, maxWidth: 560),
+          builder: (context, _) => StatefulBuilder(
+            builder: (context, setDialogState) {
+              void rebuildDialog() {
+                if (dialogOpen && mounted) {
+                  setDialogState(() {});
+                }
+              }
+
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: AppSmoothScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            '创建网络',
-                            style: Theme.of(context).textTheme.titleLarge,
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.language_outlined,
+                              size: 22,
+                              color: Color(0xFF334155),
+                            ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '创建一个新的虚拟网络，用于连接不同区域的设备。',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFF94A3B8)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '创建网络',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '创建一个新的虚拟网络，用于连接不同区域的设备。',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FButton(
+                            variant: .ghost,
+                            size: .sm,
+                            onPress: () => Navigator.of(dialogContext).pop(),
+                            child: const Icon(Icons.close, size: 18),
                           ),
                         ],
                       ),
-                    ),
-                    FButton(
-                      variant: .ghost,
-                      size: .sm,
-                      onPress: () => Navigator.of(dialogContext).pop(),
-                      child: const Icon(Icons.close, size: 18),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                      _CreateNetworkForm(
+                        nameController: _newNetworkNameController,
+                        ipv4CidrController: _newNetworkIPv4CidrController,
+                        selectedRegionCode: _selectedRegionCode,
+                        regions: _activeRegions,
+                        loadingRegions: _isLoadingRegions,
+                        creating: _isCreatingNetwork,
+                        error: _createError ?? _regionError,
+                        onNameChanged: (value) {
+                          _updateState(() => _setNewNetworkName(value));
+                          rebuildDialog();
+                        },
+                        onIPv4CidrChanged: (value) {
+                          _updateState(() => _setNewNetworkIPv4Cidr(value));
+                          rebuildDialog();
+                        },
+                        onRegionChanged: (value) {
+                          _updateState(() => _selectedRegionCode = value);
+                          rebuildDialog();
+                        },
+                        onCreate: () async {
+                          await _createNetwork(
+                            onStateChanged: rebuildDialog,
+                            onSuccess: () {
+                              if (Navigator.of(dialogContext).canPop()) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                            },
+                          );
+                        },
+                        onRetryRegions: () async {
+                          await _loadRegions();
+                          rebuildDialog();
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 24),
-                _CreateNetworkForm(
-                  name: _newNetworkName,
-                  ipv4Cidr: _newNetworkIPv4Cidr,
-                  selectedRegionCode: _selectedRegionCode,
-                  regions: _activeRegions,
-                  loadingRegions: _isLoadingRegions,
-                  creating: _isCreatingNetwork,
-                  error: _createError ?? _regionError,
-                  onNameChanged: (value) =>
-                      _updateState(() => _newNetworkName = value),
-                  onIPv4CidrChanged: (value) =>
-                      _updateState(() => _newNetworkIPv4Cidr = value),
-                  onRegionChanged: (value) =>
-                      _updateState(() => _selectedRegionCode = value),
-                  onCreate: () async {
-                    await _createNetwork(
-                      onSuccess: () {
-                        if (Navigator.of(dialogContext).canPop()) {
-                          Navigator.of(dialogContext).pop();
-                        }
-                      },
-                    );
-                  },
-                  onRetryRegions: _loadRegions,
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      dialogOpen = false;
+    }
   }
 }

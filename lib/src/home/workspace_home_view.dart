@@ -77,6 +77,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   _DashboardView _activeView = _DashboardView.overview;
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
+  final TextEditingController _newNetworkNameController = TextEditingController(
+    text: '我的网络',
+  );
+  final TextEditingController _newNetworkIPv4CidrController =
+      TextEditingController();
   String? _selectedRegionCode;
   int _networkRequestId = 0;
   int _deviceRequestId = 0;
@@ -131,6 +136,26 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     setState(fn);
   }
 
+  void _setNewNetworkName(String value) {
+    _newNetworkName = value;
+    if (_newNetworkNameController.text != value) {
+      _newNetworkNameController.value = TextEditingValue(
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
+      );
+    }
+  }
+
+  void _setNewNetworkIPv4Cidr(String value) {
+    _newNetworkIPv4Cidr = value;
+    if (_newNetworkIPv4CidrController.text != value) {
+      _newNetworkIPv4CidrController.value = TextEditingValue(
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +167,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void dispose() {
     _trafficPollTimer?.cancel();
     _peerPollTimer?.cancel();
+    _newNetworkNameController.dispose();
+    _newNetworkIPv4CidrController.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     super.dispose();
   }

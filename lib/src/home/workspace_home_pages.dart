@@ -61,17 +61,17 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           const SizedBox(height: 260, child: Center(child: FCircularProgress()))
         else if (_networks.isEmpty)
           _CreateNetworkPanel(
-            name: _newNetworkName,
-            ipv4Cidr: _newNetworkIPv4Cidr,
+            nameController: _newNetworkNameController,
+            ipv4CidrController: _newNetworkIPv4CidrController,
             selectedRegionCode: _selectedRegionCode,
             regions: _activeRegions,
             loadingRegions: _isLoadingRegions,
             creating: _isCreatingNetwork,
             error: _createError ?? _regionError,
             onNameChanged: (value) =>
-                _updateState(() => _newNetworkName = value),
+                _updateState(() => _setNewNetworkName(value)),
             onIPv4CidrChanged: (value) =>
-                _updateState(() => _newNetworkIPv4Cidr = value),
+                _updateState(() => _setNewNetworkIPv4Cidr(value)),
             onRegionChanged: (value) =>
                 _updateState(() => _selectedRegionCode = value),
             onCreate: _createNetwork,
@@ -112,16 +112,16 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
 
     if (_networks.isEmpty) {
       return _CreateNetworkPanel(
-        name: _newNetworkName,
-        ipv4Cidr: _newNetworkIPv4Cidr,
+        nameController: _newNetworkNameController,
+        ipv4CidrController: _newNetworkIPv4CidrController,
         selectedRegionCode: _selectedRegionCode,
         regions: _activeRegions,
         loadingRegions: _isLoadingRegions,
         creating: _isCreatingNetwork,
         error: _createError ?? _regionError,
-        onNameChanged: (value) => _updateState(() => _newNetworkName = value),
+        onNameChanged: (value) => _updateState(() => _setNewNetworkName(value)),
         onIPv4CidrChanged: (value) =>
-            _updateState(() => _newNetworkIPv4Cidr = value),
+            _updateState(() => _setNewNetworkIPv4Cidr(value)),
         onRegionChanged: (value) =>
             _updateState(() => _selectedRegionCode = value),
         onCreate: _createNetwork,

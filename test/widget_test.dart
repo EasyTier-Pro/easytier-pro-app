@@ -786,6 +786,95 @@ void main() {
     expect(find.byType(FSwitch), findsOneWidget);
   });
 
+  testWidgets('create network dialog submits selected CIDR preset', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('network-create-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('172.16.0.0/16'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.widgetWithText(FButton, '创建网络'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(authService.createdNetworkNames, <String>['我的网络']);
+    expect(authService.createdNetworkIPv4Cidrs, <String?>['172.16.0.0/16']);
+  });
+
+  testWidgets('create network dialog shows name validation error', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('network-create-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(FDialog),
+            matching: find.byType(FTextField),
+          )
+          .first,
+      '',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.widgetWithText(FButton, '创建网络'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入网络名称。'), findsOneWidget);
+    expect(authService.createdNetworkNames, isEmpty);
+    expect(find.byType(FDialog), findsOneWidget);
+  });
+
   testWidgets('places network refresh control after create action', (
     WidgetTester tester,
   ) async {
