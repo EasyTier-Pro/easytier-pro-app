@@ -1072,7 +1072,10 @@ void main() {
     await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('尚未批准'), findsOneWidget);
+    expect(
+      find.text('本机设备尚未批准，请先在控制台批准设备。'),
+      findsOneWidget,
+    );
     expect(authService.attachedNetworkIds, isEmpty);
   });
 

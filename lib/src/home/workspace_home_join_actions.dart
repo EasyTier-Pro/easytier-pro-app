@@ -61,8 +61,11 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         network.id,
         _JoinNetworkState.joinedWithIp(joinedLocalDevice?.ipv4),
       );
+      _showNetworkActionToast('「${network.name}」已连接');
     } catch (error) {
-      _setJoinError(network.id, _normalizeError(error));
+      final message = _normalizeError(error);
+      _setJoinError(network.id, message);
+      _showNetworkActionToast('加入「${network.name}」失败：$message', destructive: true);
     }
   }
 
@@ -94,14 +97,17 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         nodeId: localDevice.id,
       );
       _markNetworkLeft(network.id, localDevice.id, machineId);
+      _showNetworkActionToast('「${network.name}」已断开连接');
     } catch (error) {
+      final message = _normalizeError(error);
       _setJoinState(
         network.id,
         _JoinNetworkState.joinedWithIp(
           localDevice.ipv4,
-          message: '退出网络失败：${_normalizeError(error)}',
+          message: '退出网络失败：$message',
         ),
       );
+      _showNetworkActionToast('退出「${network.name}」失败：$message', destructive: true);
     }
   }
 

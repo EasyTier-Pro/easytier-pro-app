@@ -393,24 +393,6 @@ class _NetworkSwitchTile extends StatelessWidget {
                                   loading: isLoading,
                                   onChange: (_) => onToggle?.call(),
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  isLoading
-                                      ? '处理中'
-                                      : joined
-                                      ? '已连接'
-                                      : '未连接',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: isLoading
-                                            ? const Color(0xFF64748B)
-                                            : joined
-                                            ? const Color(0xFF16A34A)
-                                            : const Color(0xFF94A3B8),
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 11,
-                                      ),
-                                ),
                               ],
                             ),
                           ],
