@@ -197,6 +197,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     final failed = state.phase == _JoinPhase.error;
     final localIpv4 = state.localIpv4?.trim();
     final cidrText = network.ipv4Cidr.trim();
+    final history = trafficHistory;
 
     final switchValue = joined || joining;
     final isLoading = joining || leaving;
@@ -389,24 +390,13 @@ class _NetworkSwitchTile extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            if (joined) ...[
-                              Builder(
-                                builder: (context) {
-                                  final history = trafficHistory;
-                                  if (history == null || history.length < 2) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _NetworkTrafficSparkline(
-                                        history: history,
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                  );
-                                },
+                            if (joined &&
+                                history != null &&
+                                history.isNotEmpty) ...[
+                              _NetworkTrafficSparkline(
+                                history: history,
                               ),
+                              const SizedBox(width: 8),
                             ],
                             Column(
                               mainAxisSize: MainAxisSize.min,
@@ -524,24 +514,30 @@ class _NetworkTrafficSparkline extends StatelessWidget {
     final maxRate = history
         .map((h) => math.max(h.downloadRate, h.uploadRate))
         .reduce(math.max);
-    final yMax = maxRate <= 0 ? 1.0 : maxRate * 1.1;
+    final hasTraffic = maxRate > 0;
+    final yMax = hasTraffic ? maxRate * 1.15 : 1.0;
+
+    final isSinglePoint = history.length == 1;
+    final maxX = isSinglePoint ? 1.0 : (history.length - 1).toDouble();
 
     final downloadSpots = <FlSpot>[
       for (var i = 0; i < history.length; i++)
         FlSpot(i.toDouble(), history[i].downloadRate),
+      if (isSinglePoint) FlSpot(1.0, history[0].downloadRate),
     ];
     final uploadSpots = <FlSpot>[
       for (var i = 0; i < history.length; i++)
         FlSpot(i.toDouble(), history[i].uploadRate),
+      if (isSinglePoint) FlSpot(1.0, history[0].uploadRate),
     ];
 
     return SizedBox(
-      width: 80,
-      height: 36,
+      width: 100,
+      height: 40,
       child: LineChart(
         LineChartData(
           minX: 0,
-          maxX: (history.length - 1).toDouble(),
+          maxX: maxX,
           minY: 0,
           maxY: yMax,
           gridData: const FlGridData(show: false),
@@ -549,26 +545,40 @@ class _NetworkTrafficSparkline extends StatelessWidget {
           borderData: FlBorderData(show: false),
           lineTouchData: const LineTouchData(enabled: false),
           lineBarsData: [
-            _buildLine(downloadSpots, downloadColor),
-            _buildLine(uploadSpots, uploadColor),
+            _buildLine(downloadSpots, downloadColor, showDot: isSinglePoint),
+            _buildLine(uploadSpots, uploadColor, showDot: isSinglePoint),
+            if (!hasTraffic)
+              LineChartBarData(
+                spots: [FlSpot(0, 0), FlSpot(maxX, 0)],
+                barWidth: 1,
+                dotData: FlDotData(show: false),
+                color: const Color(0xFFCBD5E1),
+                belowBarData: BarAreaData(show: false),
+              ),
           ],
         ),
       ),
     );
   }
 
-  LineChartBarData _buildLine(List<FlSpot> spots, Color color) {
+  LineChartBarData _buildLine(List<FlSpot> spots, Color color, {bool showDot = false}) {
     return LineChartBarData(
       spots: spots,
-      isCurved: true,
+      isCurved: spots.length > 2,
       curveSmoothness: 0.3,
-      barWidth: 1.2,
+      barWidth: 1.8,
       isStrokeCapRound: true,
-      dotData: const FlDotData(show: false),
+      dotData: FlDotData(show: showDot, getDotPainter: (spot, percent, bar, index) {
+        return FlDotCirclePainter(
+          radius: 2.5,
+          color: color,
+          strokeWidth: 0,
+        );
+      }),
       color: color,
       belowBarData: BarAreaData(
         show: true,
-        color: color.withAlpha(20),
+        color: color.withAlpha(35),
       ),
     );
   }
