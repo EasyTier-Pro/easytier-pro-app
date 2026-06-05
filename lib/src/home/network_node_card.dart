@@ -45,13 +45,12 @@ class _NodeCardState extends State<_NodeCard> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            child: IntrinsicHeight(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                     // 首行：名称 + 状态文字 + 展开箭头
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -122,7 +121,6 @@ class _NodeCardState extends State<_NodeCard> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
