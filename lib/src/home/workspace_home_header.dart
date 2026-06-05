@@ -36,114 +36,116 @@ class _DashboardHeader extends StatelessWidget {
     final trimmedName = userName.trim();
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFFFFFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact =
-              constraints.maxWidth < _dashboardHeaderCompactBreakpoint;
+    return SelectionContainer.disabled(
+      child: Container(
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact =
+                constraints.maxWidth < _dashboardHeaderCompactBreakpoint;
 
-          return Row(
-            children: [
-              const _BrandMark(),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: appScrollPhysics,
-                  child: Row(
-                    children: [
-                      FButton(
-                        variant: activeView == _DashboardView.overview
-                            ? .secondary
-                            : .ghost,
-                        size: .sm,
-                        onPress: onShowOverview,
-                        child: const Text('首页'),
-                      ),
-                      if (networks.isNotEmpty) ...[
+            return Row(
+              children: [
+                const _BrandMark(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: appScrollPhysics,
+                    child: Row(
+                      children: [
+                        FButton(
+                          variant: activeView == _DashboardView.overview
+                              ? .secondary
+                              : .ghost,
+                          size: .sm,
+                          onPress: onShowOverview,
+                          child: const Text('首页'),
+                        ),
+                        if (networks.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          _NetworkTabMenu(
+                            active: activeView == _DashboardView.network,
+                            networks: networks,
+                            selectedNetworkId: selectedNetworkId,
+                            onSelectNetwork: onSelectNetwork,
+                          ),
+                        ],
                         const SizedBox(width: 6),
-                        _NetworkTabMenu(
-                          active: activeView == _DashboardView.network,
-                          networks: networks,
-                          selectedNetworkId: selectedNetworkId,
-                          onSelectNetwork: onSelectNetwork,
+                        FButton(
+                          variant: activeView == _DashboardView.devices
+                              ? .secondary
+                              : .ghost,
+                          size: .sm,
+                          onPress: onShowDevices,
+                          child: const Text('设备'),
                         ),
                       ],
-                      const SizedBox(width: 6),
-                      FButton(
-                        variant: activeView == _DashboardView.devices
-                            ? .secondary
-                            : .ghost,
-                        size: .sm,
-                        onPress: onShowDevices,
-                        child: const Text('设备'),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              if (!compact) const SizedBox(width: 16),
-              if (!compact) ...[
-                _HeaderMetric(
-                  label: '设备',
-                  value: '$deviceCount',
-                  icon: Icons.devices_other_outlined,
-                ),
-                const SizedBox(width: 10),
-                _HeaderMetric(
-                  label: '在线',
-                  value: '$onlineDeviceCount',
-                  icon: Icons.circle,
-                  color: onlineDeviceCount > 0
-                      ? const Color(0xFF16A34A)
-                      : Colors.grey,
-                ),
-                const SizedBox(width: 10),
-                ValueListenableBuilder<CoreRunStatus>(
-                  valueListenable: coreStatusListenable,
-                  builder: (context, status, _) {
-                    final color = switch (status.phase) {
-                      CoreRunPhase.running => const Color(0xFF16A34A),
-                      CoreRunPhase.repairing => const Color(0xFFF59E0B),
-                      CoreRunPhase.checking => const Color(0xFF2563EB),
-                      CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
-                      CoreRunPhase.error => const Color(0xFFDC2626),
-                      CoreRunPhase.signedOut => Colors.grey,
-                    };
-                    return Row(
-                      children: [
-                        Icon(Icons.circle, size: 12, color: color),
-                        const SizedBox(width: 5),
-                        Text(
-                          '引擎',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: const Color(0xFF737373),
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ],
-                    );
-                  },
+                if (!compact) const SizedBox(width: 16),
+                if (!compact) ...[
+                  _HeaderMetric(
+                    label: '设备',
+                    value: '$deviceCount',
+                    icon: Icons.devices_other_outlined,
+                  ),
+                  const SizedBox(width: 10),
+                  _HeaderMetric(
+                    label: '在线',
+                    value: '$onlineDeviceCount',
+                    icon: Icons.circle,
+                    color: onlineDeviceCount > 0
+                        ? const Color(0xFF16A34A)
+                        : Colors.grey,
+                  ),
+                  const SizedBox(width: 10),
+                  ValueListenableBuilder<CoreRunStatus>(
+                    valueListenable: coreStatusListenable,
+                    builder: (context, status, _) {
+                      final color = switch (status.phase) {
+                        CoreRunPhase.running => const Color(0xFF16A34A),
+                        CoreRunPhase.repairing => const Color(0xFFF59E0B),
+                        CoreRunPhase.checking => const Color(0xFF2563EB),
+                        CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
+                        CoreRunPhase.error => const Color(0xFFDC2626),
+                        CoreRunPhase.signedOut => Colors.grey,
+                      };
+                      return Row(
+                        children: [
+                          Icon(Icons.circle, size: 12, color: color),
+                          const SizedBox(width: 5),
+                          Text(
+                            '引擎',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: const Color(0xFF737373),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(width: 12),
+                _UserMenu(
+                  userName: trimmedName,
+                  workspaceName: workspaceName,
+                  initial: initial,
+                  onShowSettings: onShowSettings,
+                  onLogout: onLogout,
                 ),
               ],
-              const SizedBox(width: 12),
-              _UserMenu(
-                userName: trimmedName,
-                workspaceName: workspaceName,
-                initial: initial,
-                onShowSettings: onShowSettings,
-                onLogout: onLogout,
-              ),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -185,7 +187,9 @@ class _NetworkTabMenu extends StatelessWidget {
             for (final network in networks)
               FItem(
                 key: ValueKey<String>('network-tab-option-${network.id}'),
-                title: Text(network.name, overflow: TextOverflow.ellipsis),
+                title: SelectionContainer.disabled(
+                  child: Text(network.name, overflow: TextOverflow.ellipsis),
+                ),
                 prefix: SizedBox(
                   width: 18,
                   child: network.id == selectedNetwork.id

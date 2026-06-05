@@ -7,32 +7,15 @@ import 'package:flutter/rendering.dart';
 class AppTextSelectionController {
   AppTextSelectionController();
 
+  final GlobalKey<SelectionAreaState> selectionAreaKey =
+      GlobalKey<SelectionAreaState>();
   final ValueNotifier<bool> hasSelection = ValueNotifier<bool>(false);
-  GlobalKey<SelectionAreaState>? _activeSelectionAreaKey;
 
-  void handleSelectionChanged(
-    GlobalKey<SelectionAreaState> selectionAreaKey,
-    SelectedContent? content,
-  ) {
-    final hasContent = content?.plainText.isNotEmpty == true;
-    if (hasContent) {
-      _activeSelectionAreaKey = selectionAreaKey;
-      hasSelection.value = true;
-      return;
-    }
-    if (_activeSelectionAreaKey == selectionAreaKey) {
-      _activeSelectionAreaKey = null;
-      hasSelection.value = false;
-    }
+  void handleSelectionChanged(SelectedContent? content) {
+    hasSelection.value = content?.plainText.isNotEmpty == true;
   }
 
   void clearSelection() {
-    final selectionAreaKey = _activeSelectionAreaKey;
-    _activeSelectionAreaKey = null;
-    if (selectionAreaKey == null) {
-      hasSelection.value = false;
-      return;
-    }
     final state = selectionAreaKey.currentState;
     if (state == null || !state.mounted) {
       hasSelection.value = false;
@@ -42,15 +25,7 @@ class AppTextSelectionController {
     hasSelection.value = false;
   }
 
-  void detach(GlobalKey<SelectionAreaState> selectionAreaKey) {
-    if (_activeSelectionAreaKey == selectionAreaKey) {
-      _activeSelectionAreaKey = null;
-      hasSelection.value = false;
-    }
-  }
-
   void reset() {
-    _activeSelectionAreaKey = null;
     hasSelection.value = false;
   }
 }
@@ -85,12 +60,16 @@ class _AppTextSelectionTapCleanerState
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _handlePointerDown,
-      onPointerMove: _handlePointerMove,
-      onPointerUp: _handlePointerUp,
-      onPointerCancel: (_) => _resetTapTracking(),
-      child: widget.child,
+    return SelectionArea(
+      key: appTextSelectionController.selectionAreaKey,
+      onSelectionChanged: appTextSelectionController.handleSelectionChanged,
+      child: Listener(
+        onPointerDown: _handlePointerDown,
+        onPointerMove: _handlePointerMove,
+        onPointerUp: _handlePointerUp,
+        onPointerCancel: (_) => _resetTapTracking(),
+        child: widget.child,
+      ),
     );
   }
 

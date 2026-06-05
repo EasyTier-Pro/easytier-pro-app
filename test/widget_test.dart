@@ -928,7 +928,10 @@ void main() {
     expect(
       _hasSelectionAreaAncestor(
         tester,
-        find.byKey(const ValueKey<String>('network-tab-option-net-2')),
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('network-tab-option-net-2')),
+          matching: find.text('Research'),
+        ),
       ),
       isFalse,
     );
@@ -1072,10 +1075,7 @@ void main() {
     await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('本机设备尚未批准，请先在控制台批准设备。'),
-      findsOneWidget,
-    );
+    expect(find.text('本机设备尚未批准，请先在控制台批准设备。'), findsOneWidget);
     expect(authService.attachedNetworkIds, isEmpty);
   });
 
@@ -1485,7 +1485,12 @@ bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
   final element = tester.element(finder);
   var found = false;
   element.visitAncestorElements((ancestor) {
-    if (ancestor.widget is SelectionArea) {
+    final widget = ancestor.widget;
+    if (widget is SelectionContainer && widget.registrar == null) {
+      found = false;
+      return false;
+    }
+    if (widget is SelectionArea) {
       found = true;
       return false;
     }
