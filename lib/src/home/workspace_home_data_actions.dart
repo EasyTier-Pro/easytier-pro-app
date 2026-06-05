@@ -393,8 +393,48 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('创建网络', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.language_outlined,
+                        size: 22,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '创建网络',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '创建一个新的虚拟网络，用于连接不同区域的设备。',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFF94A3B8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FButton(
+                      variant: .ghost,
+                      size: .sm,
+                      onPress: () => Navigator.of(dialogContext).pop(),
+                      child: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 _CreateNetworkForm(
                   name: _newNetworkName,
                   ipv4Cidr: _newNetworkIPv4Cidr,
