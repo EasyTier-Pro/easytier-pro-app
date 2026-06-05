@@ -107,18 +107,20 @@ class _CreateNetworkForm extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: FSelect<String>(
-                  key: ValueKey<String?>(selectedRegionCode),
-                  control: FSelectControl.lifted(
-                    value: selectedRegionCode,
-                    onChange: onRegionChanged,
+                child: ExcludeSemantics(
+                  child: FSelect<String>(
+                    key: ValueKey<String?>(selectedRegionCode),
+                    control: FSelectControl.lifted(
+                      value: selectedRegionCode,
+                      onChange: onRegionChanged,
+                    ),
+                    size: .sm,
+                    items: {
+                      for (final region in regions)
+                        region.displayName: region.code,
+                    },
+                    enabled: !loadingRegions && regions.isNotEmpty,
                   ),
-                  size: .sm,
-                  items: {
-                    for (final region in regions)
-                      region.displayName: region.code,
-                  },
-                  enabled: !loadingRegions && regions.isNotEmpty,
                 ),
               ),
               const SizedBox(width: 8),

@@ -18,10 +18,15 @@ class _SettingsPanel extends StatelessWidget {
     String message, {
     bool destructive = false,
   }) {
-    showFToast(
+    showRawFToast(
       context: context,
       variant: destructive ? .destructive : .primary,
-      title: Text(message),
+      builder: (context, entry) => ExcludeSemantics(
+        child: FToast(
+          variant: destructive ? .destructive : .primary,
+          title: Text(message),
+        ),
+      ),
     );
   }
 
