@@ -338,6 +338,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
               children: [
                 for (final device in devices)
                   FItem(
+                    key: ValueKey<String>('managed-device-${device.id}'),
                     prefix: _StatusDot(online: device.online),
                     title: Text(device.hostname),
                     subtitle: Text(

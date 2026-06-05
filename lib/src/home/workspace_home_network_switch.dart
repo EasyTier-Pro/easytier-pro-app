@@ -76,6 +76,7 @@ class _NetworkSwitchList extends StatelessWidget {
             for (var i = 0; i < networks.length; i++) ...[
               if (i > 0) const SizedBox(height: 10),
               _NetworkSwitchTile(
+                key: ValueKey<String>('network-switch-${networks[i].id}'),
                 network: networks[i],
                 devices:
                     networkDevices[networks[i].id] ?? const <NetworkDevice>[],
@@ -172,6 +173,7 @@ class _NetworkRefreshButton extends StatelessWidget {
 
 class _NetworkSwitchTile extends StatelessWidget {
   const _NetworkSwitchTile({
+    super.key,
     required this.network,
     required this.devices,
     required this.state,
@@ -539,31 +541,33 @@ class _NetworkTrafficSparkline extends StatelessWidget {
       if (isSinglePoint) FlSpot(1.0, history[0].uploadRate),
     ];
 
-    return SizedBox(
-      width: 100,
-      height: 40,
-      child: LineChart(
-        LineChartData(
-          minX: 0,
-          maxX: maxX,
-          minY: 0,
-          maxY: yMax,
-          gridData: const FlGridData(show: false),
-          titlesData: const FlTitlesData(show: false),
-          borderData: FlBorderData(show: false),
-          lineTouchData: const LineTouchData(enabled: false),
-          lineBarsData: [
-            _buildLine(downloadSpots, downloadColor, showDot: isSinglePoint),
-            _buildLine(uploadSpots, uploadColor, showDot: isSinglePoint),
-            if (!hasTraffic)
-              LineChartBarData(
-                spots: [FlSpot(0, 0), FlSpot(maxX, 0)],
-                barWidth: 1,
-                dotData: FlDotData(show: false),
-                color: const Color(0xFFCBD5E1),
-                belowBarData: BarAreaData(show: false),
-              ),
-          ],
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: 100,
+        height: 40,
+        child: LineChart(
+          LineChartData(
+            minX: 0,
+            maxX: maxX,
+            minY: 0,
+            maxY: yMax,
+            gridData: const FlGridData(show: false),
+            titlesData: const FlTitlesData(show: false),
+            borderData: FlBorderData(show: false),
+            lineTouchData: const LineTouchData(enabled: false),
+            lineBarsData: [
+              _buildLine(downloadSpots, downloadColor, showDot: isSinglePoint),
+              _buildLine(uploadSpots, uploadColor, showDot: isSinglePoint),
+              if (!hasTraffic)
+                LineChartBarData(
+                  spots: [FlSpot(0, 0), FlSpot(maxX, 0)],
+                  barWidth: 1,
+                  dotData: FlDotData(show: false),
+                  color: const Color(0xFFCBD5E1),
+                  belowBarData: BarAreaData(show: false),
+                ),
+            ],
+          ),
         ),
       ),
     );

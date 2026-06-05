@@ -190,6 +190,7 @@ class _SettingsPanel extends StatelessWidget {
               itemBuilder: (context, index) {
                 return switch (index) {
                   0 => FCard(
+                    key: const ValueKey<String>('settings-account-card'),
                     title: const Text('账号'),
                     child: Column(
                       children: [
@@ -233,6 +234,7 @@ class _SettingsPanel extends StatelessWidget {
                     ),
                   ),
                   1 => FCard(
+                    key: const ValueKey<String>('settings-core-card'),
                     title: const Text('连接引擎'),
                     child: ValueListenableBuilder<CoreRunStatus>(
                       valueListenable: coreLifecycleService.status,
@@ -324,6 +326,7 @@ class _SettingsPanel extends StatelessWidget {
                     ),
                   ),
                   _ => FCard(
+                    key: const ValueKey<String>('settings-diagnostics-card'),
                     title: const Text('诊断日志'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

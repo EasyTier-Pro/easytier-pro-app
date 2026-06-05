@@ -64,11 +64,18 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
             ),
           );
 
-    return AnimatedSwitcher(
-      duration: appMotionMedium,
-      reverseDuration: appMotionShort,
-      transitionBuilder: appFadeSlideTransition,
-      child: content,
+    return Semantics(
+      container: true,
+      label: widget.nodes.isEmpty
+          ? '网络节点列表，暂无节点'
+          : '网络节点列表，共 ${widget.nodes.length} 个节点',
+      explicitChildNodes: true,
+      child: AnimatedSwitcher(
+        duration: appMotionMedium,
+        reverseDuration: appMotionShort,
+        transitionBuilder: appFadeSlideTransition,
+        child: content,
+      ),
     );
   }
 }
