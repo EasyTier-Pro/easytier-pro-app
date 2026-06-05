@@ -520,25 +520,30 @@ class _NetworkTrafficSparkline extends StatelessWidget {
   Widget build(BuildContext context) {
     final downloadColor = const Color(0xFF16A34A);
     final uploadColor = const Color(0xFF2563EB);
+    const maxHistoryPoints =
+        _WorkspaceHomeViewState._maxNetworkTrafficHistoryPoints;
+    final visibleHistory = history.length > maxHistoryPoints
+        ? history.sublist(history.length - maxHistoryPoints)
+        : history;
 
-    final maxRate = history
+    final maxRate = visibleHistory
         .map((h) => math.max(h.downloadRate, h.uploadRate))
         .reduce(math.max);
     final hasTraffic = maxRate > 0;
     final yMax = hasTraffic ? maxRate * 1.15 : 1.0;
 
-    final isSinglePoint = history.length == 1;
-    final maxX = isSinglePoint ? 1.0 : (history.length - 1).toDouble();
+    final isSinglePoint = visibleHistory.length == 1;
+    const minX = 0.0;
+    final maxX = (maxHistoryPoints - 1).toDouble();
+    final firstX = maxX - (visibleHistory.length - 1);
 
     final downloadSpots = <FlSpot>[
-      for (var i = 0; i < history.length; i++)
-        FlSpot(i.toDouble(), history[i].downloadRate),
-      if (isSinglePoint) FlSpot(1.0, history[0].downloadRate),
+      for (var i = 0; i < visibleHistory.length; i++)
+        FlSpot(firstX + i, visibleHistory[i].downloadRate),
     ];
     final uploadSpots = <FlSpot>[
-      for (var i = 0; i < history.length; i++)
-        FlSpot(i.toDouble(), history[i].uploadRate),
-      if (isSinglePoint) FlSpot(1.0, history[0].uploadRate),
+      for (var i = 0; i < visibleHistory.length; i++)
+        FlSpot(firstX + i, visibleHistory[i].uploadRate),
     ];
 
     return ExcludeSemantics(
@@ -547,7 +552,7 @@ class _NetworkTrafficSparkline extends StatelessWidget {
         height: 40,
         child: LineChart(
           LineChartData(
-            minX: 0,
+            minX: minX,
             maxX: maxX,
             minY: 0,
             maxY: yMax,
@@ -560,7 +565,7 @@ class _NetworkTrafficSparkline extends StatelessWidget {
               _buildLine(uploadSpots, uploadColor, showDot: isSinglePoint),
               if (!hasTraffic)
                 LineChartBarData(
-                  spots: [FlSpot(0, 0), FlSpot(maxX, 0)],
+                  spots: [const FlSpot(minX, 0), FlSpot(maxX, 0)],
                   barWidth: 1,
                   dotData: FlDotData(show: false),
                   color: const Color(0xFFCBD5E1),

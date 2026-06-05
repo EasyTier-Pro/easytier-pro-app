@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -149,6 +150,88 @@ void main() {
     expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('keeps traffic sparkline x-axis stable as samples grow', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: 'office-network',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 3072,
+            uploadBytes: 6144,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 5120,
+            uploadBytes: 10240,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 4),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+
+    _expectTrafficSparklineWindow(tester, <double>[29]);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    _expectTrafficSparklineWindow(tester, <double>[28, 29]);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    _expectTrafficSparklineWindow(tester, <double>[27, 28, 29]);
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -1645,6 +1728,23 @@ void _useDesktopViewport(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+}
+
+void _expectTrafficSparklineWindow(
+  WidgetTester tester,
+  List<double> expectedXs,
+) {
+  final chart = tester.widget<LineChart>(find.byType(LineChart));
+
+  expect(chart.data.minX, 0);
+  expect(chart.data.maxX, 29);
+  expect(chart.data.lineBarsData.length, greaterThanOrEqualTo(2));
+
+  for (final line in chart.data.lineBarsData.take(2)) {
+    final xs = line.spots.map((spot) => spot.x).toList(growable: false);
+    expect(xs, expectedXs);
+    expect(xs.last, 29);
+  }
 }
 
 bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
