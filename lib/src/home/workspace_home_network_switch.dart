@@ -573,6 +573,7 @@ class _NetworkTrafficSparkline extends StatelessWidget {
                 ),
             ],
           ),
+          duration: Duration.zero,
         ),
       ),
     );

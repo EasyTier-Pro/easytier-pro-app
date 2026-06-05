@@ -1736,6 +1736,7 @@ void _expectTrafficSparklineWindow(
 ) {
   final chart = tester.widget<LineChart>(find.byType(LineChart));
 
+  expect(chart.duration, Duration.zero);
   expect(chart.data.minX, 0);
   expect(chart.data.maxX, 29);
   expect(chart.data.lineBarsData.length, greaterThanOrEqualTo(2));
