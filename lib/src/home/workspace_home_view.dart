@@ -99,6 +99,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   static const int _maxNetworkTrafficHistoryPoints = 30;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
+  Map<String, bool> _networkInstanceReady = const <String, bool>{};
   Map<String, CoreNetworkTrafficTotals> _previousTrafficTotals =
       const <String, CoreNetworkTrafficTotals>{};
   Map<String, Map<String, CorePeerStatus>> _networkPeerStatuses =

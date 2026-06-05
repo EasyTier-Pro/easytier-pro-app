@@ -5,6 +5,7 @@ class _NetworkSwitchList extends StatelessWidget {
     required this.networks,
     required this.networkDevices,
     required this.trafficByNetworkId,
+    required this.networkInstanceReady,
     required this.trafficHistoryFor,
     required this.joinStateFor,
     required this.onJoin,
@@ -18,6 +19,7 @@ class _NetworkSwitchList extends StatelessWidget {
   final List<ConsoleNetwork> networks;
   final Map<String, List<NetworkDevice>> networkDevices;
   final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
+  final Map<String, bool> networkInstanceReady;
   final Map<String, List<_TrafficHistoryPoint>> trafficHistoryFor;
   final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
   final Future<void> Function(ConsoleNetwork) onJoin;
@@ -79,6 +81,7 @@ class _NetworkSwitchList extends StatelessWidget {
                     networkDevices[networks[i].id] ?? const <NetworkDevice>[],
                 state: joinStateFor(networks[i]),
                 traffic: trafficByNetworkId[networks[i].id],
+                instanceReady: networkInstanceReady[networks[i].id] == true,
                 trafficHistory: trafficHistoryFor[networks[i].id],
                 onJoin: () => unawaited(onJoin(networks[i])),
                 onLeave: () => unawaited(onLeave(networks[i])),
@@ -173,6 +176,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     required this.devices,
     required this.state,
     required this.traffic,
+    required this.instanceReady,
     required this.trafficHistory,
     required this.onJoin,
     required this.onLeave,
@@ -183,6 +187,7 @@ class _NetworkSwitchTile extends StatelessWidget {
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
   final _NetworkTrafficSnapshot? traffic;
+  final bool instanceReady;
   final List<_TrafficHistoryPoint>? trafficHistory;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
@@ -193,6 +198,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     final attachedDevices = devices.where((d) => d.attached).toList();
     final onlineCount = attachedDevices.where((d) => d.online).length;
     final joined = state.phase == _JoinPhase.joined;
+    final locallyConnected = joined && instanceReady;
     final joining = state.phase == _JoinPhase.joining;
     final leaving = state.phase == _JoinPhase.leaving;
     final failed = state.phase == _JoinPhase.error;
@@ -212,8 +218,10 @@ class _NetworkSwitchTile extends StatelessWidget {
             }
           };
 
-    final accentColor = joined
+    final accentColor = locallyConnected
         ? const Color(0xFF16A34A)
+        : joined
+        ? const Color(0xFFF59E0B)
         : failed
         ? const Color(0xFFDC2626)
         : const Color(0xFFCBD5E1);
@@ -325,7 +333,13 @@ class _NetworkSwitchTile extends StatelessWidget {
                                           WrapCrossAlignment.center,
                                       children: [
                                         _IpBadge(ip: localIpv4),
-                                        if (traffic != null) ...[
+                                        if (!instanceReady)
+                                          const _StatusChip(
+                                            label: '实例启动中',
+                                            active: false,
+                                          ),
+                                        if (instanceReady &&
+                                            traffic != null) ...[
                                           _MiniTrafficPill(
                                             icon: Icons.arrow_downward,
                                             label: _formatTrafficRate(
@@ -391,7 +405,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            if (joined &&
+                            if (locallyConnected &&
                                 history != null &&
                                 history.isNotEmpty) ...[
                               _NetworkTrafficSparkline(history: history),

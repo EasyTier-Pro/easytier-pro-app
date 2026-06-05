@@ -20,6 +20,7 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         network.id,
         _JoinNetworkState.joinedWithIp(existingLocalDevice.ipv4),
       );
+      unawaited(_refreshNetworkInstanceState(network));
       return;
     }
 
@@ -43,6 +44,7 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
           network.id,
           _JoinNetworkState.joinedWithIp(refreshedLocalDevice.ipv4),
         );
+        unawaited(_refreshNetworkInstanceState(network));
         return;
       }
 
@@ -61,11 +63,15 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         network.id,
         _JoinNetworkState.joinedWithIp(joinedLocalDevice?.ipv4),
       );
+      unawaited(_refreshNetworkInstanceState(network));
       _showNetworkActionToast('「${network.name}」已连接');
     } catch (error) {
       final message = _normalizeError(error);
       _setJoinError(network.id, message);
-      _showNetworkActionToast('加入「${network.name}」失败：$message', destructive: true);
+      _showNetworkActionToast(
+        '加入「${network.name}」失败：$message',
+        destructive: true,
+      );
     }
   }
 
@@ -107,7 +113,10 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
           message: '退出网络失败：$message',
         ),
       );
-      _showNetworkActionToast('退出「${network.name}」失败：$message', destructive: true);
+      _showNetworkActionToast(
+        '退出「${network.name}」失败：$message',
+        destructive: true,
+      );
     }
   }
 
@@ -226,6 +235,8 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
             .toList(growable: false),
       };
       _joinStates = {..._joinStates, networkId: _JoinNetworkState.idle};
+      _networkInstanceReady = Map<String, bool>.from(_networkInstanceReady)
+        ..remove(networkId);
       final nextPeerStatuses = Map<String, Map<String, CorePeerStatus>>.from(
         _networkPeerStatuses,
       )..remove(networkId);

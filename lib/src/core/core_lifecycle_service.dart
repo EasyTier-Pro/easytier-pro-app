@@ -343,6 +343,11 @@ cd /d "$installerDir"
     final stderrText = (await stderrFuture).trim();
 
     if (exitCode != 0) {
+      _logger.warn(
+        'core.stats',
+        'EasyTier traffic stats failed',
+        context: {'exit_code': exitCode, 'stderr': stderrText},
+      );
       throw StateError(
         stderrText.isEmpty
             ? 'easytier-cli stats 执行失败 (exit=$exitCode)'
@@ -350,7 +355,83 @@ cd /d "$installerDir"
       );
     }
 
-    return parseNetworkTrafficTotalsFromJson(stdoutText);
+    final totals = parseNetworkTrafficTotalsFromJson(stdoutText);
+    _logger.debug(
+      'core.stats',
+      'EasyTier traffic stats parsed',
+      context: {'network_names': totals.keys.join(','), 'count': totals.length},
+    );
+    return totals;
+  }
+
+  Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
+    final instanceName = runtimeNetworkName.trim();
+    if (instanceName.isEmpty) {
+      return false;
+    }
+
+    final cliExecutable = _resolveCliExecutable();
+    _logger.debug(
+      'core.instance',
+      'Checking EasyTier network instance',
+      context: {'executable': cliExecutable, 'instance_name': instanceName},
+    );
+
+    final process = await Process.start(cliExecutable, [
+      '-o',
+      'json',
+      '--instance-name',
+      instanceName,
+      'node',
+      'info',
+    ]);
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill();
+        throw TimeoutException('easytier-cli node info 执行超时');
+      },
+    );
+    final stdoutText = (await stdoutFuture).trim();
+    final stderrText = (await stderrFuture).trim();
+
+    if (exitCode == 0) {
+      _logger.debug(
+        'core.instance',
+        'EasyTier network instance is running',
+        context: {
+          'instance_name': instanceName,
+          'output_length': stdoutText.length,
+        },
+      );
+      return true;
+    }
+
+    final message = stderrText.isEmpty
+        ? 'easytier-cli node info 执行失败 (exit=$exitCode)'
+        : stderrText;
+    if (_isInstanceNotReadyMessage(message)) {
+      _logger.warn(
+        'core.instance',
+        'EasyTier network instance is not ready',
+        context: {'instance_name': instanceName, 'error': message},
+      );
+      return false;
+    }
+
+    _logger.warn(
+      'core.instance',
+      'EasyTier network instance check failed',
+      context: {
+        'instance_name': instanceName,
+        'exit_code': exitCode,
+        'stderr': stderrText,
+      },
+    );
+    throw StateError(message);
   }
 
   Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
@@ -389,6 +470,15 @@ cd /d "$installerDir"
     final stderrText = (await stderrFuture).trim();
 
     if (exitCode != 0) {
+      _logger.warn(
+        'core.peer',
+        'EasyTier peer status failed',
+        context: {
+          'instance_name': instanceName,
+          'exit_code': exitCode,
+          'stderr': stderrText,
+        },
+      );
       throw StateError(
         stderrText.isEmpty
             ? 'easytier-cli peer 执行失败 (exit=$exitCode)'
@@ -397,6 +487,13 @@ cd /d "$installerDir"
     }
 
     return parseNetworkPeerStatusesFromJson(stdoutText);
+  }
+
+  static bool _isInstanceNotReadyMessage(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('no running instances found') ||
+        lower.contains('no instance matches') ||
+        lower.contains('no instance');
   }
 
   Future<void> _ensureRunning({required bool forceReinstall}) async {

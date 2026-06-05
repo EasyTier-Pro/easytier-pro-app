@@ -82,6 +82,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             networks: sortedNetworks,
             networkDevices: _networkDevices,
             trafficByNetworkId: _networkTraffic,
+            networkInstanceReady: _networkInstanceReady,
             trafficHistoryFor: _networkTrafficHistories,
             joinStateFor: _joinStateFor,
             onJoin: _joinNetwork,

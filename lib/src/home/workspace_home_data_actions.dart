@@ -189,6 +189,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _refreshNetworkNodes(ConsoleNetwork network) async {
     await _loadSingleNetworkDevices(network.id);
+    await _refreshNetworkInstanceState(network);
     await _pollNetworkPeers(network);
   }
 
@@ -364,6 +365,8 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       _networkTraffic = Map<String, _NetworkTrafficSnapshot>.from(
         _networkTraffic,
       )..remove(networkId);
+      _networkInstanceReady = Map<String, bool>.from(_networkInstanceReady)
+        ..remove(networkId);
       _networkPeerStatuses = Map<String, Map<String, CorePeerStatus>>.from(
         _networkPeerStatuses,
       )..remove(networkId);

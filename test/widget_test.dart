@@ -153,6 +153,53 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('shows startup state when network instance is missing', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      instanceRunning: false,
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('实例启动中'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('network detail list stretches with window height', (
     WidgetTester tester,
   ) async {
@@ -1843,12 +1890,14 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   _NoopCoreLifecycleService({
     required super.authService,
     required this.machineId,
+    this.instanceRunning = true,
     this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
     this.peerSamples = const <Map<String, CorePeerStatus>>[],
     this.peerError,
   });
 
   final String? machineId;
+  final bool instanceRunning;
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
   final List<Map<String, CorePeerStatus>> peerSamples;
   final Object? peerError;
@@ -1889,6 +1938,11 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
         : trafficSamples.length - 1;
     _trafficReadCount++;
     return trafficSamples[sampleIndex];
+  }
+
+  @override
+  Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
+    return instanceRunning;
   }
 
   @override
