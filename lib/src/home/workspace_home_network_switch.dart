@@ -428,7 +428,7 @@ class _NetworkSwitchTile extends StatelessWidget {
   }
 }
 
-class _LoadingSwitch extends StatelessWidget {
+class _LoadingSwitch extends StatefulWidget {
   const _LoadingSwitch({
     required this.value,
     required this.loading,
@@ -440,28 +440,66 @@ class _LoadingSwitch extends StatelessWidget {
   final ValueChanged<bool>? onChange;
 
   @override
+  State<_LoadingSwitch> createState() => _LoadingSwitchState();
+}
+
+class _LoadingSwitchState extends State<_LoadingSwitch>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+    if (widget.loading) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _LoadingSwitch old) {
+    super.didUpdateWidget(old);
+    if (widget.loading && !old.loading) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.loading && old.loading) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 51,
       height: 31,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          FSwitch(
-            value: value,
-            enabled: !loading && onChange != null,
-            onChange: onChange,
-          ),
-          if (loading)
-            Center(
-              child: FCircularProgress(
-                size: .xs,
-                style: const FCircularProgressStyleDelta.delta(
-                  iconStyle: IconThemeDataDelta.delta(color: Colors.white),
-                ),
-              ),
-            ),
-        ],
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          return Opacity(
+            opacity: widget.loading
+                ? 0.35 + (0.65 * _animation.value)
+                : 1.0,
+            child: child,
+          );
+        },
+        child: FSwitch(
+          value: widget.value,
+          enabled: !widget.loading && widget.onChange != null,
+          onChange: widget.onChange,
+        ),
       ),
     );
   }
