@@ -76,85 +76,89 @@ class _SettingsPanel extends StatelessWidget {
   Future<void> _showLogsDialog(BuildContext context) async {
     await showFDialog<void>(
       context: context,
-      builder: (dialogContext, _, animation) => FDialog.raw(
-        animation: animation,
-        constraints: const BoxConstraints(
-          minWidth: 600,
-          maxWidth: 800,
-          maxHeight: 520,
-        ),
-        builder: (context, _) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('诊断日志', style: Theme.of(context).textTheme.titleLarge),
-                  const Spacer(),
-                  FButton(
-                    variant: .ghost,
-                    size: .sm,
-                    onPress: () {
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    child: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ValueListenableBuilder<List<AppLogEntry>>(
-                  valueListenable: AppLogger.instance.recentEntries,
-                  builder: (context, entries, _) {
-                    if (entries.isEmpty) {
-                      return const Center(child: Text('暂无日志'));
-                    }
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F9FB),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: SingleChildScrollView(
-                        child: SelectableText(
-                          entries.map((entry) => entry.humanLine).join('\n'),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                fontFamily: 'monospace',
-                                color: const Color(0xFF374151),
-                              ),
-                        ),
-                      ),
-                    );
-                  },
+      barrierDismissible: false,
+      builder: (dialogContext, _, animation) => ExcludeSemantics(
+        child: FDialog.raw(
+          animation: animation,
+          constraints: const BoxConstraints(
+            minWidth: 600,
+            maxWidth: 800,
+            maxHeight: 520,
+          ),
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('诊断日志', style: Theme.of(context).textTheme.titleLarge),
+                    const Spacer(),
+                    FButton(
+                      variant: .ghost,
+                      size: .sm,
+                      onPress: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      child: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FButton(
-                    variant: .outline,
-                    size: .sm,
-                    onPress: () => unawaited(_exportLogs(dialogContext)),
-                    child: const Text('导出诊断日志'),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ValueListenableBuilder<List<AppLogEntry>>(
+                    valueListenable: AppLogger.instance.recentEntries,
+                    builder: (context, entries, _) {
+                      if (entries.isEmpty) {
+                        return const Center(child: Text('暂无日志'));
+                      }
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FB),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            entries.map((entry) => entry.humanLine).join('\n'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  color: const Color(0xFF374151),
+                                ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  FButton(
-                    variant: .outline,
-                    size: .sm,
-                    onPress: () => unawaited(_openLogDirectory(dialogContext)),
-                    child: const Text('打开日志目录'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FButton(
+                      variant: .outline,
+                      size: .sm,
+                      onPress: () => unawaited(_exportLogs(dialogContext)),
+                      child: const Text('导出诊断日志'),
+                    ),
+                    FButton(
+                      variant: .outline,
+                      size: .sm,
+                      onPress: () =>
+                          unawaited(_openLogDirectory(dialogContext)),
+                      child: const Text('打开日志目录'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

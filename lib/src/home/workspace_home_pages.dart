@@ -180,6 +180,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                       if (compact)
                         Tooltip(
                           message: '刷新节点',
+                          excludeFromSemantics: true,
                           child: FButton(
                             variant: .ghost,
                             size: .sm,
@@ -367,45 +368,48 @@ class _NetworkMoreMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FPopoverMenu(
-      menuAnchor: Alignment.topRight,
-      childAnchor: Alignment.bottomRight,
-      divider: FItemDivider.none,
-      menuBuilder: (context, controller, menu) => [
-        FItemGroup(
-          divider: FItemDivider.none,
-          children: [
-            FItem(
-              key: const ValueKey<String>('network-more-delete'),
-              prefix: const Icon(
-                Icons.delete_outline,
-                size: 18,
-                color: Color(0xFFDC2626),
-              ),
-              title: Text(
-                '删除网络...',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFDC2626),
-                  fontWeight: FontWeight.w600,
+    return ExcludeSemantics(
+      child: FPopoverMenu(
+        menuAnchor: Alignment.topRight,
+        childAnchor: Alignment.bottomRight,
+        divider: FItemDivider.none,
+        menuBuilder: (context, controller, menu) => [
+          FItemGroup(
+            divider: FItemDivider.none,
+            children: [
+              FItem(
+                key: const ValueKey<String>('network-more-delete'),
+                prefix: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: Color(0xFFDC2626),
                 ),
+                title: Text(
+                  '删除网络...',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFFDC2626),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onPress: () {
+                  unawaited(controller.hide());
+                  onDelete();
+                },
               ),
-              onPress: () {
-                unawaited(controller.hide());
-                onDelete();
-              },
-            ),
-          ],
-        ),
-      ],
-      builder: (context, controller, child) => Tooltip(
-        message: '更多操作',
-        child: FButton(
-          key: const ValueKey<String>('network-more-menu-button'),
-          variant: .ghost,
-          size: .sm,
-          onPress: enabled ? () => unawaited(controller.toggle()) : null,
-          mainAxisSize: MainAxisSize.min,
-          child: const Icon(Icons.more_vert, size: 18),
+            ],
+          ),
+        ],
+        builder: (context, controller, child) => Tooltip(
+          message: '更多操作',
+          excludeFromSemantics: true,
+          child: FButton(
+            key: const ValueKey<String>('network-more-menu-button'),
+            variant: .ghost,
+            size: .sm,
+            onPress: enabled ? () => unawaited(controller.toggle()) : null,
+            mainAxisSize: MainAxisSize.min,
+            child: const Icon(Icons.more_vert, size: 18),
+          ),
         ),
       ),
     );

@@ -144,6 +144,7 @@ class _NetworkRefreshButton extends StatelessWidget {
 
     return Tooltip(
       message: refreshing ? '正在刷新网络' : '刷新网络',
+      excludeFromSemantics: true,
       child: FButton(
         key: const ValueKey<String>('network-refresh-button'),
         variant: .ghost,
@@ -393,9 +394,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                             if (joined &&
                                 history != null &&
                                 history.isNotEmpty) ...[
-                              _NetworkTrafficSparkline(
-                                history: history,
-                              ),
+                              _NetworkTrafficSparkline(history: history),
                               const SizedBox(width: 8),
                             ],
                             Column(
@@ -451,10 +450,7 @@ class _LoadingSwitchState extends State<_LoadingSwitch>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _animation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    );
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     if (widget.loading) {
       _controller.repeat(reverse: true);
     }
@@ -485,9 +481,7 @@ class _LoadingSwitchState extends State<_LoadingSwitch>
         animation: _animation,
         builder: (context, child) {
           return Opacity(
-            opacity: widget.loading
-                ? 0.35 + (0.65 * _animation.value)
-                : 1.0,
+            opacity: widget.loading ? 0.35 + (0.65 * _animation.value) : 1.0,
             child: child,
           );
         },
@@ -561,25 +555,25 @@ class _NetworkTrafficSparkline extends StatelessWidget {
     );
   }
 
-  LineChartBarData _buildLine(List<FlSpot> spots, Color color, {bool showDot = false}) {
+  LineChartBarData _buildLine(
+    List<FlSpot> spots,
+    Color color, {
+    bool showDot = false,
+  }) {
     return LineChartBarData(
       spots: spots,
       isCurved: spots.length > 2,
       curveSmoothness: 0.3,
       barWidth: 1.8,
       isStrokeCapRound: true,
-      dotData: FlDotData(show: showDot, getDotPainter: (spot, percent, bar, index) {
-        return FlDotCirclePainter(
-          radius: 2.5,
-          color: color,
-          strokeWidth: 0,
-        );
-      }),
-      color: color,
-      belowBarData: BarAreaData(
-        show: true,
-        color: color.withAlpha(35),
+      dotData: FlDotData(
+        show: showDot,
+        getDotPainter: (spot, percent, bar, index) {
+          return FlDotCirclePainter(radius: 2.5, color: color, strokeWidth: 0);
+        },
       ),
+      color: color,
+      belowBarData: BarAreaData(show: true, color: color.withAlpha(35)),
     );
   }
 }

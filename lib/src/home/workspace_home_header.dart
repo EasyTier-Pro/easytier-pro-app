@@ -174,47 +174,49 @@ class _NetworkTabMenu extends StatelessWidget {
       }
     }
 
-    return FPopoverMenu(
-      menuAnchor: Alignment.topRight,
-      childAnchor: Alignment.bottomRight,
-      maxHeight: 280,
-      divider: FItemDivider.none,
-      menuBuilder: (context, controller, menu) => [
-        FItemGroup(
-          key: const ValueKey<String>('network-tab-popover'),
-          divider: FItemDivider.none,
-          children: [
-            for (final network in networks)
-              FItem(
-                key: ValueKey<String>('network-tab-option-${network.id}'),
-                title: SelectionContainer.disabled(
-                  child: Text(network.name, overflow: TextOverflow.ellipsis),
+    return ExcludeSemantics(
+      child: FPopoverMenu(
+        menuAnchor: Alignment.topRight,
+        childAnchor: Alignment.bottomRight,
+        maxHeight: 280,
+        divider: FItemDivider.none,
+        menuBuilder: (context, controller, menu) => [
+          FItemGroup(
+            key: const ValueKey<String>('network-tab-popover'),
+            divider: FItemDivider.none,
+            children: [
+              for (final network in networks)
+                FItem(
+                  key: ValueKey<String>('network-tab-option-${network.id}'),
+                  title: SelectionContainer.disabled(
+                    child: Text(network.name, overflow: TextOverflow.ellipsis),
+                  ),
+                  prefix: SizedBox(
+                    width: 18,
+                    child: network.id == selectedNetwork.id
+                        ? const Icon(Icons.check, size: 16)
+                        : null,
+                  ),
+                  onPress: () {
+                    unawaited(controller.hide());
+                    onSelectNetwork(network.id);
+                  },
                 ),
-                prefix: SizedBox(
-                  width: 18,
-                  child: network.id == selectedNetwork.id
-                      ? const Icon(Icons.check, size: 16)
-                      : null,
-                ),
-                onPress: () {
-                  unawaited(controller.hide());
-                  onSelectNetwork(network.id);
-                },
-              ),
-          ],
+            ],
+          ),
+        ],
+        builder: (context, controller, child) => _NetworkTabButton(
+          active: active,
+          label: selectedNetwork.name,
+          onSelect: () {
+            if (active) {
+              unawaited(controller.toggle());
+            } else {
+              onSelectNetwork(selectedNetwork.id);
+            }
+          },
+          onOpenMenu: () => unawaited(controller.toggle()),
         ),
-      ],
-      builder: (context, controller, child) => _NetworkTabButton(
-        active: active,
-        label: selectedNetwork.name,
-        onSelect: () {
-          if (active) {
-            unawaited(controller.toggle());
-          } else {
-            onSelectNetwork(selectedNetwork.id);
-          }
-        },
-        onOpenMenu: () => unawaited(controller.toggle()),
       ),
     );
   }

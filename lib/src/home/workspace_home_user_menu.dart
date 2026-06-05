@@ -19,69 +19,71 @@ class _UserMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = userName.isEmpty ? '用户' : userName;
 
-    return FPopoverMenu(
-      menuAnchor: Alignment.topRight,
-      childAnchor: Alignment.bottomRight,
-      divider: FItemDivider.full,
-      menuBuilder: (context, controller, menu) => [
-        FItemGroup(
-          divider: FItemDivider.full,
-          children: [
-            FItem.raw(
-              enabled: false,
-              child: SizedBox(
-                width: 200,
-                child: SelectionContainer.disabled(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFF0A0A0A),
-                          fontWeight: FontWeight.w700,
+    return ExcludeSemantics(
+      child: FPopoverMenu(
+        menuAnchor: Alignment.topRight,
+        childAnchor: Alignment.bottomRight,
+        divider: FItemDivider.full,
+        menuBuilder: (context, controller, menu) => [
+          FItemGroup(
+            divider: FItemDivider.full,
+            children: [
+              FItem.raw(
+                enabled: false,
+                child: SizedBox(
+                  width: 200,
+                  child: SelectionContainer.disabled(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: const Color(0xFF0A0A0A),
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        workspaceName,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF737373),
+                        const SizedBox(height: 2),
+                        Text(
+                          workspaceName,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFF737373)),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            FItem(
-              prefix: const Icon(Icons.settings_outlined, size: 18),
-              title: SelectionContainer.disabled(child: const Text('设置')),
-              onPress: () {
-                unawaited(controller.hide());
-                onShowSettings();
-              },
-            ),
-            FItem(
-              prefix: const Icon(Icons.logout_outlined, size: 18),
-              title: SelectionContainer.disabled(child: const Text('退出登录')),
-              onPress: () {
-                unawaited(controller.hide());
-                unawaited(onLogout());
-              },
-            ),
-          ],
+              FItem(
+                prefix: const Icon(Icons.settings_outlined, size: 18),
+                title: SelectionContainer.disabled(child: const Text('设置')),
+                onPress: () {
+                  unawaited(controller.hide());
+                  onShowSettings();
+                },
+              ),
+              FItem(
+                prefix: const Icon(Icons.logout_outlined, size: 18),
+                title: SelectionContainer.disabled(child: const Text('退出登录')),
+                onPress: () {
+                  unawaited(controller.hide());
+                  unawaited(onLogout());
+                },
+              ),
+            ],
+          ),
+        ],
+        builder: (context, controller, child) => FButton(
+          variant: .ghost,
+          size: .sm,
+          onPress: () => unawaited(controller.toggle()),
+          mainAxisSize: MainAxisSize.min,
+          suffix: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+          child: FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
         ),
-      ],
-      builder: (context, controller, child) => FButton(
-        variant: .ghost,
-        size: .sm,
-        onPress: () => unawaited(controller.toggle()),
-        mainAxisSize: MainAxisSize.min,
-        suffix: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-        child: FAvatar.raw(size: 30, child: Text(initial.toUpperCase())),
       ),
     );
   }

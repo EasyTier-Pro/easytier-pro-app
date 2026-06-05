@@ -27,6 +27,7 @@ class _NodeOsIcon extends StatelessWidget {
 
     return Tooltip(
       message: label,
+      excludeFromSemantics: true,
       child: SizedBox.square(
         dimension: 32,
         child: Stack(
