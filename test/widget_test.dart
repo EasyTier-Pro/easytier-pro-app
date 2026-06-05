@@ -937,6 +937,36 @@ void main() {
     );
   });
 
+  testWidgets('user menu labels are not selectable', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(of: find.byType(FAvatar), matching: find.text('T')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('设置'), findsOneWidget);
+    expect(_hasSelectionAreaAncestor(tester, find.text('Test User')), isFalse);
+    expect(_hasSelectionAreaAncestor(tester, find.text('个人空间')), isFalse);
+    expect(_hasSelectionAreaAncestor(tester, find.text('设置')), isFalse);
+    expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
+  });
+
   testWidgets('confirms before deleting a network and hides it locally', (
     WidgetTester tester,
   ) async {

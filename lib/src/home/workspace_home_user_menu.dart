@@ -31,32 +31,34 @@ class _UserMenu extends StatelessWidget {
               enabled: false,
               child: SizedBox(
                 width: 200,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF0A0A0A),
-                        fontWeight: FontWeight.w700,
+                child: SelectionContainer.disabled(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF0A0A0A),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      workspaceName,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
+                      const SizedBox(height: 2),
+                      Text(
+                        workspaceName,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF737373),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
             FItem(
               prefix: const Icon(Icons.settings_outlined, size: 18),
-              title: const Text('设置'),
+              title: SelectionContainer.disabled(child: const Text('设置')),
               onPress: () {
                 unawaited(controller.hide());
                 onShowSettings();
@@ -64,7 +66,7 @@ class _UserMenu extends StatelessWidget {
             ),
             FItem(
               prefix: const Icon(Icons.logout_outlined, size: 18),
-              title: const Text('退出登录'),
+              title: SelectionContainer.disabled(child: const Text('退出登录')),
               onPress: () {
                 unawaited(controller.hide());
                 unawaited(onLogout());

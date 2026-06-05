@@ -14,6 +14,7 @@ import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
+import '../shared/app_text_selection.dart';
 import '../shared/selectable_text_hit_boundary.dart';
 import 'network_node_list_panel.dart';
 
@@ -184,34 +185,40 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
             coreStatusListenable: widget.coreLifecycleService.status,
           ),
           Expanded(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-              child: AnimatedSwitcher(
-                duration: appMotionMedium,
-                reverseDuration: appMotionShort,
-                transitionBuilder: appFadeSlideTransition,
-                layoutBuilder: appSwitcherStackLayout,
-                child: KeyedSubtree(
-                  key: contentKey,
-                  child: _activeView == _DashboardView.network
-                      ? Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 1040),
-                              child: _buildContent(context),
+            child: AppTextSelectionTapCleaner(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+                child: AnimatedSwitcher(
+                  duration: appMotionMedium,
+                  reverseDuration: appMotionShort,
+                  transitionBuilder: appFadeSlideTransition,
+                  layoutBuilder: appSwitcherStackLayout,
+                  child: KeyedSubtree(
+                    key: contentKey,
+                    child: _activeView == _DashboardView.network
+                        ? Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1040,
+                                ),
+                                child: _buildContent(context),
+                              ),
+                            ),
+                          )
+                        : AppSmoothScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1040,
+                                ),
+                                child: _buildContent(context),
+                              ),
                             ),
                           ),
-                        )
-                      : AppSmoothScrollView(
-                          padding: const EdgeInsets.all(24),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 1040),
-                              child: _buildContent(context),
-                            ),
-                          ),
-                        ),
+                  ),
                 ),
               ),
             ),
