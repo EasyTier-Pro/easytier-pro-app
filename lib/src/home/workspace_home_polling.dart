@@ -221,8 +221,14 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
           ..clear()
           ..addAll(nextHistory);
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
+        return;
+      }
+      final message = _normalizeError(error);
+      // 当 EasyTier 实例尚未就绪时，CLI 会返回此错误；此时保留已有数据，
+      // 仅静默跳过本次轮询，避免 sparkline 等状态被清空。
+      if (_isInstanceNotReadyError(message)) {
         return;
       }
       _updateState(() {
@@ -331,6 +337,11 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
       if (!mounted) {
         return;
       }
+      final message = _normalizeError(error);
+      // 实例尚未就绪是正常过渡状态，不应作为错误展示给用户。
+      if (_isInstanceNotReadyError(message)) {
+        return;
+      }
       _updateState(() {
         final nextStatuses = Map<String, Map<String, CorePeerStatus>>.from(
           _networkPeerStatuses,
@@ -338,11 +349,17 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
         _networkPeerStatuses = nextStatuses;
         _peerStatusErrors = {
           ..._peerStatusErrors,
-          network.id: _normalizeError(error),
+          network.id: message,
         };
       });
     } finally {
       _isPeerPollInFlight = false;
     }
+  }
+
+  bool _isInstanceNotReadyError(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('no instance matches') ||
+        lower.contains('no instance');
   }
 }
