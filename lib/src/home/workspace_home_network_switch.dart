@@ -5,6 +5,7 @@ class _NetworkSwitchList extends StatelessWidget {
     required this.networks,
     required this.networkDevices,
     required this.trafficByNetworkId,
+    required this.trafficHistoryFor,
     required this.joinStateFor,
     required this.onJoin,
     required this.onLeave,
@@ -17,6 +18,7 @@ class _NetworkSwitchList extends StatelessWidget {
   final List<ConsoleNetwork> networks;
   final Map<String, List<NetworkDevice>> networkDevices;
   final Map<String, _NetworkTrafficSnapshot> trafficByNetworkId;
+  final Map<String, List<_TrafficHistoryPoint>> trafficHistoryFor;
   final _JoinNetworkState Function(ConsoleNetwork) joinStateFor;
   final Future<void> Function(ConsoleNetwork) onJoin;
   final Future<void> Function(ConsoleNetwork) onLeave;
@@ -77,6 +79,7 @@ class _NetworkSwitchList extends StatelessWidget {
                     networkDevices[networks[i].id] ?? const <NetworkDevice>[],
                 state: joinStateFor(networks[i]),
                 traffic: trafficByNetworkId[networks[i].id],
+                trafficHistory: trafficHistoryFor[networks[i].id],
                 onJoin: () => unawaited(onJoin(networks[i])),
                 onLeave: () => unawaited(onLeave(networks[i])),
                 onOpen: () => onOpen(networks[i]),
@@ -169,6 +172,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     required this.devices,
     required this.state,
     required this.traffic,
+    required this.trafficHistory,
     required this.onJoin,
     required this.onLeave,
     required this.onOpen,
@@ -178,6 +182,7 @@ class _NetworkSwitchTile extends StatelessWidget {
   final List<NetworkDevice> devices;
   final _JoinNetworkState state;
   final _NetworkTrafficSnapshot? traffic;
+  final List<_TrafficHistoryPoint>? trafficHistory;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onOpen;
@@ -384,6 +389,25 @@ class _NetworkSwitchTile extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 12),
+                            if (joined) ...[
+                              Builder(
+                                builder: (context) {
+                                  final history = trafficHistory;
+                                  if (history == null || history.length < 2) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _NetworkTrafficSparkline(
+                                        history: history,
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ],
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.end,
@@ -482,6 +506,69 @@ class _LoadingSwitchState extends State<_LoadingSwitch>
           enabled: !widget.loading && widget.onChange != null,
           onChange: widget.onChange,
         ),
+      ),
+    );
+  }
+}
+
+class _NetworkTrafficSparkline extends StatelessWidget {
+  const _NetworkTrafficSparkline({required this.history});
+
+  final List<_TrafficHistoryPoint> history;
+
+  @override
+  Widget build(BuildContext context) {
+    final downloadColor = const Color(0xFF16A34A);
+    final uploadColor = const Color(0xFF2563EB);
+
+    final maxRate = history
+        .map((h) => math.max(h.downloadRate, h.uploadRate))
+        .reduce(math.max);
+    final yMax = maxRate <= 0 ? 1.0 : maxRate * 1.1;
+
+    final downloadSpots = <FlSpot>[
+      for (var i = 0; i < history.length; i++)
+        FlSpot(i.toDouble(), history[i].downloadRate),
+    ];
+    final uploadSpots = <FlSpot>[
+      for (var i = 0; i < history.length; i++)
+        FlSpot(i.toDouble(), history[i].uploadRate),
+    ];
+
+    return SizedBox(
+      width: 80,
+      height: 36,
+      child: LineChart(
+        LineChartData(
+          minX: 0,
+          maxX: (history.length - 1).toDouble(),
+          minY: 0,
+          maxY: yMax,
+          gridData: const FlGridData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          borderData: FlBorderData(show: false),
+          lineTouchData: const LineTouchData(enabled: false),
+          lineBarsData: [
+            _buildLine(downloadSpots, downloadColor),
+            _buildLine(uploadSpots, uploadColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  LineChartBarData _buildLine(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      curveSmoothness: 0.3,
+      barWidth: 1.2,
+      isStrokeCapRound: true,
+      dotData: const FlDotData(show: false),
+      color: color,
+      belowBarData: BarAreaData(
+        show: true,
+        color: color.withAlpha(20),
       ),
     );
   }

@@ -58,6 +58,7 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
     }
     _updateState(() {
       _networkTraffic = const <String, _NetworkTrafficSnapshot>{};
+      _networkTrafficHistories.clear();
     });
   }
 
@@ -84,12 +85,24 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
       return remove;
     });
 
+    final nextHistories = Map<String, List<_TrafficHistoryPoint>>.from(
+      _networkTrafficHistories,
+    );
+    nextHistories.removeWhere((networkId, _) {
+      final remove = !activeNetworkIds.contains(networkId);
+      changed = changed || remove;
+      return remove;
+    });
+
     if (!changed || !mounted) {
       return;
     }
     _updateState(() {
       _networkTraffic = nextTraffic;
       _previousTrafficTotals = nextPrevious;
+      _networkTrafficHistories
+        ..clear()
+        ..addAll(nextHistories);
     });
   }
 
@@ -128,21 +141,43 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
         _previousTrafficTotals,
       );
 
+      final nextHistories = Map<String, List<_TrafficHistoryPoint>>.from(
+        _networkTrafficHistories,
+      );
+
       for (final network in networks) {
         final runtimeName = network.runtimeNetworkName.trim();
         final totals = totalsByRuntimeName[runtimeName];
         if (totals == null) {
           nextTraffic.remove(network.id);
           nextPrevious.remove(runtimeName);
+          nextHistories.remove(network.id);
           continue;
         }
 
         final previous = nextPrevious[runtimeName];
-        nextTraffic[network.id] = _NetworkTrafficSnapshot.fromTotals(
+        final snapshot = _NetworkTrafficSnapshot.fromTotals(
           totals,
           previous: previous,
         );
+        nextTraffic[network.id] = snapshot;
         nextPrevious[runtimeName] = totals;
+
+        final history = List<_TrafficHistoryPoint>.from(
+          nextHistories[network.id] ?? const <_TrafficHistoryPoint>[],
+        )..add(
+            _TrafficHistoryPoint(
+              timestamp: DateTime.now(),
+              downloadRate: snapshot.downloadBytesPerSecond ?? 0,
+              uploadRate: snapshot.uploadBytesPerSecond ?? 0,
+            ),
+          );
+        while (
+            history.length >
+            _WorkspaceHomeViewState._maxNetworkTrafficHistoryPoints) {
+          history.removeAt(0);
+        }
+        nextHistories[network.id] = history;
       }
 
       nextTraffic.removeWhere(
@@ -151,10 +186,40 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
       nextPrevious.removeWhere(
         (runtimeName, _) => !activeRuntimeNames.contains(runtimeName),
       );
+      nextHistories.removeWhere(
+        (networkId, _) => !activeNetworkIds.contains(networkId),
+      );
+
+      var totalDownloadRate = 0.0;
+      var totalUploadRate = 0.0;
+      for (final network in networks) {
+        final snapshot = nextTraffic[network.id];
+        if (snapshot != null) {
+          totalDownloadRate += snapshot.downloadBytesPerSecond ?? 0;
+          totalUploadRate += snapshot.uploadBytesPerSecond ?? 0;
+        }
+      }
+      final nextHistory = List<_TrafficHistoryPoint>.from(_trafficHistory)
+        ..add(
+          _TrafficHistoryPoint(
+            timestamp: DateTime.now(),
+            downloadRate: totalDownloadRate,
+            uploadRate: totalUploadRate,
+          ),
+        );
+      while (nextHistory.length > _WorkspaceHomeViewState._maxTrafficHistoryPoints) {
+        nextHistory.removeAt(0);
+      }
 
       _updateState(() {
         _networkTraffic = nextTraffic;
         _previousTrafficTotals = nextPrevious;
+        _networkTrafficHistories
+          ..clear()
+          ..addAll(nextHistories);
+        _trafficHistory
+          ..clear()
+          ..addAll(nextHistory);
       });
     } catch (_) {
       if (!mounted) {
@@ -163,6 +228,8 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
       _updateState(() {
         _networkTraffic = const <String, _NetworkTrafficSnapshot>{};
         _previousTrafficTotals = const <String, CoreNetworkTrafficTotals>{};
+        _networkTrafficHistories.clear();
+        _trafficHistory.clear();
       });
     } finally {
       _isTrafficPollInFlight = false;

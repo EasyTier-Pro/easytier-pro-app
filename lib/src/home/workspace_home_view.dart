@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -85,6 +87,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool _isPeerPollInFlight = false;
   Set<String> _trafficPollNetworkIds = const <String>{};
   String? _peerPollNetworkId;
+  final List<_TrafficHistoryPoint> _trafficHistory = <_TrafficHistoryPoint>[];
+  static const int _maxTrafficHistoryPoints = 60;
+  final Map<String, List<_TrafficHistoryPoint>> _networkTrafficHistories =
+      <String, List<_TrafficHistoryPoint>>{};
+  static const int _maxNetworkTrafficHistoryPoints = 30;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, CoreNetworkTrafficTotals> _previousTrafficTotals =

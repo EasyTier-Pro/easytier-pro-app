@@ -43,6 +43,7 @@ dependencies:
   forui: ^0.22.2
   font_awesome_flutter: ^11.0.0
   flutter_staggered_grid_view: ^0.7.0
+  fl_chart: ^0.70.2
 
 dev_dependencies:
   flutter_test:

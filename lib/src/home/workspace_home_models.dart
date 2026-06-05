@@ -32,6 +32,18 @@ class _JoinNetworkState {
   }
 }
 
+class _TrafficHistoryPoint {
+  const _TrafficHistoryPoint({
+    required this.timestamp,
+    required this.downloadRate,
+    required this.uploadRate,
+  });
+
+  final DateTime timestamp;
+  final double downloadRate;
+  final double uploadRate;
+}
+
 class _NetworkTrafficSnapshot {
   const _NetworkTrafficSnapshot({
     required this.downloadBytes,
