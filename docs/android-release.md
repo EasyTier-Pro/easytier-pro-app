@@ -62,7 +62,7 @@ cd android
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
+当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、config server callback JSON 关键字段解析、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
 
 ## VPN 权限与后台运行说明
 

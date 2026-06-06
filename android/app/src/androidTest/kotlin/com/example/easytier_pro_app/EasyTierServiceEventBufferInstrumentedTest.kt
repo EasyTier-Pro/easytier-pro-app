@@ -49,6 +49,29 @@ class EasyTierServiceEventBufferInstrumentedTest {
         throw AssertionError("Expected IllegalArgumentException for maxSize=0")
     }
 
+    @Test
+    fun parsesConfigServerCallbackPayload() {
+        val parsed = parseJson(
+            """
+            {
+              "event": "run_network_instance",
+              "success": true,
+              "instance_id": "bce27f42-5c4c-41ff-9a49-2db5fd2560ca",
+              "instance_name": "network-a-android",
+              "network_name": "network-a",
+              "error": null
+            }
+            """.trimIndent(),
+        ) as Map<*, *>
+
+        assertEquals("run_network_instance", parsed["event"])
+        assertEquals(true, parsed["success"])
+        assertEquals("bce27f42-5c4c-41ff-9a49-2db5fd2560ca", parsed["instance_id"])
+        assertEquals("network-a-android", parsed["instance_name"])
+        assertEquals("network-a", parsed["network_name"])
+        assertEquals(null, parsed["error"])
+    }
+
     private fun event(type: String): Map<String, Any?> {
         return mapOf(
             "type" to type,
