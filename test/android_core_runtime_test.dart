@@ -766,6 +766,59 @@ void main() {
       expect(startVpn.arguments, containsPair('instanceName', 'network-a'));
     });
 
+    test(
+      'keeps only the latest pending VPN before permission is granted',
+      () async {
+        vpnPrepared = false;
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+            'vpn_config': {
+              'addresses': ['10.10.0.2/24'],
+            },
+          },
+        });
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-b',
+            'vpn_config': {
+              'addresses': ['10.20.0.2/24'],
+            },
+          },
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnPermissionGranted,
+          'payload': {'granted': true},
+        });
+
+        final startVpn = await _waitForCall(calls, 'startVpn');
+        expect(startVpn.arguments, {
+          'instanceName': 'network-b',
+          'vpnConfig': {
+            'addresses': ['10.20.0.2/24'],
+            'routes': ['10.20.0.0/24'],
+            'dns': <String>[],
+          },
+        });
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnPermissionGranted,
+          'payload': {'granted': true},
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls.where((call) => call.method == 'startVpn'), hasLength(1));
+      },
+    );
+
     test('does not start VPN after native permission denial', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       nativeEvents.add({

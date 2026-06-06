@@ -423,7 +423,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return;
     }
 
-    _pendingVpnPayloads[instanceKey] = payloadMap;
+    _pendingVpnPayloads
+      ..clear()
+      ..[instanceKey] = payloadMap;
     unawaited(_queueVpnStart(instanceKey));
   }
 
