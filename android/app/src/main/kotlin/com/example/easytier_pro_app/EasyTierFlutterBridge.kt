@@ -2,7 +2,6 @@ package com.example.easytier_pro_app
 
 import android.Manifest
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
@@ -15,8 +14,6 @@ import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.ArrayDeque
-import java.util.Locale
-import java.util.UUID
 
 class EasyTierFlutterBridge(private val activity: MainActivity) :
     MethodChannel.MethodCallHandler,
@@ -250,28 +247,11 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
     }
 
     private fun getMachineId(): String {
-        val preferences = activity.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
-        val existing = preferences.getString(machineIdKey, null)?.trim()
-        if (!existing.isNullOrEmpty()) {
-            return existing
-        }
-        val generated = UUID.randomUUID().toString()
-        preferences.edit().putString(machineIdKey, generated).apply()
-        return generated
+        return EasyTierAndroidIdentity.machineId(activity)
     }
 
     private fun getHostname(): String {
-        val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
-        val model = Build.MODEL?.trim().orEmpty()
-        val raw = listOf(manufacturer, model)
-            .filter { it.isNotEmpty() }
-            .joinToString("-")
-            .ifEmpty { "android-device" }
-        return raw
-            .lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9-]+"), "-")
-            .trim('-')
-            .ifEmpty { "android-device" }
+        return EasyTierAndroidIdentity.hostname()
     }
 
     private fun emit(type: String, payload: Map<String, Any?>) {
@@ -317,8 +297,6 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         private const val methodChannelName = "net.easytier.pro/core_runtime"
         private const val eventChannelName = "net.easytier.pro/core_runtime_events"
         private const val logTag = "EasyTierBridge"
-        private const val preferencesName = "easytier_core_runtime"
-        private const val machineIdKey = "machine_id"
         private const val vpnRequestCode = 42020
         private const val notificationRequestCode = 42021
         private const val maxBufferedServiceEvents = 64
