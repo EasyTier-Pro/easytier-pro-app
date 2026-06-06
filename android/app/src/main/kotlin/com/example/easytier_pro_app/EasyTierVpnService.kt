@@ -57,6 +57,7 @@ class EasyTierVpnService : VpnService() {
 
     override fun onDestroy() {
         stopConfigServerClient(stopServiceIfIdle = false)
+        stopNetworkInstances()
         stopVpn(stopService = false)
         super.onDestroy()
     }
