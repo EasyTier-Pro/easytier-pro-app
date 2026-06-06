@@ -7,6 +7,7 @@ enum CoreRunPhase {
   running,
   error,
   needsElevation,
+  needsVpnPermission,
 }
 
 class _ElevationRequiredException implements Exception {

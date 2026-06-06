@@ -3,21 +3,32 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../auth/console_auth_service.dart';
 import 'core_peer_status.dart';
 import '../logging/app_logger.dart';
 
 part 'core_lifecycle_models.dart';
+part 'core_platform_runtime.dart';
+part 'desktop_core_runtime.dart';
+part 'android_core_runtime.dart';
 
 class CoreLifecycleService {
-  CoreLifecycleService({required this.authService})
-    : status = ValueNotifier<CoreRunStatus>(CoreRunStatus.signedOut);
+  CoreLifecycleService({
+    required this.authService,
+    CorePlatformRuntime? runtime,
+  }) : status = ValueNotifier<CoreRunStatus>(CoreRunStatus.signedOut) {
+    _runtime = runtime ?? CorePlatformRuntime.current(this);
+    _runtimeEvents = _runtime.events.listen(_handleRuntimeEvent);
+  }
 
   final AuthService authService;
   final ValueNotifier<CoreRunStatus> status;
   final AppLogger _logger = AppLogger.instance;
 
+  late final CorePlatformRuntime _runtime;
+  late final StreamSubscription<CoreRuntimeEvent> _runtimeEvents;
   AuthSession? _session;
   Future<void> _serial = Future<void>.value();
   String? _cliPath;
@@ -54,18 +65,17 @@ class CoreLifecycleService {
   Future<void> onLogout() {
     return _enqueue(() async {
       _session = null;
-      _logger.info('core', 'Logout flow: uninstalling local engine binding');
+      _logger.info('core', 'Logout flow: stopping local engine binding');
       status.value = const CoreRunStatus(
         phase: CoreRunPhase.repairing,
-        message: '正在卸载连接引擎...',
+        message: '正在停止连接引擎...',
       );
       try {
-        await _desktopCommand('uninstall', const {'purge': false});
-        _cliPath = null;
+        await _runtime.stop();
         _logger.info(
           'core',
           'Logout cleanup completed',
-          context: const {'uninstall_requested': true},
+          context: {'runtime': _runtime.runtimeType.toString()},
         );
         status.value = CoreRunStatus.signedOut;
       } catch (error) {
@@ -96,6 +106,12 @@ class CoreLifecycleService {
     });
   }
 
+  Future<void> dispose() async {
+    await _runtimeEvents.cancel();
+    await _runtime.dispose();
+    status.dispose();
+  }
+
   Future<void> repairWithElevation() {
     return _enqueue(() async {
       final session = _session;
@@ -107,8 +123,12 @@ class CoreLifecycleService {
         status.value = CoreRunStatus.signedOut;
         return;
       }
-      if (!Platform.isWindows) {
-        _logger.warn('core', 'Elevation repair is only supported on Windows');
+      if (!_runtime.supportsElevationRepair) {
+        _logger.warn(
+          'core',
+          'Elevation repair is not supported by current runtime',
+          context: {'runtime': _runtime.runtimeType.toString()},
+        );
         await _ensureRunning(forceReinstall: true);
         return;
       }
@@ -321,172 +341,17 @@ cd /d "$installerDir"
 
   Future<Map<String, CoreNetworkTrafficTotals>>
   readNetworkTrafficTotals() async {
-    final cliExecutable = _resolveCliExecutable();
-    _logger.debug(
-      'core.stats',
-      'Reading EasyTier traffic stats',
-      context: {'executable': cliExecutable},
-    );
-
-    final process = await Process.start(cliExecutable, ['-o', 'json', 'stats']);
-    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
-    final stderrFuture = process.stderr.transform(utf8.decoder).join();
-
-    final exitCode = await process.exitCode.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        process.kill();
-        throw TimeoutException('easytier-cli stats 执行超时');
-      },
-    );
-    final stdoutText = await stdoutFuture;
-    final stderrText = (await stderrFuture).trim();
-
-    if (exitCode != 0) {
-      _logger.warn(
-        'core.stats',
-        'EasyTier traffic stats failed',
-        context: {'exit_code': exitCode, 'stderr': stderrText},
-      );
-      throw StateError(
-        stderrText.isEmpty
-            ? 'easytier-cli stats 执行失败 (exit=$exitCode)'
-            : stderrText,
-      );
-    }
-
-    final totals = parseNetworkTrafficTotalsFromJson(stdoutText);
-    _logger.debug(
-      'core.stats',
-      'EasyTier traffic stats parsed',
-      context: {'network_names': totals.keys.join(','), 'count': totals.length},
-    );
-    return totals;
+    return _runtime.readNetworkTrafficTotals();
   }
 
   Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
-    final instanceName = runtimeNetworkName.trim();
-    if (instanceName.isEmpty) {
-      return false;
-    }
-
-    final cliExecutable = _resolveCliExecutable();
-    _logger.debug(
-      'core.instance',
-      'Checking EasyTier network instance',
-      context: {'executable': cliExecutable, 'instance_name': instanceName},
-    );
-
-    final process = await Process.start(cliExecutable, [
-      '-o',
-      'json',
-      '--instance-name',
-      instanceName,
-      'node',
-      'info',
-    ]);
-    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
-    final stderrFuture = process.stderr.transform(utf8.decoder).join();
-
-    final exitCode = await process.exitCode.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        process.kill();
-        throw TimeoutException('easytier-cli node info 执行超时');
-      },
-    );
-    final stdoutText = (await stdoutFuture).trim();
-    final stderrText = (await stderrFuture).trim();
-
-    if (exitCode == 0) {
-      _logger.debug(
-        'core.instance',
-        'EasyTier network instance is running',
-        context: {
-          'instance_name': instanceName,
-          'output_length': stdoutText.length,
-        },
-      );
-      return true;
-    }
-
-    final message = stderrText.isEmpty
-        ? 'easytier-cli node info 执行失败 (exit=$exitCode)'
-        : stderrText;
-    if (_isInstanceNotReadyMessage(message)) {
-      _logger.warn(
-        'core.instance',
-        'EasyTier network instance is not ready',
-        context: {'instance_name': instanceName, 'error': message},
-      );
-      return false;
-    }
-
-    _logger.warn(
-      'core.instance',
-      'EasyTier network instance check failed',
-      context: {
-        'instance_name': instanceName,
-        'exit_code': exitCode,
-        'stderr': stderrText,
-      },
-    );
-    throw StateError(message);
+    return _runtime.isNetworkInstanceRunning(runtimeNetworkName);
   }
 
   Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
     String runtimeNetworkName,
   ) async {
-    final instanceName = runtimeNetworkName.trim();
-    if (instanceName.isEmpty) {
-      return const <String, CorePeerStatus>{};
-    }
-
-    final cliExecutable = _resolveCliExecutable();
-    _logger.debug(
-      'core.peer',
-      'Reading EasyTier peer status',
-      context: {'executable': cliExecutable, 'instance_name': instanceName},
-    );
-
-    final process = await Process.start(cliExecutable, [
-      '-o',
-      'json',
-      '--instance-name',
-      instanceName,
-      'peer',
-    ]);
-    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
-    final stderrFuture = process.stderr.transform(utf8.decoder).join();
-
-    final exitCode = await process.exitCode.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        process.kill();
-        throw TimeoutException('easytier-cli peer 执行超时');
-      },
-    );
-    final stdoutText = await stdoutFuture;
-    final stderrText = (await stderrFuture).trim();
-
-    if (exitCode != 0) {
-      _logger.warn(
-        'core.peer',
-        'EasyTier peer status failed',
-        context: {
-          'instance_name': instanceName,
-          'exit_code': exitCode,
-          'stderr': stderrText,
-        },
-      );
-      throw StateError(
-        stderrText.isEmpty
-            ? 'easytier-cli peer 执行失败 (exit=$exitCode)'
-            : stderrText,
-      );
-    }
-
-    return parseNetworkPeerStatusesFromJson(stdoutText);
+    return _runtime.readNetworkPeerStatuses(runtimeNetworkName);
   }
 
   static bool _isInstanceNotReadyMessage(String message) {
@@ -531,26 +396,21 @@ cd /d "$installerDir"
         workspaceId: workspace.id,
       );
       if (!forceReinstall) {
-        final desktopStatus = await _tryReadDesktopStatus(bootstrap);
-        final machineId = desktopStatus?.machineId;
-        if (desktopStatus?.ready == true &&
+        final runtimeStatus = await _runtime.readStatus(bootstrap);
+        final machineId = runtimeStatus?.machineId;
+        if (runtimeStatus != null &&
+            runtimeStatus.phase == CoreRunPhase.running &&
             machineId != null &&
             machineId.isNotEmpty) {
           _logger.info(
             'core',
-            'Existing desktop service is ready',
+            'Existing runtime service is ready',
             context: {
               'machine_id': machineId,
-              'version': desktopStatus?.version ?? '',
-              'service_state': desktopStatus?.serviceState ?? '',
+              'runtime': _runtime.runtimeType.toString(),
             },
           );
-          status.value = CoreRunStatus(
-            phase: CoreRunPhase.running,
-            message: '本机设备已就绪',
-            machineId: machineId,
-            details: 'EasyTier ${desktopStatus?.version ?? bootstrap.version}',
-          );
+          status.value = runtimeStatus.toStatus();
           return;
         }
       }
@@ -559,15 +419,6 @@ cd /d "$installerDir"
           phase: CoreRunPhase.repairing,
           message: '正在重装连接引擎...',
         );
-        try {
-          await _desktopCommand('uninstall', const {'purge': false});
-        } catch (error) {
-          _logger.warn(
-            'core',
-            'Forced reinstall pre-uninstall failed, continuing install',
-            context: {'error': error.toString()},
-          );
-        }
       } else {
         status.value = const CoreRunStatus(
           phase: CoreRunPhase.repairing,
@@ -575,29 +426,21 @@ cd /d "$installerDir"
         );
       }
 
-      final installEvent = await _desktopCommand('install', {
-        'bootstrap_token': bootstrap.bootstrapToken,
-        'version': bootstrap.version,
-        'config_server': bootstrap.configServer,
-      });
-      final machineId = parseMachineIdFromDesktopEvent(installEvent);
-      _rememberCliPath(parseCliPathFromDesktopEvent(installEvent));
+      final result = await _runtime.ensureRunning(
+        bootstrap,
+        forceReinstall: forceReinstall,
+      );
       _logger.info(
         'core',
-        'Desktop install completed',
+        'Runtime ensure completed',
         context: {
           'force_reinstall': forceReinstall,
-          'machine_id': machineId ?? '',
-          'event': installEvent['data']?.toString() ?? '',
+          'runtime': _runtime.runtimeType.toString(),
+          'phase': result.phase.name,
+          'machine_id': result.machineId ?? '',
         },
       );
-
-      status.value = CoreRunStatus(
-        phase: CoreRunPhase.running,
-        message: machineId == null || machineId.isEmpty ? '连接引擎运行中' : '本机设备已就绪',
-        machineId: machineId,
-        details: 'EasyTier ${bootstrap.version}',
-      );
+      status.value = result.toStatus();
     } catch (error) {
       _logger.error(
         'core',
@@ -1042,6 +885,36 @@ cd /d "$installerDir"
 
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  void _handleRuntimeEvent(CoreRuntimeEvent event) {
+    _logger.debug(
+      'core.runtime',
+      'Runtime event received',
+      context: {'type': event.type, ...event.data},
+    );
+    if (event.type == CoreRuntimeEventTypes.vpnPermissionGranted &&
+        _session != null &&
+        status.value.phase == CoreRunPhase.needsVpnPermission) {
+      unawaited(
+        _enqueue(() async {
+          await _ensureRunning(forceReinstall: false);
+        }),
+      );
+      return;
+    }
+    if (event.type == CoreRuntimeEventTypes.error) {
+      final message = event.data['error']?.toString().trim() ?? '';
+      if (message.isNotEmpty) {
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '连接引擎运行异常',
+          lastError: message,
+          machineId: status.value.machineId,
+          details: status.value.details,
+        );
+      }
+    }
   }
 
   Future<void> _enqueue(Future<void> Function() action) {

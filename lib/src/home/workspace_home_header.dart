@@ -114,6 +114,9 @@ class _DashboardHeader extends StatelessWidget {
                         CoreRunPhase.repairing => const Color(0xFFF59E0B),
                         CoreRunPhase.checking => const Color(0xFF2563EB),
                         CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
+                        CoreRunPhase.needsVpnPermission => const Color(
+                          0xFFF59E0B,
+                        ),
                         CoreRunPhase.error => const Color(0xFFDC2626),
                         CoreRunPhase.signedOut => Colors.grey,
                       };
@@ -354,10 +357,12 @@ class _StatusBadge extends StatelessWidget {
         final checking = status.phase == CoreRunPhase.checking;
         final signedOut = status.phase == CoreRunPhase.signedOut;
         final needsElevation = status.phase == CoreRunPhase.needsElevation;
+        final needsVpnPermission =
+            status.phase == CoreRunPhase.needsVpnPermission;
 
         final ringColor = error
             ? const Color(0xFFDC2626)
-            : needsElevation
+            : needsElevation || needsVpnPermission
             ? const Color(0xFFF59E0B)
             : checking || signedOut
             ? const Color(0xFF9CA3AF)
@@ -367,7 +372,7 @@ class _StatusBadge extends StatelessWidget {
 
         final bgColor = error
             ? const Color(0xFFFEE2E2)
-            : needsElevation
+            : needsElevation || needsVpnPermission
             ? const Color(0xFFFEF3C7)
             : checking || signedOut
             ? const Color(0xFFF3F4F6)
@@ -377,7 +382,7 @@ class _StatusBadge extends StatelessWidget {
 
         final borderColor = error
             ? const Color(0xFFFECACA)
-            : needsElevation
+            : needsElevation || needsVpnPermission
             ? const Color(0xFFFDE68A)
             : checking || signedOut
             ? const Color(0xFFE5E7EB)
@@ -389,6 +394,8 @@ class _StatusBadge extends StatelessWidget {
             ? Icons.error_outline
             : needsElevation
             ? Icons.admin_panel_settings_outlined
+            : needsVpnPermission
+            ? Icons.vpn_key_outlined
             : checking
             ? Icons.sync
             : running
@@ -399,6 +406,8 @@ class _StatusBadge extends StatelessWidget {
             ? '引擎异常'
             : needsElevation
             ? '需要管理员权限'
+            : needsVpnPermission
+            ? '需要 VPN 授权'
             : checking
             ? '正在检查'
             : running
@@ -415,6 +424,10 @@ class _StatusBadge extends StatelessWidget {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!
               : '创建虚拟网卡需要管理员权限';
+        } else if (needsVpnPermission) {
+          subtitle = status.lastError?.isNotEmpty == true
+              ? status.lastError!
+              : 'Android 需要授权后才能建立虚拟网卡';
         } else if (joinedCount > 0) {
           subtitle = '$joinedCount 个网络';
         } else {
@@ -471,7 +484,8 @@ class _StatusBadge extends StatelessWidget {
           ],
         );
 
-        final trafficPills = joinedCount > 0 && !error && !needsElevation
+        final trafficPills =
+            joinedCount > 0 && !error && !needsElevation && !needsVpnPermission
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

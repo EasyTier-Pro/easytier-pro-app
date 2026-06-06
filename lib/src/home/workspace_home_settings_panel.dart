@@ -246,6 +246,8 @@ class _SettingsPanel extends StatelessWidget {
                       valueListenable: coreLifecycleService.status,
                       builder: (context, status, _) {
                         final running = status.phase == CoreRunPhase.running;
+                        final needsVpnPermission =
+                            status.phase == CoreRunPhase.needsVpnPermission;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -256,7 +258,8 @@ class _SettingsPanel extends StatelessWidget {
                                   online: running,
                                   color:
                                       status.phase ==
-                                          CoreRunPhase.needsElevation
+                                              CoreRunPhase.needsElevation ||
+                                          needsVpnPermission
                                       ? const Color(0xFFF59E0B)
                                       : null,
                                 ),
@@ -289,17 +292,18 @@ class _SettingsPanel extends StatelessWidget {
                                     ?.copyWith(
                                       color:
                                           status.phase ==
-                                              CoreRunPhase.needsElevation
+                                                  CoreRunPhase.needsElevation ||
+                                              needsVpnPermission
                                           ? const Color(0xFFB45309)
                                           : const Color(0xFFDC2626),
                                     ),
                               ),
                             ],
-                            if (status.phase ==
-                                CoreRunPhase.needsElevation) ...[
+                            if (status.phase == CoreRunPhase.needsElevation ||
+                                needsVpnPermission) ...[
                               const SizedBox(height: 10),
                               Text(
-                                '需要管理员权限',
+                                needsVpnPermission ? '需要 VPN 授权' : '需要管理员权限',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFF737373)),
                               ),
