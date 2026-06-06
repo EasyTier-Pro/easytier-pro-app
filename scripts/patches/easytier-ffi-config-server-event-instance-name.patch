@@ -1,0 +1,17 @@
+diff --git a/easytier-contrib/easytier-ffi/src/config_server.rs b/easytier-contrib/easytier-ffi/src/config_server.rs
+index 21a18e398..8fbcf7512 100644
+--- a/easytier-contrib/easytier-ffi/src/config_server.rs
++++ b/easytier-contrib/easytier-ffi/src/config_server.rs
+@@ -198,10 +198,11 @@ impl ManagedConfigServerClientHooks {
+             return Ok(());
+         };
+-
++        let instance_name = INSTANCE_MANAGER.get_instance_name(&instance_id).unwrap_or_default();
+         let event_json = serde_json::json!({
+             "event": event,
+             "success": true,
+             "instance_id": instance_id.to_string(),
++            "instance_name": instance_name,
+             "error": null,
+         })
+         .to_string();

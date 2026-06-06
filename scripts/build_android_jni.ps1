@@ -153,6 +153,9 @@ $env:CLANG_PATH = $clang
 Apply-LocalEasyTierPatch (
     Join-Path $localPatchRoot "easytier-android-jni-release-collect-network-infos.patch"
 )
+Apply-LocalEasyTierPatch (
+    Join-Path $localPatchRoot "easytier-ffi-config-server-event-instance-name.patch"
+)
 
 try {
     foreach ($abiName in $Abi) {

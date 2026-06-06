@@ -662,9 +662,13 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
       final config = instance?.vpnConfig;
       if (config != null && _vpnConfigHasAddress(config)) {
+        final matchedInstance = instance!;
+        final targetInstanceName = instanceName.isEmpty
+            ? matchedInstance.name
+            : instanceName;
         return _ResolvedAndroidVpnTarget(
-          instanceName: instance!.name,
-          instanceId: instance.id ?? instanceId,
+          instanceName: targetInstanceName,
+          instanceId: matchedInstance.id ?? instanceId,
           vpnConfig: config,
           knownInstanceNames: knownInstanceNames,
         );
@@ -673,7 +677,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
     return _ResolvedAndroidVpnTarget(
       instanceName:
-          lastMatchedInstance?.name ??
+          (instanceName.isEmpty ? lastMatchedInstance?.name : instanceName) ??
           (instanceName.isEmpty ? instanceKey : instanceName),
       instanceId:
           lastMatchedInstance?.id ?? (instanceId.isEmpty ? null : instanceId),
@@ -1398,7 +1402,7 @@ class AndroidNetworkInfoSnapshot {
     final decoded = jsonDecode(text);
     final instances = <String, AndroidNetworkInstanceInfo>{};
 
-    void collect(Object? value, {String? nameHint}) {
+    void collect(Object? value, {String? nameHint, String? idHint}) {
       if (value is List) {
         for (final item in value) {
           collect(item);
@@ -1420,7 +1424,11 @@ class AndroidNetworkInfoSnapshot {
       ]);
       final name = explicitName ?? nameHint?.trim();
       if (name != null && name.isNotEmpty && _looksLikeInstanceMap(map)) {
-        final instance = AndroidNetworkInstanceInfo.fromJson(map, name: name);
+        final instance = AndroidNetworkInstanceInfo.fromJson(
+          map,
+          name: name,
+          idHint: idHint,
+        );
         instances[instance.name] = instance;
       }
 
@@ -1430,7 +1438,11 @@ class AndroidNetworkInfoSnapshot {
         if (_containerKeys.contains(key)) {
           collect(child);
         } else if (child is Map) {
-          collect(child, nameHint: key);
+          collect(
+            child,
+            nameHint: key,
+            idHint: _looksLikeUuid(key) ? key : null,
+          );
         } else if (child is List && _containerKeys.contains(key)) {
           collect(child);
         }
@@ -1471,6 +1483,12 @@ class AndroidNetworkInfoSnapshot {
         map.containsKey('peer_list') ||
         map.containsKey('routes');
   }
+
+  static bool _looksLikeUuid(String value) {
+    return RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    ).hasMatch(value.trim());
+  }
 }
 
 class AndroidNetworkInstanceInfo {
@@ -1493,6 +1511,7 @@ class AndroidNetworkInstanceInfo {
   static AndroidNetworkInstanceInfo fromJson(
     Map<String, Object?> json, {
     required String name,
+    String? idHint,
   }) {
     final error = _firstNonEmptyString([
       json['error'],
@@ -1508,6 +1527,7 @@ class AndroidNetworkInstanceInfo {
         json['instance_id'],
         json['instanceId'],
         json['id'],
+        idHint,
       ]),
       error: error,
       vpnConfig: AndroidCoreRuntime.buildVpnConfigFromNetworkInfo(json),
