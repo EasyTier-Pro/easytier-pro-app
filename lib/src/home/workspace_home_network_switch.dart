@@ -524,6 +524,7 @@ class _NetworkTrafficSparkline extends StatefulWidget {
 class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _detailOverlay;
+  OverlayEntry? _fullscreenOverlay;
   Rect? _anchorRect;
   bool _overlayUpdateScheduled = false;
   late final AnimationController _overlayAnimationController;
@@ -547,7 +548,7 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
   @override
   void didUpdateWidget(covariant _NetworkTrafficSparkline oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_detailOverlay != null) {
+    if (_detailOverlay != null || _fullscreenOverlay != null) {
       _scheduleDetailOverlayUpdate();
     }
   }
@@ -555,6 +556,7 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
   @override
   void dispose() {
     _removeDetailsImmediately();
+    _removeFullscreenImmediately();
     _overlayAnimationController.dispose();
     super.dispose();
   }
@@ -569,16 +571,20 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
       onEnter: (_) => _showDetails(),
       onExit: (_) => _hideDetails(),
       child: ExcludeSemantics(
-        child: SizedBox(
-          width: 100,
-          height: 40,
-          child: LineChart(
-            _trafficSparklineChartData(
-              chart: chart,
-              downloadColor: downloadColor,
-              uploadColor: uploadColor,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _showFullscreen,
+          child: SizedBox(
+            width: 100,
+            height: 40,
+            child: LineChart(
+              _trafficSparklineChartData(
+                chart: chart,
+                downloadColor: downloadColor,
+                uploadColor: uploadColor,
+              ),
+              duration: Duration.zero,
             ),
-            duration: Duration.zero,
           ),
         ),
       ),
@@ -623,6 +629,28 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     _detailOverlay = null;
   }
 
+  void _showFullscreen() {
+    _removeDetailsImmediately();
+    final overlay = _fullscreenOverlay;
+    if (overlay != null) {
+      overlay.markNeedsBuild();
+      return;
+    }
+
+    _fullscreenOverlay = OverlayEntry(
+      builder: (context) => _NetworkTrafficFullscreenOverlay(
+        history: widget.history,
+        onClose: _removeFullscreenImmediately,
+      ),
+    );
+    Overlay.of(context).insert(_fullscreenOverlay!);
+  }
+
+  void _removeFullscreenImmediately() {
+    _fullscreenOverlay?.remove();
+    _fullscreenOverlay = null;
+  }
+
   void _scheduleDetailOverlayUpdate() {
     if (_overlayUpdateScheduled) {
       return;
@@ -631,12 +659,13 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     _overlayUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _overlayUpdateScheduled = false;
-      if (!mounted || _detailOverlay == null) {
+      if (!mounted || (_detailOverlay == null && _fullscreenOverlay == null)) {
         return;
       }
 
       _updateAnchorRect();
       _detailOverlay?.markNeedsBuild();
+      _fullscreenOverlay?.markNeedsBuild();
     });
   }
 
@@ -648,6 +677,102 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
 
     final topLeft = box.localToGlobal(Offset.zero);
     _anchorRect = topLeft & box.size;
+  }
+}
+
+class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
+  const _NetworkTrafficFullscreenOverlay({
+    required this.history,
+    required this.onClose,
+  });
+
+  final List<_TrafficHistoryPoint> history;
+  final VoidCallback onClose;
+
+  static const double _screenPadding = 24;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final panelWidth = math.min(screenSize.width - (_screenPadding * 2), 960.0);
+    final panelHeight = math.min(
+      screenSize.height - (_screenPadding * 2),
+      720.0,
+    );
+
+    return Positioned.fill(
+      child: Material(
+        color: Colors.transparent,
+        child: GestureDetector(
+          key: const ValueKey<String>('traffic-fullscreen-overlay'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onClose,
+          child: Container(
+            color: const Color(0xFF020617).withAlpha(170),
+            padding: const EdgeInsets.all(_screenPadding),
+            child: Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: SizedBox(
+                  width: panelWidth,
+                  height: panelHeight,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF020617).withAlpha(60),
+                          blurRadius: 34,
+                          offset: const Offset(0, 18),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '实时流量详情',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                              ),
+                              const Spacer(),
+                              FButton(
+                                key: const ValueKey<String>(
+                                  'traffic-fullscreen-close',
+                                ),
+                                variant: .ghost,
+                                size: .sm,
+                                onPress: onClose,
+                                mainAxisSize: MainAxisSize.min,
+                                child: const Icon(Icons.close, size: 18),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Expanded(
+                            child: _NetworkTrafficDetailChart(history: history),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

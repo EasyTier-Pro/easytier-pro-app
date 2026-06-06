@@ -341,6 +341,33 @@ void main() {
     expect(find.text('实时流量'), findsNothing);
     expect(find.byType(LineChart), findsOneWidget);
 
+    await tester.tap(find.byType(LineChart));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-overlay')),
+      findsOneWidget,
+    );
+    expect(find.text('实时流量详情'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+      findsNothing,
+    );
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartsStatic(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-close')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-overlay')),
+      findsNothing,
+    );
+    expect(find.text('实时流量详情'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+
     await gesture.removePointer();
     await tester.pumpWidget(const SizedBox());
   });
