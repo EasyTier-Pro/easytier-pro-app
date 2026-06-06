@@ -105,6 +105,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题在 Dart 对 `collectNetworkInfos` / config server 下发结果的解析或路由刷新链路。
 - 如果日志 routes 正确但未被排除的浏览器、Termux 或 ping 工具仍无法访问虚拟 IP/子网，问题更可能在系统 VPN interface、TUN fd 注入或 EasyTier data-plane 转发链路。
 - 不要用 EasyTier Pro 自己访问虚拟网作为连通性判断，因为应用自身会被 `addDisallowedApplication(packageName)` 排除在 VPN 外，用来避免控制面和 EasyTier 底层传输路由回环。
+- 导出诊断日志后，可以用 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>` 自动检查 config server 启动、TUN fd、routes、mapped route 归一化和自身应用排除是否满足。该脚本不证明数据面已通，虚拟 IP/子网访问仍需用未被排除的应用实际验证。
 
 ## 发布前验证
 
@@ -121,6 +122,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 完成 VPN 授权。
 - 控制台下发 `run_network_instance` 后，日志出现 `vpn_started` 或 native `Injected TUN fd`。
 - 应用内“设置 -> 诊断日志”出现 `Android VPN established`，且 `routes` 包含虚拟网 CIDR 与已授权子网 CIDR，`disallowed_applications` 至少包含 `net.easytier.pro`。
+- 导出诊断日志，并运行 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>`。
 - 使用未被排除的应用访问虚拟 IP 和子网地址，确认系统 VPN route 能承载数据面流量。
 - 退出登录后，应用内诊断日志出现 `Android VPN stopped` 和 `Android config server client stopped`，确认 config server client 与 VPN 均停止。
 
