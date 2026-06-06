@@ -110,6 +110,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Map<String, String> _peerStatusErrors = const <String, String>{};
   String? _trayConnectionNetworkId;
   String? _trayConnectionLabel;
+  String? _trayWorkspaceName;
   bool? _trayConnectionEnabled;
   bool? _trayConnectionDisconnecting;
 
@@ -155,11 +156,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         network != null &&
         state?.phase != _JoinPhase.joining &&
         state?.phase != _JoinPhase.leaving;
-    final label = disconnecting ? '断开' : '连接';
+    final label = _trayConnectionLabelFor(network, state);
     final networkId = network?.id;
+    final workspaceName = _trayWorkspaceNameForSession();
 
     if (_trayConnectionNetworkId == networkId &&
         _trayConnectionLabel == label &&
+        _trayWorkspaceName == workspaceName &&
         _trayConnectionEnabled == enabled &&
         _trayConnectionDisconnecting == disconnecting) {
       return;
@@ -167,6 +170,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
     _trayConnectionNetworkId = networkId;
     _trayConnectionLabel = label;
+    _trayWorkspaceName = workspaceName;
     _trayConnectionEnabled = enabled;
     _trayConnectionDisconnecting = disconnecting;
 
@@ -174,11 +178,33 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       TrayConnectionAction(
         label: label,
         enabled: enabled,
+        workspaceName: workspaceName,
         onSelected: networkId == null
             ? null
             : () => _runTrayConnectionAction(networkId, disconnecting),
       ),
     );
+  }
+
+  String _trayConnectionLabelFor(
+    ConsoleNetwork? network,
+    _JoinNetworkState? state,
+  ) {
+    if (network == null) {
+      return '连接';
+    }
+
+    return switch (state?.phase) {
+      _JoinPhase.joined => '断开 ${network.name}',
+      _JoinPhase.leaving => '正在断开 ${network.name}...',
+      _JoinPhase.joining => '正在连接 ${network.name}...',
+      _ => '连接到 ${network.name}',
+    };
+  }
+
+  String _trayWorkspaceNameForSession() {
+    final name = _workspace?.name.trim();
+    return name == null || name.isEmpty ? '未关联工作区' : name;
   }
 
   Future<void> _runTrayConnectionAction(

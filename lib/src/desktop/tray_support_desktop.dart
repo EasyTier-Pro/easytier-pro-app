@@ -138,7 +138,12 @@ class _DesktopTraySupport extends TraySupport
   Future<void> _refreshContextMenu() async {
     final connectionAction =
         _connectionAction ??
-        const TrayConnectionAction(label: '连接', enabled: false);
+        const TrayConnectionAction(
+          label: '连接',
+          enabled: false,
+          workspaceName: '未登录',
+        );
+    final workspaceName = connectionAction.workspaceName?.trim();
 
     await trayManager.setContextMenu(
       Menu(
@@ -158,6 +163,8 @@ class _DesktopTraySupport extends TraySupport
               }
             },
           ),
+          if (workspaceName != null && workspaceName.isNotEmpty)
+            MenuItem(label: '工作区：$workspaceName', disabled: true),
           MenuItem.separator(),
           MenuItem(
             label: '显示主窗口',

@@ -7,11 +7,13 @@ class TrayConnectionAction {
   const TrayConnectionAction({
     required this.label,
     required this.enabled,
+    this.workspaceName,
     this.onSelected,
   });
 
   final String label;
   final bool enabled;
+  final String? workspaceName;
   final Future<void> Function()? onSelected;
 }
 
