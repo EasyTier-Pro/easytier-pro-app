@@ -291,7 +291,12 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             onPress: _isLoadingDevices
                 ? null
                 : () => unawaited(_loadManagedDevices()),
-            child: Text(_isLoadingDevices ? '刷新中' : '刷新'),
+            child: SizedBox.square(
+              dimension: 16,
+              child: _isLoadingDevices
+                  ? const FCircularProgress(size: .sm)
+                  : const Icon(Icons.refresh, size: 16),
+            ),
           ),
         ),
         const SizedBox(height: 16),
