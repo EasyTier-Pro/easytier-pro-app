@@ -3,6 +3,7 @@ package com.example.easytier_pro_app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
@@ -54,7 +55,7 @@ class EasyTierVpnService : VpnService() {
         stopVpn(stopService = false)
         Log.i(logTag, "Establishing VPN for instance=$instanceName addresses=${addresses.size}")
 
-        startForeground(notificationId, notification())
+        startForeground(notificationId, notification(instanceName))
 
         val builder = Builder()
             .setSession("EasyTier Pro")
@@ -128,7 +129,7 @@ class EasyTierVpnService : VpnService() {
         }
     }
 
-    private fun notification(): Notification {
+    private fun notification(instanceName: String): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             val channel = NotificationChannel(
@@ -149,9 +150,39 @@ class EasyTierVpnService : VpnService() {
         return builder
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("EasyTier Pro")
-            .setContentText("VPN connection is active")
+            .setContentText("Connected to $instanceName")
+            .setContentIntent(openAppPendingIntent())
+            .addAction(
+                applicationInfo.icon,
+                "Disconnect",
+                stopVpnPendingIntent(),
+            )
             .setOngoing(true)
             .build()
+    }
+
+    private fun openAppPendingIntent(): PendingIntent {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(this, MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        return PendingIntent.getActivity(
+            this,
+            pendingIntentOpenAppRequestCode,
+            intent,
+            pendingIntentFlags,
+        )
+    }
+
+    private fun stopVpnPendingIntent(): PendingIntent {
+        val intent = Intent(this, EasyTierVpnService::class.java).apply {
+            action = actionStop
+        }
+        return PendingIntent.getService(
+            this,
+            pendingIntentStopRequestCode,
+            intent,
+            pendingIntentFlags,
+        )
     }
 
     private fun stopForegroundCompat() {
@@ -184,5 +215,9 @@ class EasyTierVpnService : VpnService() {
         private const val logTag = "EasyTierVpnService"
         private const val notificationId = 22020
         private const val notificationChannelId = "easytier_vpn"
+        private const val pendingIntentOpenAppRequestCode = 22021
+        private const val pendingIntentStopRequestCode = 22022
+        private val pendingIntentFlags =
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     }
 }
