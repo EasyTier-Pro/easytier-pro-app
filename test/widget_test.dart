@@ -323,6 +323,7 @@ void main() {
     _expectTextSingleLine(tester, find.text('10.0 KiB/s'));
     expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
     _expectTrafficTimeLabelsFitInside(tester);
+    _expectTrafficXAxisLabelsOutsideGraph(tester);
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartYScalesFixed(tester);
     _expectTrafficChartsStatic(tester);
@@ -1931,6 +1932,20 @@ void _expectTrafficTimeLabelsFitInside(WidgetTester tester) {
   expect(timeTitleWidgets, isNotEmpty);
   for (final widget in timeTitleWidgets) {
     expect(widget.fitInside.enabled, isTrue);
+  }
+}
+
+void _expectTrafficXAxisLabelsOutsideGraph(WidgetTester tester) {
+  final detailedCharts = tester
+      .widgetList<LineChart>(find.byType(LineChart))
+      .where((chart) => chart.data.titlesData.show)
+      .toList(growable: false);
+
+  expect(detailedCharts, isNotEmpty);
+  for (final chart in detailedCharts) {
+    final bottomTitles = chart.data.titlesData.bottomTitles;
+    expect(bottomTitles.sideTitleAlignment, SideTitleAlignment.outside);
+    expect(bottomTitles.sideTitles.reservedSize, greaterThanOrEqualTo(24));
   }
 }
 

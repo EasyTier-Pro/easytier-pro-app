@@ -920,10 +920,10 @@ LineChartData _trafficSparklineChartData({
               ),
             ),
             bottomTitles: AxisTitles(
-              sideTitleAlignment: SideTitleAlignment.inside,
+              sideTitleAlignment: SideTitleAlignment.outside,
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 22,
+                reservedSize: 24,
                 interval: chart.maxX,
                 getTitlesWidget: (value, meta) => _trafficXAxisTitle(
                   value: value,
