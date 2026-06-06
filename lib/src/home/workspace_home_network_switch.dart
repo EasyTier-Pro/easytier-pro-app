@@ -530,9 +530,8 @@ class _NetworkTrafficSparkline extends StatelessWidget {
         .map((h) => math.max(h.downloadRate, h.uploadRate))
         .reduce(math.max);
     final hasTraffic = maxRate > 0;
-    final yMax = hasTraffic ? maxRate * 1.15 : 1.0;
+    final yMax = _trafficSparklineYMax(maxRate);
 
-    final isSinglePoint = visibleHistory.length == 1;
     const minX = 0.0;
     final maxX = (maxHistoryPoints - 1).toDouble();
     final firstX = maxX - (visibleHistory.length - 1);
@@ -561,8 +560,8 @@ class _NetworkTrafficSparkline extends StatelessWidget {
             borderData: FlBorderData(show: false),
             lineTouchData: const LineTouchData(enabled: false),
             lineBarsData: [
-              _buildLine(downloadSpots, downloadColor, showDot: isSinglePoint),
-              _buildLine(uploadSpots, uploadColor, showDot: isSinglePoint),
+              _buildLine(downloadSpots, downloadColor),
+              _buildLine(uploadSpots, uploadColor),
               if (!hasTraffic)
                 LineChartBarData(
                   spots: [const FlSpot(minX, 0), FlSpot(maxX, 0)],
@@ -573,7 +572,8 @@ class _NetworkTrafficSparkline extends StatelessWidget {
                 ),
             ],
           ),
-          duration: Duration.zero,
+          duration: appMotionMedium,
+          curve: appMotionCurve,
         ),
       ),
     );
@@ -586,7 +586,7 @@ class _NetworkTrafficSparkline extends StatelessWidget {
   }) {
     return LineChartBarData(
       spots: spots,
-      isCurved: spots.length > 2,
+      isCurved: spots.length >= 4,
       curveSmoothness: 0.3,
       barWidth: 1.8,
       isStrokeCapRound: true,
@@ -597,8 +597,33 @@ class _NetworkTrafficSparkline extends StatelessWidget {
         },
       ),
       color: color,
-      belowBarData: BarAreaData(show: true, color: color.withAlpha(35)),
+      belowBarData: BarAreaData(
+        show: spots.length > 1,
+        color: color.withAlpha(35),
+      ),
     );
+  }
+
+  double _trafficSparklineYMax(double maxRate) {
+    const minScale = 1024.0;
+    if (maxRate <= 0) {
+      return minScale;
+    }
+
+    final target = math.max(maxRate * 1.15, minScale);
+    final exponent = (math.log(target) / math.ln10).floor();
+    final magnitude = math.pow(10, exponent).toDouble();
+    final normalized = target / magnitude;
+
+    final multiplier = normalized <= 1
+        ? 1.0
+        : normalized <= 2
+        ? 2.0
+        : normalized <= 5
+        ? 5.0
+        : 10.0;
+
+    return multiplier * magnitude;
   }
 }
 
