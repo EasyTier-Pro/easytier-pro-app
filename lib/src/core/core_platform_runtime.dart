@@ -86,5 +86,7 @@ class CoreRuntimeEventTypes {
   static const String notificationPermissionDenied =
       'notification_permission_denied';
   static const String configServer = 'config_server';
+  static const String configServerStarted = 'config_server_started';
+  static const String configServerStopped = 'config_server_stopped';
   static const String error = 'error';
 }

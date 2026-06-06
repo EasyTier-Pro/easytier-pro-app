@@ -908,6 +908,26 @@ cd /d "$installerDir"
       );
       return;
     }
+    if (event.type == CoreRuntimeEventTypes.configServerStopped) {
+      if (_shouldReconnectAfterRuntimeStop()) {
+        _logger.warn(
+          'core.runtime',
+          'Config server stopped while session is active; reconnecting',
+        );
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.repairing,
+          message: '控制面连接已断开，正在重新连接...',
+          machineId: status.value.machineId,
+          details: status.value.details,
+        );
+        unawaited(
+          _enqueue(() async {
+            await _ensureRunning(forceReinstall: false);
+          }),
+        );
+      }
+      return;
+    }
     if (event.type == CoreRuntimeEventTypes.error) {
       final message = event.data['error']?.toString().trim() ?? '';
       if (message.isNotEmpty) {
@@ -920,6 +940,20 @@ cd /d "$installerDir"
         );
       }
     }
+  }
+
+  bool _shouldReconnectAfterRuntimeStop() {
+    if (_session == null) {
+      return false;
+    }
+    return switch (status.value.phase) {
+      CoreRunPhase.running || CoreRunPhase.needsVpnPermission => true,
+      CoreRunPhase.signedOut ||
+      CoreRunPhase.checking ||
+      CoreRunPhase.repairing ||
+      CoreRunPhase.error ||
+      CoreRunPhase.needsElevation => false,
+    };
   }
 
   Future<void> _enqueue(Future<void> Function() action) {
