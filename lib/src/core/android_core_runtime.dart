@@ -872,22 +872,44 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   static List<String> _readRouteCidrs(Object? value) {
     final cidrs = <String>{};
+    if (value is Map) {
+      _addRouteCidrsFromValue(cidrs, value);
+      return cidrs.toList(growable: false);
+    }
     for (final item in _readList(value)) {
-      if (item is Map) {
-        final map = _stringObjectMap(item);
-        cidrs.addAll(_readCidrList(map['proxy_cidrs'] ?? map['proxyCidrs']));
-        final cidr = _cidrFromValue(map);
-        if (cidr.isNotEmpty) {
-          cidrs.add(cidr);
-        }
-      } else {
-        final cidr = _cidrFromValue(item);
-        if (cidr.isNotEmpty) {
-          cidrs.add(cidr);
-        }
-      }
+      _addRouteCidrsFromValue(cidrs, item);
     }
     return cidrs.toList(growable: false);
+  }
+
+  static void _addRouteCidrsFromValue(Set<String> cidrs, Object? value) {
+    if (value is Map) {
+      final map = _stringObjectMap(value);
+      for (final key in const <String>['route', 'route_info', 'routeInfo']) {
+        final nested = map[key];
+        if (nested is Map) {
+          _addRouteCidrsFromValue(cidrs, nested);
+        }
+      }
+      final cidr = _cidrFromValue(map);
+      if (cidr.isNotEmpty) {
+        cidrs.add(cidr);
+      }
+      cidrs.addAll(
+        _readCidrList(
+          map['proxy_cidrs'] ??
+              map['proxyCidrs'] ??
+              map['proxy_cidr'] ??
+              map['proxyCidr'],
+        ),
+      );
+      return;
+    }
+
+    final cidr = _cidrFromValue(value);
+    if (cidr.isNotEmpty) {
+      cidrs.add(cidr);
+    }
   }
 
   static String? _networkRouteFromAddressCidr(String value) {
@@ -972,10 +994,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       ..._readRouteCidrs(json['peerRoutes']),
       ..._readRouteCidrs(json['route_infos']),
       ..._readRouteCidrs(json['routeInfos']),
-      for (final pair in _readList(json['peer_route_pairs']))
-        _cidrFromValue(pair),
-      for (final pair in _readList(json['peerRoutePairs']))
-        _cidrFromValue(pair),
+      ..._readRouteCidrs(json['peer_route_pairs']),
+      ..._readRouteCidrs(json['peerRoutePairs']),
     }..removeWhere((value) => value.isEmpty);
 
     final dns = <String>{

@@ -119,7 +119,11 @@ void main() {
         'peer_route_pairs': [
           {
             'peer': {'hostname': 'node-a'},
-            'route': {'destination': '10.8.0.0', 'prefix_length': 16},
+            'route': {
+              'destination': '10.8.0.0',
+              'prefix_length': 16,
+              'proxy_cidrs': ['192.168.50.0/24'],
+            },
           },
           {
             'peer': {'hostname': 'node-b'},
@@ -129,7 +133,12 @@ void main() {
       });
 
       expect(config['addresses'], ['10.1.0.1/24']);
-      expect(config['routes'], ['10.1.0.0/24', '10.8.0.0/16', '10.9.0.0/16']);
+      expect(config['routes'], [
+        '10.1.0.0/24',
+        '10.8.0.0/16',
+        '192.168.50.0/24',
+        '10.9.0.0/16',
+      ]);
     });
 
     test('parses upstream running info map for Android VPN config', () {
