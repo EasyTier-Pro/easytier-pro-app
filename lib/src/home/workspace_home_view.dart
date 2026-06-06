@@ -43,6 +43,7 @@ class WorkspaceHomeView extends StatefulWidget {
     required this.traySupport,
     required this.session,
     required this.onLogout,
+    this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
@@ -50,6 +51,7 @@ class WorkspaceHomeView extends StatefulWidget {
   final TraySupport traySupport;
   final AuthSession session;
   final Future<void> Function() onLogout;
+  final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
   State<WorkspaceHomeView> createState() => _WorkspaceHomeViewState();
@@ -114,6 +116,17 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool? _trayConnectionDisconnecting;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
+
+  bool get _isAndroidMvpSingleActiveNetwork {
+    final override = widget.androidMvpSingleActiveNetworkOverride;
+    if (override != null) {
+      return override;
+    }
+    if (kIsWeb) {
+      return false;
+    }
+    return Platform.isAndroid;
+  }
 
   ConsoleNetwork? get _selectedNetwork {
     for (final network in _networks) {

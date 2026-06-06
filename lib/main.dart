@@ -72,11 +72,13 @@ class MyApp extends StatefulWidget {
     required this.authService,
     required this.traySupport,
     required this.coreLifecycleService,
+    this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
   final TraySupport traySupport;
   final CoreLifecycleService coreLifecycleService;
+  final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -144,6 +146,8 @@ class _MyAppState extends State<MyApp> {
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
+        androidMvpSingleActiveNetworkOverride:
+            widget.androidMvpSingleActiveNetworkOverride,
       ),
     );
   }

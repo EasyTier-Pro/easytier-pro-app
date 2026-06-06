@@ -14,6 +14,14 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       _setJoinError(network.id, '请等待本机设备准备完成后再加入网络。');
       return;
     }
+    final joinedAndroidNetwork = _joinedAndroidNetworkExcluding(network.id);
+    if (joinedAndroidNetwork != null) {
+      final message =
+          'Android 当前仅支持一个活跃 VPN 网络，请先断开「${joinedAndroidNetwork.name}」后再加入此网络。';
+      _setJoinError(network.id, message);
+      _showNetworkActionToast(message, destructive: true);
+      return;
+    }
     final existingLocalDevice = _localDeviceInNetwork(network.id, machineId);
     if (existingLocalDevice != null) {
       _setJoinState(
@@ -149,6 +157,24 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       }
       if (attempt < _WorkspaceHomeViewState._devicePollAttempts - 1) {
         await Future<void>.delayed(_WorkspaceHomeViewState._devicePollDelay);
+      }
+    }
+    return null;
+  }
+
+  ConsoleNetwork? _joinedAndroidNetworkExcluding(String networkId) {
+    if (!_isAndroidMvpSingleActiveNetwork) {
+      return null;
+    }
+    for (final network in _networks) {
+      if (network.id == networkId) {
+        continue;
+      }
+      final phase = _joinStateFor(network).phase;
+      if (phase == _JoinPhase.joined ||
+          phase == _JoinPhase.joining ||
+          phase == _JoinPhase.leaving) {
+        return network;
       }
     }
     return null;

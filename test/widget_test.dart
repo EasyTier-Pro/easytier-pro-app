@@ -123,6 +123,51 @@ void main() {
     expect(find.byType(FSwitch), findsNWidgets(2));
   });
 
+  testWidgets('android blocks joining a second active network', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'android-phone',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+        androidMvpSingleActiveNetworkOverride: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    expect(authService.attachedNetworkIds, <String>['net-1']);
+
+    await tester.tap(find.byType(FSwitch).at(1));
+    await tester.pumpAndSettle();
+
+    expect(authService.attachedNetworkIds, <String>['net-1']);
+    expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+  });
+
   testWidgets('shows realtime traffic after joining a network', (
     WidgetTester tester,
   ) async {
