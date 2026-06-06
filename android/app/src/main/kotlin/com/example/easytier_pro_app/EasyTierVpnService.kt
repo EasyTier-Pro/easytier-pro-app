@@ -59,14 +59,12 @@ class EasyTierVpnService : VpnService() {
                 payload["instanceName"] = instanceName
             }
             if (action == actionStart) {
-                payload["addresses"] = intentStringList(intent, extraAddresses)
-                payload["routes"] = intentStringList(intent, extraRoutes)
-                payload["dnsServers"] = intentStringList(intent, extraDnsServers)
-                payload["disallowedApplications"] = intentStringList(
-                    intent,
-                    extraDisallowedApplications,
+                payload.putAll(
+                    EasyTierVpnStartConfigParser.diagnosticPayload(
+                        intent,
+                        packageName,
+                    ),
                 )
-                payload["mtu"] = intent?.getIntExtra(extraMtu, 0) ?: 0
             }
             EasyTierFlutterBridge.emitFromService(
                 "error",

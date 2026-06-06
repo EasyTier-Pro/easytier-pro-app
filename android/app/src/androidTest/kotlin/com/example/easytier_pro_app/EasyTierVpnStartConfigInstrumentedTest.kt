@@ -68,6 +68,32 @@ class EasyTierVpnStartConfigInstrumentedTest {
     }
 
     @Test
+    fun diagnosticPayloadDisallowsSelfPackageEvenWhenConfigIsInvalid() {
+        val intent = Intent().apply {
+            putExtra(EasyTierVpnService.extraInstanceName, "network-a")
+            putStringArrayListExtra(
+                EasyTierVpnService.extraDisallowedApplications,
+                arrayListOf("com.example.extra"),
+            )
+            putExtra(EasyTierVpnService.extraMtu, 1280)
+        }
+
+        val payload = EasyTierVpnStartConfigParser.diagnosticPayload(
+            intent,
+            context.packageName,
+        )
+
+        assertEquals(emptyList<String>(), payload["addresses"])
+        assertEquals(emptyList<String>(), payload["routes"])
+        assertEquals(emptyList<String>(), payload["dnsServers"])
+        assertEquals(
+            listOf(context.packageName, "com.example.extra"),
+            payload["disallowedApplications"],
+        )
+        assertEquals(1280, payload["mtu"])
+    }
+
+    @Test
     fun rejectsInvalidCidrPrefix() {
         assertFailsWithMessage("Invalid CIDR prefix") {
             EasyTierVpnStartConfigParser.parseCidr("10.10.0.0/33")

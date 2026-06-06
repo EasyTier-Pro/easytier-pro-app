@@ -43,6 +43,38 @@ object EasyTierVpnStartConfigParser {
             .distinct()
     }
 
+    fun diagnosticPayload(intent: Intent?, packageName: String): Map<String, Any?> {
+        val config = try {
+            intent?.let { fromIntent(it, packageName) }
+        } catch (_: Throwable) {
+            null
+        }
+        return mapOf(
+            "addresses" to (
+                config?.addresses
+                    ?: stringList(intent, EasyTierVpnService.extraAddresses)
+            ),
+            "routes" to (
+                config?.routes
+                    ?: stringList(intent, EasyTierVpnService.extraRoutes)
+            ),
+            "dnsServers" to (
+                config?.dnsServers
+                    ?: stringList(intent, EasyTierVpnService.extraDnsServers)
+            ),
+            "disallowedApplications" to (
+                config?.disallowedApplications ?: disallowedApplications(
+                    packageName,
+                    stringList(intent, EasyTierVpnService.extraDisallowedApplications),
+                )
+            ),
+            "mtu" to (
+                config?.mtu
+                    ?: (intent?.getIntExtra(EasyTierVpnService.extraMtu, 0) ?: 0)
+            ),
+        )
+    }
+
     fun parseCidr(value: String): AndroidVpnCidr {
         val parts = value.trim().split("/", limit = 2)
         require(parts.firstOrNull()?.isNotEmpty() == true) { "Invalid CIDR: $value" }
@@ -51,8 +83,8 @@ object EasyTierVpnStartConfigParser {
         return AndroidVpnCidr(parts[0], prefix)
     }
 
-    private fun stringList(intent: Intent, extraName: String): List<String> {
-        return intent.getStringArrayListExtra(extraName)
+    private fun stringList(intent: Intent?, extraName: String): List<String> {
+        return intent?.getStringArrayListExtra(extraName)
             .orEmpty()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
