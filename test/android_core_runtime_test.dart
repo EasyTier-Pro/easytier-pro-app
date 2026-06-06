@@ -167,6 +167,44 @@ void main() {
       ]);
     });
 
+    test('extracts map keyed routes and subnet route containers', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'address': '10.10.0.2/24',
+        'routes': {
+          'route-a': {'destination': '10.40.0.0', 'prefix': 16},
+          'route-b': {
+            'route_info': {'cidr': '10.41.0.0/16'},
+            'subnet_routes': {
+              'branch-a': {'cidr': '192.168.60.0/24'},
+              'branch-b': {'address': '192.168.61.0', 'prefix': 24},
+            },
+          },
+        },
+        'peer_routes': {
+          'peer-a': {
+            'ipv4_addr': {
+              'address': {'addr': 168427523},
+              'network_length': 32,
+            },
+          },
+        },
+        'proxy_cidrs': {
+          'site-a': '172.20.0.0/16',
+        },
+      });
+
+      expect(config['addresses'], ['10.10.0.2/24']);
+      expect(config['routes'], [
+        '10.10.0.0/24',
+        '10.40.0.0/16',
+        '10.41.0.0/16',
+        '192.168.60.0/24',
+        '192.168.61.0/24',
+        '10.10.0.3/32',
+        '172.20.0.0/16',
+      ]);
+    });
+
     test('preserves configured Android VPN disallowed applications', () {
       final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
         'address': '10.10.0.2/24',

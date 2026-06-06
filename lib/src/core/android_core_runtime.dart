@@ -932,9 +932,34 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   static void _addRouteCidrsFromValue(Set<String> cidrs, Object? value) {
     if (value is Map) {
       final map = _stringObjectMap(value);
-      for (final key in const <String>['route', 'route_info', 'routeInfo']) {
+      if (!_looksLikeRouteCidrMap(map)) {
+        for (final child in map.values) {
+          if (child is Map || child is List) {
+            _addRouteCidrsFromValue(cidrs, child);
+          } else {
+            final cidr = _cidrFromValue(child);
+            if (_looksLikeRouteCidrText(cidr)) {
+              cidrs.add(_routeCidr(cidr));
+            }
+          }
+        }
+        return;
+      }
+
+      for (final key in const <String>[
+        'route',
+        'route_info',
+        'routeInfo',
+        'routes',
+        'route_infos',
+        'routeInfos',
+        'peer_routes',
+        'peerRoutes',
+        'peer_route_pairs',
+        'peerRoutePairs',
+      ]) {
         final nested = map[key];
-        if (nested is Map) {
+        if (nested is Map || nested is List) {
           _addRouteCidrsFromValue(cidrs, nested);
         }
       }
@@ -954,7 +979,17 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         'subnets',
         'subnet',
       ]) {
-        cidrs.addAll(_readCidrList(map[key]).map(_routeCidr));
+        final nested = map[key];
+        if (nested != null) {
+          _addRouteCidrsFromValue(cidrs, nested);
+        }
+      }
+      return;
+    }
+
+    if (value is List) {
+      for (final item in value) {
+        _addRouteCidrsFromValue(cidrs, item);
       }
       return;
     }
@@ -963,6 +998,71 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     if (cidr.isNotEmpty) {
       cidrs.add(_routeCidr(cidr));
     }
+  }
+
+  static bool _looksLikeRouteCidrMap(Map<String, Object?> map) {
+    const routeKeys = <String>{
+      'route',
+      'route_info',
+      'routeInfo',
+      'routes',
+      'route_infos',
+      'routeInfos',
+      'peer_routes',
+      'peerRoutes',
+      'peer_route_pairs',
+      'peerRoutePairs',
+      'proxy_cidrs',
+      'proxyCidrs',
+      'proxy_cidr',
+      'proxyCidr',
+      'subnet_cidrs',
+      'subnetCidrs',
+      'subnet_routes',
+      'subnetRoutes',
+      'subnets',
+      'subnet',
+      'cidr',
+      'ipv4_cidr',
+      'ipv4Cidr',
+      'ip_cidr',
+      'ipCidr',
+      'destination',
+      'dest',
+      'address',
+      'ip',
+      'ipv4',
+      'ipv4_addr',
+      'ipv4Addr',
+      'ipv4_address',
+      'ipv4Address',
+      'virtual_ip',
+      'virtualIp',
+      'virtual_ipv4',
+      'virtualIpv4',
+    };
+    return map.keys.any(routeKeys.contains);
+  }
+
+  static bool _looksLikeRouteCidrText(String value) {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return false;
+    }
+    if (_networkRouteFromAddressCidr(text) != null) {
+      return true;
+    }
+    final octets = text.split('.');
+    if (octets.length != 4) {
+      return false;
+    }
+    for (final octet in octets) {
+      final value = int.tryParse(octet);
+      if (value == null || value < 0 || value > 255) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static String _routeCidr(String cidr) {
