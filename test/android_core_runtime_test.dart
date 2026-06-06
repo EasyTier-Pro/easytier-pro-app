@@ -54,6 +54,11 @@ void main() {
             {
               'instance_name': 'network-a',
               'running': true,
+              'ipv4_cidr': '10.1.0.1/24',
+              'routes': [
+                {'address': '10.2.0.0', 'prefix': 24},
+              ],
+              'dns_servers': ['10.1.0.53'],
               'peers': [
                 {'ipv4': '10.1.0.2/24', 'hostname': 'node-a', 'cost': 'Local'},
               ],
@@ -67,6 +72,9 @@ void main() {
       expect(instance!.running, isTrue);
       expect(instance.peers, hasLength(1));
       expect(instance.peers.single['hostname'], 'node-a');
+      expect(instance.vpnConfig?['addresses'], ['10.1.0.1/24']);
+      expect(instance.vpnConfig?['routes'], ['10.2.0.0/24']);
+      expect(instance.vpnConfig?['dns'], ['10.1.0.53']);
     });
 
     test('parses map keyed by instance name', () {
@@ -100,6 +108,25 @@ void main() {
       expect(instance, isNotNull);
       expect(instance!.running, isFalse);
       expect(instance.error, 'tun fd missing');
+    });
+
+    test('extracts routes from peer-route pairs', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'address': {'ip': '10.1.0.1', 'prefixLength': 24},
+        'peer_route_pairs': [
+          {
+            'peer': {'hostname': 'node-a'},
+            'route': {'destination': '10.8.0.0', 'prefix_length': 16},
+          },
+          {
+            'peer': {'hostname': 'node-b'},
+            'route_info': {'cidr': '10.9.0.0/16'},
+          },
+        ],
+      });
+
+      expect(config['addresses'], ['10.1.0.1/24']);
+      expect(config['routes'], ['10.8.0.0/16', '10.9.0.0/16']);
     });
   });
 }
