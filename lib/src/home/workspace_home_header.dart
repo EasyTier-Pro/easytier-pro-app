@@ -338,6 +338,7 @@ class _StatusBadge extends StatelessWidget {
     required this.joinedCount,
     required this.downloadRate,
     required this.uploadRate,
+    required this.hasTrafficStats,
     this.onElevate,
   });
 
@@ -345,6 +346,7 @@ class _StatusBadge extends StatelessWidget {
   final int joinedCount;
   final double downloadRate;
   final double uploadRate;
+  final bool hasTrafficStats;
   final Future<void> Function()? onElevate;
 
   @override
@@ -485,7 +487,11 @@ class _StatusBadge extends StatelessWidget {
         );
 
         final trafficPills =
-            joinedCount > 0 && !error && !needsElevation && !needsVpnPermission
+            hasTrafficStats &&
+                joinedCount > 0 &&
+                !error &&
+                !needsElevation &&
+                !needsVpnPermission
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

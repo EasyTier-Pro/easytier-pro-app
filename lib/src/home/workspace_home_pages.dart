@@ -24,9 +24,11 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
 
     var totalDownloadRate = 0.0;
     var totalUploadRate = 0.0;
+    var hasTrafficStats = false;
     for (final network in joinedNetworks) {
       final traffic = _networkTraffic[network.id];
       if (traffic != null) {
+        hasTrafficStats = true;
         totalDownloadRate += traffic.downloadBytesPerSecond ?? 0;
         totalUploadRate += traffic.uploadBytesPerSecond ?? 0;
       }
@@ -49,6 +51,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           joinedCount: joinedNetworks.length,
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,
+          hasTrafficStats: hasTrafficStats,
           onElevate: widget.coreLifecycleService.repairWithElevation,
         ),
         const SizedBox(height: 24),

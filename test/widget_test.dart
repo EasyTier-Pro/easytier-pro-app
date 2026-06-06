@@ -560,6 +560,7 @@ void main() {
       expect(find.text('实例启动中'), findsNothing);
       expect(find.textContaining('10.144.0.2'), findsOneWidget);
       expect(find.textContaining('10.145.0.2'), findsOneWidget);
+      expect(find.textContaining('B/s'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
     },
