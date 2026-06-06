@@ -4,6 +4,8 @@
 
 ## Release 签名
 
+Android 正式安装身份为 `net.easytier.pro`。当前 Kotlin `namespace` 仍保留在 `com.example.easytier_pro_app`，仅作为源码命名空间；应用商店包身份、安装升级路径和系统 VPN 归属以 `applicationId` 为准。
+
 Release 构建读取 `android/key.properties`。该文件已被 `android/.gitignore` 忽略，禁止提交。
 
 示例：
@@ -76,7 +78,6 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 
 仍需产品确认：
 
-- 正式 `applicationId`。
 - 上传签名证书归属和保管流程。
 - 国内渠道 VPN 权限说明文案。
 - Android 流量统计是继续弱化展示，还是等待 EasyTier JNI 暴露等价 stats API。

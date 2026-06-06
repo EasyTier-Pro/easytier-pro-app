@@ -204,8 +204,8 @@ class EasyTierVpnService : VpnService() {
     private data class Cidr(val address: String, val prefixLength: Int)
 
     companion object {
-        const val actionStart = "com.example.easytier_pro_app.action.START_VPN"
-        const val actionStop = "com.example.easytier_pro_app.action.STOP_VPN"
+        const val actionStart = "net.easytier.pro.action.START_VPN"
+        const val actionStop = "net.easytier.pro.action.STOP_VPN"
         const val extraInstanceName = "instanceName"
         const val extraAddresses = "addresses"
         const val extraRoutes = "routes"

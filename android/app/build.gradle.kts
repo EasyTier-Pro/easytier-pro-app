@@ -17,6 +17,7 @@ val releaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
     taskName.contains("Release", ignoreCase = true)
 }
 val releaseAbiFilters = listOf("arm64-v8a", "x86_64")
+val easyTierProApplicationId = "net.easytier.pro"
 if (releaseBuildRequested) {
     val missingReleaseKeys = listOf(
         "storeFile",
@@ -42,8 +43,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.easytier_pro_app"
+        applicationId = easyTierProApplicationId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
