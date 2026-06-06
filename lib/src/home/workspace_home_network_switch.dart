@@ -906,12 +906,12 @@ LineChartData _trafficSparklineChartData({
               sideTitles: SideTitles(showTitles: false),
             ),
             leftTitles: AxisTitles(
-              axisNameWidget: const _TrafficAxisLabel(text: '速率'),
-              axisNameSize: 14,
+              sideTitleAlignment: SideTitleAlignment.inside,
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 48,
                 interval: chart.yMax,
+                minIncluded: false,
                 getTitlesWidget: (value, meta) => _trafficYAxisTitle(
                   value: value,
                   meta: meta,
@@ -920,8 +920,7 @@ LineChartData _trafficSparklineChartData({
               ),
             ),
             bottomTitles: AxisTitles(
-              axisNameWidget: const _TrafficAxisLabel(text: '采样点'),
-              axisNameSize: 14,
+              sideTitleAlignment: SideTitleAlignment.inside,
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 22,
@@ -931,6 +930,7 @@ LineChartData _trafficSparklineChartData({
                   meta: meta,
                   minX: chart.minX,
                   maxX: chart.maxX,
+                  visibleHistory: chart.visibleHistory,
                 ),
               ),
             ),
@@ -961,40 +961,21 @@ LineChartData _trafficSparklineChartData({
   );
 }
 
-class _TrafficAxisLabel extends StatelessWidget {
-  const _TrafficAxisLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: const Color(0xFF94A3B8),
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
 Widget _trafficYAxisTitle({
   required double value,
   required TitleMeta meta,
   required double maxY,
 }) {
-  final isMin = value == 0;
   final isMax = (value - maxY).abs() < 0.001;
-  if (!isMin && !isMax) {
+  if (!isMax) {
     return const SizedBox.shrink();
   }
 
   return SideTitleWidget(
     meta: meta,
-    space: 4,
+    space: 6,
     child: Text(
-      isMin ? '0 B/s' : _formatTrafficRate(maxY),
+      _formatTrafficRate(maxY),
       style: const TextStyle(
         color: Color(0xFF64748B),
         fontSize: 10,
@@ -1009,18 +990,25 @@ Widget _trafficXAxisTitle({
   required TitleMeta meta,
   required double minX,
   required double maxX,
+  required List<_TrafficHistoryPoint> visibleHistory,
 }) {
+  if (visibleHistory.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
   final isMin = (value - minX).abs() < 0.001;
   final isMax = (value - maxX).abs() < 0.001;
-  if (!isMin && !isMax) {
+  if (!isMax && (!isMin || visibleHistory.length == 1)) {
     return const SizedBox.shrink();
   }
 
   return SideTitleWidget(
     meta: meta,
-    space: 4,
+    space: 6,
     child: Text(
-      value.round().toString(),
+      _formatTrafficTime(
+        isMin ? visibleHistory.first.timestamp : visibleHistory.last.timestamp,
+      ),
       style: const TextStyle(
         color: Color(0xFF64748B),
         fontSize: 10,
@@ -1051,25 +1039,31 @@ LineChartBarData _buildTrafficLine(
 }
 
 double _trafficSparklineYMax(double maxRate) {
-  const minScale = 1024.0;
-  if (maxRate <= 0) {
-    return minScale;
+  const fixedScales = <double>[
+    1024,
+    10 * 1024,
+    100 * 1024,
+    1024 * 1024,
+    10 * 1024 * 1024,
+    100 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    10 * 1024 * 1024 * 1024,
+    100 * 1024 * 1024 * 1024,
+    1024 * 1024 * 1024 * 1024,
+  ];
+
+  for (final scale in fixedScales) {
+    if (maxRate <= scale) {
+      return scale;
+    }
   }
 
-  final target = math.max(maxRate * 1.15, minScale);
-  final exponent = (math.log(target) / math.ln10).floor();
-  final magnitude = math.pow(10, exponent).toDouble();
-  final normalized = target / magnitude;
+  return fixedScales.last;
+}
 
-  final multiplier = normalized <= 1
-      ? 1.0
-      : normalized <= 2
-      ? 2.0
-      : normalized <= 5
-      ? 5.0
-      : 10.0;
-
-  return multiplier * magnitude;
+String _formatTrafficTime(DateTime time) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${twoDigits(time.hour)}:${twoDigits(time.minute)}:${twoDigits(time.second)}';
 }
 
 class _IpBadge extends StatelessWidget {

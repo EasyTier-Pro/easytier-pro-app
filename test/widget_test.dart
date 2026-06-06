@@ -316,11 +316,13 @@ void main() {
     await tester.pump();
 
     expect(find.text('实时流量'), findsOneWidget);
-    expect(find.text('速率'), findsOneWidget);
-    expect(find.text('采样点'), findsOneWidget);
-    expect(find.text('0 B/s'), findsOneWidget);
-    expect(find.text('29'), findsOneWidget);
+    expect(find.text('速率'), findsNothing);
+    expect(find.text('采样点'), findsNothing);
+    expect(find.text('0 B/s'), findsNothing);
+    expect(find.text('10.0 KiB/s'), findsOneWidget);
+    expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
     expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartYScalesFixed(tester);
     _expectTrafficChartsStatic(tester);
 
     await tester.pump(const Duration(seconds: 2));
@@ -1879,6 +1881,32 @@ void _expectTrafficChartsStatic(WidgetTester tester) {
   for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
     expect(chart.duration, Duration.zero);
   }
+}
+
+void _expectTrafficChartYScalesFixed(WidgetTester tester) {
+  const fixedScales = <double>[
+    1024,
+    10 * 1024,
+    100 * 1024,
+    1024 * 1024,
+    10 * 1024 * 1024,
+    100 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    10 * 1024 * 1024 * 1024,
+    100 * 1024 * 1024 * 1024,
+    1024 * 1024 * 1024 * 1024,
+  ];
+
+  for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
+    expect(fixedScales, contains(chart.data.maxY));
+  }
+}
+
+Finder _trafficTimeLabels() {
+  final timePattern = RegExp(r'^\d{2}:\d{2}:\d{2}$');
+  return find.byWidgetPredicate(
+    (widget) => widget is Text && timePattern.hasMatch(widget.data ?? ''),
+  );
 }
 
 bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
