@@ -784,48 +784,7 @@ class _NetworkTrafficDetailChart extends StatelessWidget {
             duration: Duration.zero,
           ),
         ),
-        const SizedBox(height: 8),
-        _TrafficAxisSummary(chart: chart),
       ],
-    );
-  }
-}
-
-class _TrafficAxisSummary extends StatelessWidget {
-  const _TrafficAxisSummary({required this.chart});
-
-  final _TrafficSparklineData chart;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        _TrafficAxisText(
-          text: 'X ${chart.minX.round()}-${chart.maxX.round()} 采样点',
-        ),
-        _TrafficAxisText(text: 'Y 0 B/s-${_formatTrafficRate(chart.yMax)}'),
-        const _TrafficAxisText(text: '单位 X=采样点 · Y=速率'),
-      ],
-    );
-  }
-}
-
-class _TrafficAxisText extends StatelessWidget {
-  const _TrafficAxisText({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: const Color(0xFF94A3B8),
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-      ),
     );
   }
 }
@@ -938,8 +897,54 @@ LineChartData _trafficSparklineChartData({
       getDrawingHorizontalLine: (_) =>
           FlLine(color: const Color(0xFFE2E8F0).withAlpha(180), strokeWidth: 1),
     ),
-    titlesData: const FlTitlesData(show: false),
-    borderData: FlBorderData(show: false),
+    titlesData: detailed
+        ? FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: AxisTitles(
+              axisNameWidget: const _TrafficAxisLabel(text: '速率'),
+              axisNameSize: 14,
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 48,
+                interval: chart.yMax,
+                getTitlesWidget: (value, meta) => _trafficYAxisTitle(
+                  value: value,
+                  meta: meta,
+                  maxY: chart.yMax,
+                ),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              axisNameWidget: const _TrafficAxisLabel(text: '采样点'),
+              axisNameSize: 14,
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 22,
+                interval: chart.maxX,
+                getTitlesWidget: (value, meta) => _trafficXAxisTitle(
+                  value: value,
+                  meta: meta,
+                  minX: chart.minX,
+                  maxX: chart.maxX,
+                ),
+              ),
+            ),
+          )
+        : const FlTitlesData(show: false),
+    borderData: detailed
+        ? FlBorderData(
+            show: true,
+            border: const Border(
+              left: BorderSide(color: Color(0xFFCBD5E1)),
+              bottom: BorderSide(color: Color(0xFFCBD5E1)),
+            ),
+          )
+        : FlBorderData(show: false),
     lineTouchData: const LineTouchData(enabled: false),
     lineBarsData: [
       _buildTrafficLine(chart.downloadSpots, downloadColor, detailed: detailed),
@@ -953,6 +958,75 @@ LineChartData _trafficSparklineChartData({
           belowBarData: BarAreaData(show: false),
         ),
     ],
+  );
+}
+
+class _TrafficAxisLabel extends StatelessWidget {
+  const _TrafficAxisLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: const Color(0xFF94A3B8),
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+Widget _trafficYAxisTitle({
+  required double value,
+  required TitleMeta meta,
+  required double maxY,
+}) {
+  final isMin = value == 0;
+  final isMax = (value - maxY).abs() < 0.001;
+  if (!isMin && !isMax) {
+    return const SizedBox.shrink();
+  }
+
+  return SideTitleWidget(
+    meta: meta,
+    space: 4,
+    child: Text(
+      isMin ? '0 B/s' : _formatTrafficRate(maxY),
+      style: const TextStyle(
+        color: Color(0xFF64748B),
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+Widget _trafficXAxisTitle({
+  required double value,
+  required TitleMeta meta,
+  required double minX,
+  required double maxX,
+}) {
+  final isMin = (value - minX).abs() < 0.001;
+  final isMax = (value - maxX).abs() < 0.001;
+  if (!isMin && !isMax) {
+    return const SizedBox.shrink();
+  }
+
+  return SideTitleWidget(
+    meta: meta,
+    space: 4,
+    child: Text(
+      value.round().toString(),
+      style: const TextStyle(
+        color: Color(0xFF64748B),
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
   );
 }
 
