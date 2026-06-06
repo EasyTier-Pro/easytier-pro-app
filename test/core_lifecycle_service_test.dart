@@ -6,6 +6,46 @@ import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('CoreLifecycleService workspace binding', () {
+    test('forces runtime reinstall when workspace changes', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.bindSession(_session('tenant-2'));
+
+      expect(authService.workspaceIds, ['tenant-1', 'tenant-2']);
+      expect(runtime.ensureRunningCount, 2);
+      expect(runtime.forceReinstallValues, [false, true]);
+      expect(runtime.readStatusCount, 1);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
+
+    test('stops runtime when active session loses workspace', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.bindSession(_sessionWithoutWorkspace());
+
+      expect(authService.workspaceIds, ['tenant-1']);
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 1);
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(service.status.value.message, '当前账号未绑定工作区');
+    });
+  });
+
   group('CoreLifecycleService runtime events', () {
     test(
       'reconnects when config server stops while session is active',
@@ -78,6 +118,22 @@ AuthSession _session(String workspaceId) {
   );
 }
 
+AuthSession _sessionWithoutWorkspace() {
+  return AuthSession(
+    user: const ConsoleUser(
+      email: 'tester@example.com',
+      displayName: 'Tester',
+      workspaces: <ConsoleWorkspace>[],
+    ),
+    tokenSet: TokenSet(
+      accessToken: 'access-token',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      obtainedAt: DateTime.utc(2026, 1, 1),
+    ),
+  );
+}
+
 Future<void> _waitUntil(
   bool Function() condition, {
   Duration timeout = const Duration(seconds: 2),
@@ -98,6 +154,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
 
   var connected = false;
   var ensureRunningCount = 0;
+  var readStatusCount = 0;
   var stopCount = 0;
   final forceReinstallValues = <bool>[];
 
@@ -112,6 +169,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   Future<CoreRuntimeStartResult?> readStatus(
     CoreBootstrapConfig bootstrap,
   ) async {
+    readStatusCount++;
     if (!connected) {
       return null;
     }
@@ -171,6 +229,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
 
 class _LifecycleAuthService implements AuthService {
   var prepareBootstrapCount = 0;
+  final workspaceIds = <String>[];
 
   @override
   Future<AuthSession?> restoreSession() async => null;
@@ -262,6 +321,7 @@ class _LifecycleAuthService implements AuthService {
     required String workspaceId,
   }) async {
     prepareBootstrapCount++;
+    workspaceIds.add(workspaceId);
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
       version: '2.6.4',

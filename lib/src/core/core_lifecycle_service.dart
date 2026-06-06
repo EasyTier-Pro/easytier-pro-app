@@ -375,6 +375,9 @@ cd /d "$installerDir"
     final workspace = session.user.currentWorkspace;
     if (workspace == null) {
       _logger.error('core', 'No workspace available for lifecycle binding');
+      if (status.value.phase != CoreRunPhase.signedOut) {
+        await _stopRuntimeForMissingWorkspace();
+      }
       status.value = const CoreRunStatus(
         phase: CoreRunPhase.error,
         message: '当前账号未绑定工作区',
@@ -464,6 +467,22 @@ cd /d "$installerDir"
         phase: CoreRunPhase.error,
         message: '连接引擎启动失败',
         lastError: _normalizeError(error),
+      );
+    }
+  }
+
+  Future<void> _stopRuntimeForMissingWorkspace() async {
+    try {
+      await _runtime.stop();
+      _logger.info(
+        'core',
+        'Stopped runtime because the active session has no workspace',
+      );
+    } catch (error) {
+      _logger.warn(
+        'core',
+        'Failed to stop runtime after workspace became unavailable',
+        context: {'error': error.toString()},
       );
     }
   }
