@@ -187,36 +187,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
 
         val vpnConfig = call.argument<Map<String, Any?>>("vpnConfig") ?: emptyMap()
         Log.i(logTag, "Starting VPN service for instance=$instanceName")
-        val intent = Intent(activity, EasyTierVpnService::class.java).apply {
-            action = EasyTierVpnService.actionStart
-            putExtra(EasyTierVpnService.extraInstanceName, instanceName)
-            putStringArrayListExtra(
-                EasyTierVpnService.extraAddresses,
-                ArrayList(cidrList(vpnConfig["addresses"] ?: vpnConfig["address"])),
-            )
-            putStringArrayListExtra(
-                EasyTierVpnService.extraRoutes,
-                ArrayList(cidrList(vpnConfig["routes"] ?: vpnConfig["route"])),
-            )
-            putStringArrayListExtra(
-                EasyTierVpnService.extraDnsServers,
-                ArrayList(stringList(vpnConfig["dns"] ?: vpnConfig["dns_servers"])),
-            )
-            putStringArrayListExtra(
-                EasyTierVpnService.extraDisallowedApplications,
-                ArrayList(
-                    stringList(
-                        vpnConfig["disallowedApplications"] ?:
-                            vpnConfig["disallowed_applications"] ?:
-                            vpnConfig["disallowedPackages"] ?:
-                            vpnConfig["disallowed_packages"],
-                    ),
-                ),
-            )
-            (vpnConfig["mtu"] as? Number)?.toInt()?.let {
-                putExtra(EasyTierVpnService.extraMtu, it)
-            }
-        }
+        val intent = EasyTierVpnIntentFactory.startIntent(activity, instanceName, vpnConfig)
         startRuntimeService(intent)
         result.success(null)
     }
@@ -328,38 +299,6 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             return serviceEventBuffer.drain()
         }
     }
-}
-
-private fun stringList(value: Any?): List<String> {
-    return when (value) {
-        is String -> listOf(value)
-        is Iterable<*> -> value.mapNotNull { it?.toString()?.trim() }
-        else -> emptyList()
-    }.map { it.trim() }.filter { it.isNotEmpty() }
-}
-
-private fun cidrList(value: Any?): List<String> {
-    return when (value) {
-        is String -> listOf(value)
-        is Map<*, *> -> listOf(cidrFromMap(value))
-        is Iterable<*> -> value.mapNotNull { item ->
-            when (item) {
-                is String -> item
-                is Map<*, *> -> cidrFromMap(item)
-                else -> item?.toString()
-            }
-        }
-        else -> emptyList()
-    }.map { it.trim() }.filter { it.isNotEmpty() }
-}
-
-private fun cidrFromMap(value: Map<*, *>): String {
-    val address = (value["address"] ?: value["ip"] ?: value["ipv4"])?.toString()?.trim().orEmpty()
-    val prefix = (value["prefix"] ?: value["prefixLength"] ?: value["prefix_length"])
-        ?.toString()
-        ?.trim()
-        .orEmpty()
-    return if (address.isNotEmpty() && prefix.isNotEmpty()) "$address/$prefix" else address
 }
 
 fun parseJson(text: String): Any? {
