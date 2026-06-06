@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
 
 class EasyTierVpnService : VpnService() {
     private var tunFd: Int? = null
@@ -26,6 +27,7 @@ class EasyTierVpnService : VpnService() {
                 else -> START_NOT_STICKY
             }
         } catch (error: Throwable) {
+            Log.e(logTag, "VPN service command failed", error)
             EasyTierFlutterBridge.emitFromService(
                 "error",
                 mapOf("error" to (error.message ?: error.toString())),
@@ -46,6 +48,7 @@ class EasyTierVpnService : VpnService() {
 
         val addresses = intent.getStringArrayListExtra(extraAddresses) ?: arrayListOf()
         require(addresses.isNotEmpty()) { "VPN address is required before establishing TUN" }
+        Log.i(logTag, "Establishing VPN for instance=$instanceName addresses=${addresses.size}")
 
         startForeground(notificationId, notification())
 
@@ -82,6 +85,7 @@ class EasyTierVpnService : VpnService() {
         val fd = descriptor.detachFd()
         tunFd = fd
         EasyTierNative.setTunFd(instanceName, fd)
+        Log.i(logTag, "Injected TUN fd for instance=$instanceName")
         EasyTierFlutterBridge.emitFromService(
             "vpn_started",
             mapOf("instanceName" to instanceName),
@@ -94,6 +98,7 @@ class EasyTierVpnService : VpnService() {
         tunDescriptor?.close()
         tunDescriptor = null
         if (fd != null) {
+            Log.i(logTag, "Stopped VPN fd=$fd")
             EasyTierFlutterBridge.emitFromService("vpn_stopped", mapOf("fd" to fd))
         }
         stopForegroundCompat()
@@ -153,6 +158,7 @@ class EasyTierVpnService : VpnService() {
         const val extraDnsServers = "dnsServers"
         const val extraMtu = "mtu"
 
+        private const val logTag = "EasyTierVpnService"
         private const val notificationId = 22020
         private const val notificationChannelId = "easytier_vpn"
     }

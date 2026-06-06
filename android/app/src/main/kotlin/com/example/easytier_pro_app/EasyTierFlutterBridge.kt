@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -69,6 +70,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 else -> result.notImplemented()
             }
         } catch (error: Throwable) {
+            Log.e(logTag, "Method ${call.method} failed", error)
             result.error(errorCode(error), error.message ?: error.toString(), null)
         }
     }
@@ -86,6 +88,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             return false
         }
         val granted = resultCode == Activity.RESULT_OK
+        Log.i(logTag, "VPN permission result granted=$granted")
         pendingVpnResult?.success(granted)
         pendingVpnResult = null
         emit(
@@ -104,6 +107,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             return false
         }
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        Log.i(logTag, "Notification permission result granted=$granted")
         pendingNotificationResult?.success(granted)
         pendingNotificationResult = null
         emit(
@@ -122,7 +126,9 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         require(hostname.isNotEmpty()) { "hostname is required" }
         require(machineId.isNotEmpty()) { "machineId is required" }
 
+        Log.i(logTag, "Starting config server client for host=$hostname")
         EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
+            Log.d(logTag, "Received config server event")
             emit(
                 "config_server",
                 mapOf(
@@ -165,6 +171,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
     private fun prepareVpn(result: MethodChannel.Result) {
         val intent = VpnService.prepare(activity)
         if (intent == null) {
+            Log.i(logTag, "VPN permission already granted")
             emit("vpn_permission_granted", mapOf("granted" to true))
             result.success(true)
             return
@@ -174,6 +181,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             return
         }
         pendingVpnResult = result
+        Log.i(logTag, "Requesting VPN permission")
         activity.startActivityForResult(intent, vpnRequestCode)
     }
 
@@ -182,6 +190,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         require(instanceName.isNotEmpty()) { "instanceName is required" }
 
         val vpnConfig = call.argument<Map<String, Any?>>("vpnConfig") ?: emptyMap()
+        Log.i(logTag, "Starting VPN service for instance=$instanceName")
         val intent = Intent(activity, EasyTierVpnService::class.java).apply {
             action = EasyTierVpnService.actionStart
             putExtra(EasyTierVpnService.extraInstanceName, instanceName)
@@ -210,6 +219,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
     }
 
     private fun stopVpn() {
+        Log.i(logTag, "Stopping VPN service")
         val intent = Intent(activity, EasyTierVpnService::class.java).apply {
             action = EasyTierVpnService.actionStop
         }
@@ -262,6 +272,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
     companion object {
         private const val methodChannelName = "net.easytier.pro/core_runtime"
         private const val eventChannelName = "net.easytier.pro/core_runtime_events"
+        private const val logTag = "EasyTierBridge"
         private const val preferencesName = "easytier_core_runtime"
         private const val machineIdKey = "machine_id"
         private const val vpnRequestCode = 42020
