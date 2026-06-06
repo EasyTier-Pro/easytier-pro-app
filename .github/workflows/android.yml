@@ -56,9 +56,9 @@ jobs:
           -AndroidSdk $env:ANDROID_HOME
           -SkipCopy
 
-      - name: Verify packaged Android JNI libraries
+      - name: Verify Android release inputs
         shell: pwsh
-        run: ./scripts/verify_android_jni_libs.ps1
+        run: ./scripts/verify_android_release_inputs.ps1
 
       - name: Build Android debug APK
         run: flutter build apk --debug
