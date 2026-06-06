@@ -72,7 +72,11 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             }
         } catch (error: Throwable) {
             Log.e(logTag, "Method ${call.method} failed", error)
-            result.error(errorCode(error), error.message ?: error.toString(), null)
+            result.error(
+                EasyTierAndroidErrorClassifier.code(error),
+                error.message ?: error.toString(),
+                null,
+            )
         }
     }
 
@@ -252,18 +256,6 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             for (event in drainBufferedServiceEvents()) {
                 sink.success(event)
             }
-        }
-    }
-
-    private fun errorCode(error: Throwable): String {
-        val message = error.message.orEmpty()
-        return if (
-            message.contains("JNI", ignoreCase = true) ||
-            message.contains("libeasytier_android_jni", ignoreCase = true)
-        ) {
-            "JNI_UNAVAILABLE"
-        } else {
-            "ANDROID_RUNTIME_ERROR"
         }
     }
 
