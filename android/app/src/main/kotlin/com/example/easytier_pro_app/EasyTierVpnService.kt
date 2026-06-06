@@ -118,7 +118,13 @@ class EasyTierVpnService : VpnService() {
         require(addresses.isNotEmpty()) { "VPN address is required before establishing TUN" }
 
         stopVpn(stopService = false)
-        Log.i(logTag, "Establishing VPN for instance=$instanceName addresses=${addresses.size}")
+        val routes = intent.getStringArrayListExtra(extraRoutes) ?: arrayListOf()
+        val dnsServers = intent.getStringArrayListExtra(extraDnsServers) ?: arrayListOf()
+        val mtu = intent.getIntExtra(extraMtu, 0)
+        Log.i(
+            logTag,
+            "Establishing VPN for instance=$instanceName addresses=$addresses routes=$routes dns=$dnsServers mtu=$mtu disallowed=$packageName",
+        )
 
         startForeground(notificationId, notification("Connected to $instanceName"))
 
@@ -126,7 +132,6 @@ class EasyTierVpnService : VpnService() {
             .setSession("EasyTier Pro")
             .addDisallowedApplication(packageName)
 
-        val mtu = intent.getIntExtra(extraMtu, 0)
         if (mtu > 0) {
             builder.setMtu(mtu)
         }
@@ -136,13 +141,11 @@ class EasyTierVpnService : VpnService() {
             builder.addAddress(cidr.address, cidr.prefixLength)
         }
 
-        val routes = intent.getStringArrayListExtra(extraRoutes) ?: arrayListOf()
         for (route in routes) {
             val cidr = parseCidr(route)
             builder.addRoute(cidr.address, cidr.prefixLength)
         }
 
-        val dnsServers = intent.getStringArrayListExtra(extraDnsServers) ?: arrayListOf()
         for (server in dnsServers) {
             builder.addDnsServer(server)
         }
@@ -161,7 +164,14 @@ class EasyTierVpnService : VpnService() {
         Log.i(logTag, "Injected TUN fd for instance=$instanceName")
         EasyTierFlutterBridge.emitFromService(
             "vpn_started",
-            mapOf("instanceName" to instanceName),
+            mapOf(
+                "instanceName" to instanceName,
+                "addresses" to addresses,
+                "routes" to routes,
+                "dnsServers" to dnsServers,
+                "mtu" to mtu,
+                "disallowedApplications" to listOf(packageName),
+            ),
         )
     }
 
@@ -267,6 +277,7 @@ class EasyTierVpnService : VpnService() {
         val parts = value.trim().split("/", limit = 2)
         require(parts.firstOrNull()?.isNotEmpty() == true) { "Invalid CIDR: $value" }
         val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 32
+        require(prefix in 0..32) { "Invalid CIDR prefix: $value" }
         return Cidr(parts[0], prefix)
     }
 

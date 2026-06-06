@@ -13,6 +13,11 @@ class _SettingsPanel extends StatelessWidget {
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
 
+  bool get _canOpenLogDirectory =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
   void _showToast(
     BuildContext context,
     String message, {
@@ -50,6 +55,13 @@ class _SettingsPanel extends StatelessWidget {
       if (context.mounted) {
         _showToast(context, '导出诊断日志失败', destructive: true);
       }
+    }
+  }
+
+  Future<void> _copyText(BuildContext context, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (context.mounted) {
+      _showToast(context, '已复制到剪贴板');
     }
   }
 
@@ -156,13 +168,14 @@ class _SettingsPanel extends StatelessWidget {
                         onPress: () => unawaited(_exportLogs(dialogContext)),
                         child: const Text('导出诊断日志'),
                       ),
-                      FButton(
-                        variant: .outline,
-                        size: .sm,
-                        onPress: () =>
-                            unawaited(_openLogDirectory(dialogContext)),
-                        child: const Text('打开日志目录'),
-                      ),
+                      if (_canOpenLogDirectory)
+                        FButton(
+                          variant: .outline,
+                          size: .sm,
+                          onPress: () =>
+                              unawaited(_openLogDirectory(dialogContext)),
+                          child: const Text('打开日志目录'),
+                        ),
                     ],
                   ),
                 ),
@@ -286,17 +299,42 @@ class _SettingsPanel extends StatelessWidget {
                             if (status.lastError != null &&
                                 status.lastError!.isNotEmpty) ...[
                               const SizedBox(height: 10),
-                              Text(
-                                status.lastError!,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color:
-                                          status.phase ==
-                                                  CoreRunPhase.needsElevation ||
-                                              needsVpnPermission
-                                          ? const Color(0xFFB45309)
-                                          : const Color(0xFFDC2626),
-                                    ),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8F9FB),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                child: SelectableTextHitBoundary(
+                                  child: SelectableText(
+                                    status.lastError!,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color:
+                                              status.phase ==
+                                                      CoreRunPhase
+                                                          .needsElevation ||
+                                                  needsVpnPermission
+                                              ? const Color(0xFFB45309)
+                                              : const Color(0xFFDC2626),
+                                        ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _ControlSelectionBoundary(
+                                child: FButton(
+                                  variant: .outline,
+                                  size: .sm,
+                                  onPress: () => unawaited(
+                                    _copyText(context, status.lastError!),
+                                  ),
+                                  child: const Text('复制错误'),
+                                ),
                               ),
                             ],
                             if (status.phase == CoreRunPhase.needsElevation ||
@@ -362,12 +400,13 @@ class _SettingsPanel extends StatelessWidget {
                                 onPress: () => unawaited(_exportLogs(context)),
                                 child: const Text('导出诊断日志'),
                               ),
-                              FButton(
-                                variant: .outline,
-                                onPress: () =>
-                                    unawaited(_openLogDirectory(context)),
-                                child: const Text('打开日志目录'),
-                              ),
+                              if (_canOpenLogDirectory)
+                                FButton(
+                                  variant: .outline,
+                                  onPress: () =>
+                                      unawaited(_openLogDirectory(context)),
+                                  child: const Text('打开日志目录'),
+                                ),
                             ],
                           ),
                         ),

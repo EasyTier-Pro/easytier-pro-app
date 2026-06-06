@@ -584,6 +584,75 @@ void main() {
       });
     });
 
+    test('refreshes active VPN when proxy routes sync after startup', () async {
+      await runtime.dispose();
+      runtime = AndroidCoreRuntime(
+        methodChannel: methodChannel,
+        eventChannel: _FakeEventChannel(nativeEvents.stream),
+        networkInfoCacheDuration: Duration.zero,
+        vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
+        vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
+        vpnRouteRefreshFastLimit: 2,
+      );
+      networkInfos = {
+        'instances': [
+          {
+            'instance_id': 'instance-a',
+            'instance_name': 'network-a',
+            'running': true,
+            'ipv4_cidr': '10.10.0.2/24',
+            'routes': <Map<String, Object?>>[],
+            'dns_servers': ['10.10.0.1'],
+          },
+        ],
+      };
+
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_name': 'network-a',
+        },
+      });
+
+      final firstStartVpn = await _waitForCall(calls, 'startVpn');
+      expect(firstStartVpn.arguments, {
+        'instanceName': 'network-a',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24'],
+          'dns': ['10.10.0.1'],
+        },
+      });
+
+      networkInfos = {
+        'instances': [
+          {
+            'instance_id': 'instance-a',
+            'instance_name': 'network-a',
+            'running': true,
+            'ipv4_cidr': '10.10.0.2/24',
+            'routes': [
+              {'address': '10.20.0.0', 'prefix': 16},
+            ],
+            'dns_servers': ['10.10.0.1'],
+          },
+        ],
+      };
+
+      await _waitForCallCount(calls, 'startVpn', 2);
+      final startVpnCalls = calls.where((call) => call.method == 'startVpn');
+      expect(startVpnCalls.last.arguments, {
+        'instanceName': 'network-a',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24', '10.20.0.0/16'],
+          'dns': ['10.10.0.1'],
+        },
+      });
+    });
+
     test('waits for VPN permission before starting pending instance', () async {
       vpnPrepared = false;
       final result = await runtime.ensureRunning(

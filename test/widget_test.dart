@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
@@ -1518,6 +1519,93 @@ void main() {
     expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
   });
 
+  testWidgets('android settings keeps diagnostics mobile friendly', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+
+      expect(find.text('导出诊断日志'), findsOneWidget);
+      expect(find.text('打开日志目录'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('settings exposes selectable and copyable runtime errors', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    const errorText = 'Android VPN 缺少虚拟 IP 配置，instance_key=8af8e8c8-4dd4-4f82';
+    final authService = _FakeAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    coreLifecycleService.status.value = const CoreRunStatus(
+      phase: CoreRunPhase.error,
+      message: '连接引擎运行异常',
+      lastError: errorText,
+      machineId: 'machine-1',
+    );
+    await tester.pump();
+
+    await _openSettingsFromUserMenu(tester);
+
+    expect(
+      find.byWidgetPredicate((widget) {
+        return widget is SelectableText && widget.data == errorText;
+      }),
+      findsOneWidget,
+    );
+    expect(find.text('复制错误'), findsOneWidget);
+
+    String? clipboardText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = call.arguments as Map<Object?, Object?>;
+            clipboardText = data['text']?.toString();
+          }
+          return null;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    await tester.tap(find.text('复制错误'));
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(clipboardText, errorText);
+  });
+
   testWidgets('confirms before deleting a network and hides it locally', (
     WidgetTester tester,
   ) async {
@@ -2447,6 +2535,15 @@ Future<void> _selectNetworkFromHeader(
       matching: find.text(networkName),
     ),
   );
+  await _pumpAppMotionFrames(tester);
+}
+
+Future<void> _openSettingsFromUserMenu(WidgetTester tester) async {
+  await tester.tap(
+    find.descendant(of: find.byType(FAvatar), matching: find.text('T')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('设置'));
   await _pumpAppMotionFrames(tester);
 }
 

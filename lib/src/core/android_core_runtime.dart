@@ -4,9 +4,22 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   AndroidCoreRuntime({
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
-    this._networkInfoCacheDuration = _androidNetworkInfoCacheDuration,
+    @visibleForTesting
+    Duration networkInfoCacheDuration = _androidNetworkInfoCacheDuration,
+    @visibleForTesting Duration? vpnRouteRefreshFastInterval,
+    @visibleForTesting Duration? vpnRouteRefreshSteadyInterval,
+    @visibleForTesting int? vpnRouteRefreshFastLimit,
   }) : _methodChannel = methodChannel ?? const MethodChannel(_methodName),
-       _eventChannel = eventChannel ?? const EventChannel(_eventName) {
+       _eventChannel = eventChannel ?? const EventChannel(_eventName),
+       // ignore: prefer_initializing_formals
+       _networkInfoCacheDuration = networkInfoCacheDuration,
+       _vpnRouteRefreshFastInterval =
+           vpnRouteRefreshFastInterval ?? _androidVpnRouteRefreshFastInterval,
+       _vpnRouteRefreshSteadyInterval =
+           vpnRouteRefreshSteadyInterval ??
+           _androidVpnRouteRefreshSteadyInterval,
+       _vpnRouteRefreshFastLimit =
+           vpnRouteRefreshFastLimit ?? _androidVpnRouteRefreshFastLimit {
     _nativeEvents = _eventChannel.receiveBroadcastStream().listen(
       _handleNativeEvent,
       onError: (Object error) {
@@ -27,14 +40,25 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     seconds: 15,
   );
   static const Duration _androidRuntimePollInterval = Duration(seconds: 15);
+  static const Duration _androidVpnRouteRefreshFastInterval = Duration(
+    seconds: 3,
+  );
+  static const Duration _androidVpnRouteRefreshSteadyInterval = Duration(
+    seconds: 15,
+  );
+  static const int _androidVpnRouteRefreshFastLimit = 20;
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
   final Duration _networkInfoCacheDuration;
+  final Duration _vpnRouteRefreshFastInterval;
+  final Duration _vpnRouteRefreshSteadyInterval;
+  final int _vpnRouteRefreshFastLimit;
   final StreamController<CoreRuntimeEvent> _events =
       StreamController<CoreRuntimeEvent>.broadcast();
 
   late final StreamSubscription<dynamic> _nativeEvents;
+  Timer? _activeVpnRefreshTimer;
   String? _cachedNetworkInfos;
   DateTime? _cachedNetworkInfosAt;
   Future<String>? _networkInfoInFlight;
@@ -43,6 +67,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       <String, Map<String, Object?>>{};
   String? _activeVpnInstanceName;
   String? _activeVpnInstanceId;
+  String? _activeVpnConfigSignature;
+  int _activeVpnRefreshCount = 0;
   bool _vpnPrepared = false;
 
   @override
@@ -131,15 +157,17 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   @override
   Future<void> stop() async {
+    _cancelActiveVpnRefresh();
+    _pendingVpnPayloads.clear();
+    _activeVpnInstanceName = null;
+    _activeVpnInstanceId = null;
+    _activeVpnConfigSignature = null;
     await _ignoreMissingJni(
       _methodChannel.invokeMethod<void>('stopConfigServerClient'),
     );
     await _methodChannel.invokeMethod<void>('stopVpn');
     _cachedNetworkInfos = null;
     _cachedNetworkInfosAt = null;
-    _pendingVpnPayloads.clear();
-    _activeVpnInstanceName = null;
-    _activeVpnInstanceId = null;
   }
 
   @override
@@ -186,6 +214,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   @override
   Future<void> dispose() async {
+    _cancelActiveVpnRefresh();
     await _nativeEvents.cancel();
     await _events.close();
   }
@@ -291,6 +320,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       if (instanceName.isEmpty || instanceName == _activeVpnInstanceName) {
         _activeVpnInstanceName = null;
         _activeVpnInstanceId = null;
+        _activeVpnConfigSignature = null;
+        _cancelActiveVpnRefresh();
       }
     }
     if (runtimeEvent.type == CoreRuntimeEventTypes.configServer) {
@@ -440,6 +471,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
     final active = _activeVpnInstanceName;
     if (active != null && active != target.instanceName) {
+      _activeVpnInstanceName = null;
+      _activeVpnInstanceId = null;
+      _activeVpnConfigSignature = null;
+      _cancelActiveVpnRefresh();
       await _methodChannel.invokeMethod<void>('stopVpn');
     }
     await _ignoreMissingJni(
@@ -453,7 +488,93 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     });
     _activeVpnInstanceName = target.instanceName;
     _activeVpnInstanceId = target.instanceId;
+    _activeVpnConfigSignature = _vpnConfigSignature(target.vpnConfig);
+    _activeVpnRefreshCount = 0;
+    _scheduleActiveVpnRefresh();
     _pendingVpnPayloads.remove(instanceKey);
+  }
+
+  Future<void> _queueActiveVpnRefresh() {
+    _vpnSerial = _vpnSerial
+        .then(
+          (_) => _refreshActiveVpnConfig(),
+          onError: (Object error, StackTrace stackTrace) =>
+              _refreshActiveVpnConfig(),
+        )
+        .catchError(_emitVpnError);
+    return _vpnSerial;
+  }
+
+  Future<void> _refreshActiveVpnConfig() async {
+    final activeName = _activeVpnInstanceName;
+    if (activeName == null || activeName.isEmpty || !_vpnPrepared) {
+      return;
+    }
+
+    _activeVpnRefreshCount += 1;
+    try {
+      _cachedNetworkInfosAt = null;
+      final snapshot = await _readNetworkInfoSnapshot();
+      final instance = snapshot.instanceMatching(
+        name: activeName,
+        id: _activeVpnInstanceId ?? '',
+      );
+      final config = instance?.vpnConfig;
+      if (instance == null ||
+          !instance.running ||
+          config == null ||
+          !_vpnConfigHasAddress(config)) {
+        return;
+      }
+
+      final signature = _vpnConfigSignature(config);
+      if (signature == _activeVpnConfigSignature) {
+        return;
+      }
+
+      await _methodChannel.invokeMethod<void>('startVpn', {
+        'instanceName': instance.name,
+        'vpnConfig': config,
+      });
+      _activeVpnInstanceName = instance.name;
+      _activeVpnInstanceId = instance.id ?? _activeVpnInstanceId;
+      _activeVpnConfigSignature = signature;
+      _events.add(
+        CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.vpnConfigRefreshed,
+          data: {
+            'instance_name': instance.name,
+            'addresses': config['addresses'],
+            'routes': config['routes'],
+            'dns': config['dns'],
+          },
+        ),
+      );
+    } finally {
+      if (_activeVpnInstanceName != null) {
+        _scheduleActiveVpnRefresh();
+      }
+    }
+  }
+
+  void _scheduleActiveVpnRefresh() {
+    _activeVpnRefreshTimer?.cancel();
+    if (_activeVpnInstanceName == null) {
+      return;
+    }
+    final delay = _activeVpnRefreshCount < _vpnRouteRefreshFastLimit
+        ? _vpnRouteRefreshFastInterval
+        : _vpnRouteRefreshSteadyInterval;
+    _activeVpnRefreshTimer = Timer(delay, () {
+      _activeVpnRefreshTimer = null;
+      unawaited(_queueActiveVpnRefresh());
+    });
+  }
+
+  void _cancelActiveVpnRefresh() {
+    _activeVpnRefreshTimer?.cancel();
+    _activeVpnRefreshTimer = null;
+    _activeVpnRefreshCount = 0;
   }
 
   Future<_ResolvedAndroidVpnTarget> _resolveVpnTarget(
@@ -529,9 +650,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       _pendingVpnPayloads.remove(instanceKey);
       return;
     }
-    await _methodChannel.invokeMethod<void>('stopVpn');
     _activeVpnInstanceName = null;
     _activeVpnInstanceId = null;
+    _activeVpnConfigSignature = null;
+    _cancelActiveVpnRefresh();
+    await _methodChannel.invokeMethod<void>('stopVpn');
     _pendingVpnPayloads.remove(instanceKey);
   }
 
@@ -566,6 +689,29 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         _readString(config['cidr']).isNotEmpty ||
         _readString(config['ipv4_cidr']).isNotEmpty ||
         _readList(config['addresses']).isNotEmpty;
+  }
+
+  static String _vpnConfigSignature(Map<String, Object?> config) {
+    List<String> normalizedCidrs(Object? value) {
+      final items = _readCidrList(value).toSet().toList(growable: false);
+      items.sort();
+      return items;
+    }
+
+    List<String> normalizedStrings(Object? value) {
+      final items = _readStringList(value).toSet().toList(growable: false);
+      items.sort();
+      return items;
+    }
+
+    return jsonEncode({
+      'addresses': normalizedCidrs(config['addresses'] ?? config['address']),
+      'routes': normalizedCidrs(config['routes'] ?? config['route']),
+      'dns': normalizedStrings(
+        config['dns'] ?? config['dns_servers'] ?? config['dnsServers'],
+      ),
+      'mtu': _readString(config['mtu']),
+    });
   }
 
   static Map<String, Object?>? _readMap(Object? value) {
