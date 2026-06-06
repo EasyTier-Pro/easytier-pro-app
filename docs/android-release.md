@@ -79,7 +79,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android VPN interface 会以 non-blocking TUN fd 建立后再交给 EasyTier core，保持与上游 mobile launcher 对 raw fd 的使用方式一致，降低 Rust/tokio 数据面读写被阻塞 fd 卡住的风险。
 - Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
 - Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
-- Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS 和已归一化的 disallowed applications 上报错误，并只清理本次 VPN 启动状态；即使配置解析失败，失败 payload 也会补上 EasyTier Pro 自身包名，便于排查路由回环防护是否生效。如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
+- Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS、已归一化的 disallowed applications、`packageName`、数量统计和 `selfDisallowed` 上报错误，并只清理本次 VPN 启动状态；即使配置解析失败，失败 payload 也会补上 EasyTier Pro 自身包名，便于排查路由回环防护是否生效。如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
 - Dart 侧收到 Android runtime error 时会写入 `Android runtime error` 诊断日志，保留 action、instance、addresses、routes、DNS、disallowed applications 和 `self_disallowed`，便于在 `Android VPN established` 缺失时反查失败前的 VPN 配置。
 - Android VPN 后续收到原生 `vpn_started` 后，Dart 运行态会把此前的 VPN 运行时错误恢复为 running，避免诊断错误在已恢复连接后继续占据首页状态；Dart 侧 `vpn_config_refreshed` 只表示已请求原生服务刷新配置，不作为 TUN 注入成功证据。
 - Android 通知权限或 VPN 授权请求已在系统弹窗中等待时，重复启动不会进入运行时错误；通知权限 pending 会继续后续流程，VPN 授权 pending 会继续展示 `needsVpnPermission` 等待用户处理。

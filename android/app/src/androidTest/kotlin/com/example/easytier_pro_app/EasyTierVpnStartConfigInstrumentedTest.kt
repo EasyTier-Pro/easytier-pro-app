@@ -95,6 +95,11 @@ class EasyTierVpnStartConfigInstrumentedTest {
             listOf(context.packageName, "com.example.extra"),
             payload["disallowedApplications"],
         )
+        assertEquals(context.packageName, payload["packageName"])
+        assertEquals(0, payload["addressCount"])
+        assertEquals(0, payload["routeCount"])
+        assertEquals(2, payload["disallowedApplicationCount"])
+        assertEquals(true, payload["selfDisallowed"])
         assertEquals(1280, payload["mtu"])
     }
 

@@ -49,25 +49,26 @@ object EasyTierVpnStartConfigParser {
         } catch (_: Throwable) {
             null
         }
+        val addresses = config?.addresses
+            ?: stringList(intent, EasyTierVpnService.extraAddresses)
+        val routes = config?.routes
+            ?: stringList(intent, EasyTierVpnService.extraRoutes)
+        val dnsServers = config?.dnsServers
+            ?: stringList(intent, EasyTierVpnService.extraDnsServers)
+        val disallowedApplications = config?.disallowedApplications ?: disallowedApplications(
+            packageName,
+            stringList(intent, EasyTierVpnService.extraDisallowedApplications),
+        )
         return mapOf(
-            "addresses" to (
-                config?.addresses
-                    ?: stringList(intent, EasyTierVpnService.extraAddresses)
-            ),
-            "routes" to (
-                config?.routes
-                    ?: stringList(intent, EasyTierVpnService.extraRoutes)
-            ),
-            "dnsServers" to (
-                config?.dnsServers
-                    ?: stringList(intent, EasyTierVpnService.extraDnsServers)
-            ),
-            "disallowedApplications" to (
-                config?.disallowedApplications ?: disallowedApplications(
-                    packageName,
-                    stringList(intent, EasyTierVpnService.extraDisallowedApplications),
-                )
-            ),
+            "addresses" to addresses,
+            "routes" to routes,
+            "dnsServers" to dnsServers,
+            "disallowedApplications" to disallowedApplications,
+            "packageName" to packageName,
+            "addressCount" to addresses.size,
+            "routeCount" to routes.size,
+            "disallowedApplicationCount" to disallowedApplications.size,
+            "selfDisallowed" to disallowedApplications.contains(packageName),
             "mtu" to (
                 config?.mtu
                     ?: (intent?.getIntExtra(EasyTierVpnService.extraMtu, 0) ?: 0)
