@@ -57,6 +57,17 @@ object EasyTierNative {
         invokeStatus(method, arg)
     }
 
+    fun stopAllInstances() {
+        val method = findMethod("retainNetworkInstance", 1)
+        val parameter = method.parameterTypes.firstOrNull()
+        val arg: Any? = if (parameter?.isArray == true) {
+            null
+        } else {
+            emptyList<String>()
+        }
+        invokeStatus(method, arg)
+    }
+
     fun setTunFd(instanceName: String, fd: Int) {
         invokeStatus("setTunFd", instanceName, fd)
     }

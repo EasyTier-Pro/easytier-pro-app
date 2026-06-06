@@ -56,6 +56,10 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                     EasyTierNative.retainNetworkInstance(names)
                     result.success(null)
                 }
+                "stopNetworkInstances" -> {
+                    EasyTierNative.stopAllInstances()
+                    result.success(null)
+                }
                 "prepareNotifications" -> prepareNotifications(result)
                 "prepareVpn" -> prepareVpn(result)
                 "startVpn" -> startVpn(call, result)

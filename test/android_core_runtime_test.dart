@@ -336,6 +336,7 @@ void main() {
                 return 'android-host';
               case 'startConfigServerClient':
               case 'retainNetworkInstance':
+              case 'stopNetworkInstances':
               case 'startVpn':
               case 'stopVpn':
               case 'stopConfigServerClient':
@@ -914,7 +915,11 @@ void main() {
         await runtime.stop();
         expect(
           calls.map((call) => call.method),
-          containsAllInOrder(['stopConfigServerClient', 'stopVpn']),
+          containsAllInOrder([
+            'stopConfigServerClient',
+            'stopNetworkInstances',
+            'stopVpn',
+          ]),
         );
 
         nativeEvents.add({

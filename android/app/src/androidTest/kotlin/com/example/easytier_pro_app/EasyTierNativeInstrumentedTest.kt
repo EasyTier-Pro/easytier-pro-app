@@ -50,4 +50,9 @@ class EasyTierNativeInstrumentedTest {
 
         assertTrue(parsed.has("map") || parsed.length() == 0)
     }
+
+    @Test
+    fun stopAllInstancesIsAvailable() {
+        EasyTierNative.stopAllInstances()
+    }
 }

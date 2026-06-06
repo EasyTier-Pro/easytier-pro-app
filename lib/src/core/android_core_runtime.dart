@@ -166,6 +166,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     await _ignoreMissingJni(
       _methodChannel.invokeMethod<void>('stopConfigServerClient'),
     );
+    await _ignoreMissingJni(
+      _methodChannel.invokeMethod<void>('stopNetworkInstances'),
+    );
     await _methodChannel.invokeMethod<void>('stopVpn');
     _cachedNetworkInfos = null;
     _cachedNetworkInfosAt = null;

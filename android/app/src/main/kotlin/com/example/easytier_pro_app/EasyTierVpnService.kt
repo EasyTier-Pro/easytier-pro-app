@@ -126,7 +126,17 @@ class EasyTierVpnService : VpnService() {
 
     private fun stopRuntime() {
         stopConfigServerClient(stopServiceIfIdle = false)
+        stopNetworkInstances()
         stopVpn()
+    }
+
+    private fun stopNetworkInstances() {
+        try {
+            EasyTierNative.stopAllInstances()
+            Log.i(logTag, "Stopped all EasyTier network instances")
+        } catch (error: Throwable) {
+            Log.w(logTag, "Failed to stop EasyTier network instances", error)
+        }
     }
 
     private fun startVpn(intent: Intent) {
