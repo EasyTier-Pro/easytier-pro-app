@@ -188,9 +188,7 @@ void main() {
             },
           },
         },
-        'proxy_cidrs': {
-          'site-a': '172.20.0.0/16',
-        },
+        'proxy_cidrs': {'site-a': '172.20.0.0/16'},
       });
 
       expect(config['addresses'], ['10.10.0.2/24']);
@@ -562,7 +560,9 @@ void main() {
               },
             },
             'routes': [
-              {'proxy_cidrs': ['192.168.50.0/24']},
+              {
+                'proxy_cidrs': ['192.168.50.0/24'],
+              },
             ],
           },
         },
@@ -575,6 +575,7 @@ void main() {
           'event': 'run_network_instance',
           'instance_id': 'bce27f42-5c4c-41ff-9a49-2db5fd2560ca',
           'instance_name': 'network-a-android',
+          'network_name': 'network-a',
         },
       });
 
@@ -586,6 +587,102 @@ void main() {
         'instanceNames': ['network-a-android'],
       });
       expect(startVpn.arguments, {
+        'instanceName': 'network-a-android',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24', '192.168.50.0/24'],
+          'dns': <String>[],
+        },
+      });
+    });
+
+    test('maps callback network name to UUID keyed running info', () async {
+      await runtime.dispose();
+      runtime = AndroidCoreRuntime(
+        methodChannel: methodChannel,
+        eventChannel: _FakeEventChannel(nativeEvents.stream),
+        networkInfoCacheDuration: Duration.zero,
+        vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
+        vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
+        vpnRouteRefreshFastLimit: 2,
+      );
+      const instanceId = 'bce27f42-5c4c-41ff-9a49-2db5fd2560ca';
+      Map<String, Object?> runningInfo({List<String> proxyCidrs = const []}) {
+        return {
+          'running': true,
+          'my_node_info': {
+            'virtual_ipv4': {
+              'address': {'addr': 168427522},
+              'network_length': 24,
+            },
+            'hostname': 'android-phone',
+            'peer_id': 101,
+          },
+          'peer_route_pairs': [
+            {
+              'route': {
+                'peer_id': 202,
+                'ipv4_addr': {
+                  'address': {'addr': 168427523},
+                  'network_length': 24,
+                },
+                'hostname': 'desktop-peer',
+                if (proxyCidrs.isNotEmpty) 'proxy_cidrs': proxyCidrs,
+              },
+              'peer': {
+                'peer_id': 202,
+                'conns': [
+                  {
+                    'stats': {'rx_bytes': 1024, 'tx_bytes': 2048},
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      }
+
+      networkInfos = {
+        'map': {instanceId: runningInfo()},
+      };
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_id': instanceId,
+          'instance_name': 'network-a-android',
+          'network_name': 'network-a',
+        },
+      });
+
+      final startVpn = await _waitForCall(calls, 'startVpn');
+      expect(startVpn.arguments, {
+        'instanceName': 'network-a-android',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24'],
+          'dns': <String>[],
+        },
+      });
+
+      expect(await runtime.isNetworkInstanceRunning('network-a'), isTrue);
+      final statuses = await runtime.readNetworkPeerStatuses('network-a');
+      expect(statuses.keys, containsAll(['10.10.0.2', '10.10.0.3']));
+      final totals = await runtime.readNetworkTrafficTotals();
+      expect(totals.keys, ['network-a']);
+      expect(totals['network-a']!.downloadBytes, 1024);
+      expect(totals['network-a']!.uploadBytes, 2048);
+
+      networkInfos = {
+        'map': {
+          instanceId: runningInfo(proxyCidrs: ['192.168.50.0/24']),
+        },
+      };
+
+      await _waitForCallCount(calls, 'startVpn', 2);
+      final startVpnCalls = calls.where((call) => call.method == 'startVpn');
+      expect(startVpnCalls.last.arguments, {
         'instanceName': 'network-a-android',
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],

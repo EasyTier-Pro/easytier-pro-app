@@ -65,6 +65,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   Future<void> _vpnSerial = Future<void>.value();
   final Map<String, Map<String, Object?>> _pendingVpnPayloads =
       <String, Map<String, Object?>>{};
+  final Map<String, String> _instanceIdsByRuntimeName = <String, String>{};
+  final Map<String, String> _instanceNamesByRuntimeName = <String, String>{};
   String? _activeVpnInstanceName;
   String? _activeVpnInstanceId;
   String? _activeVpnConfigSignature;
@@ -160,6 +162,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   Future<void> stop() async {
     _cancelActiveVpnRefresh();
     _pendingVpnPayloads.clear();
+    _instanceIdsByRuntimeName.clear();
+    _instanceNamesByRuntimeName.clear();
     _activeVpnInstanceName = null;
     _activeVpnInstanceId = null;
     _activeVpnConfigSignature = null;
@@ -188,8 +192,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       if (traffic == null) {
         continue;
       }
-      totals[instance.name] = CoreNetworkTrafficTotals(
-        runtimeNetworkName: instance.name,
+      final runtimeNetworkName = _runtimeNameForInstance(instance);
+      totals[runtimeNetworkName] = CoreNetworkTrafficTotals(
+        runtimeNetworkName: runtimeNetworkName,
         downloadBytes: traffic.downloadBytes,
         uploadBytes: traffic.uploadBytes,
         sampledAt: sampledAt,
@@ -205,7 +210,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return false;
     }
     final snapshot = await _readNetworkInfoSnapshot();
-    return snapshot.instanceNamed(instanceName)?.running ?? false;
+    return _instanceMatchingRuntimeName(snapshot, instanceName)?.running ??
+        false;
   }
 
   @override
@@ -218,7 +224,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     }
 
     final snapshot = await _readNetworkInfoSnapshot();
-    final instance = snapshot.instanceNamed(instanceName);
+    final instance = _instanceMatchingRuntimeName(snapshot, instanceName);
     if (instance == null || !instance.running) {
       throw StateError('no instance matches $instanceName');
     }
@@ -407,25 +413,31 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return;
     }
 
-    final instanceName = _readString(
-      payloadMap['instance_name'] ??
-          payloadMap['instanceName'] ??
-          payloadMap['network_name'] ??
-          payloadMap['networkName'],
-    );
+    final instanceName = _instanceNameFromPayload(payloadMap);
     final instanceId = _readString(
       payloadMap['instance_id'] ?? payloadMap['instanceId'] ?? payloadMap['id'],
     );
+    final runtimeNetworkName = _runtimeNetworkNameFromPayload(payloadMap);
     final instanceKey = instanceName.isNotEmpty ? instanceName : instanceId;
     if (instanceKey.isEmpty) {
       return;
     }
 
     if (eventName == 'delete_network_instance') {
+      _forgetInstanceAliases(
+        instanceId: instanceId,
+        instanceName: instanceName,
+        runtimeNetworkName: runtimeNetworkName,
+      );
       unawaited(_queueVpnStop(instanceKey));
       return;
     }
 
+    _rememberInstanceAliases(
+      instanceId: instanceId,
+      instanceName: instanceName,
+      runtimeNetworkName: runtimeNetworkName,
+    );
     _pendingVpnPayloads
       ..clear()
       ..[instanceKey] = payloadMap;
@@ -572,10 +584,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
 
       await _methodChannel.invokeMethod<void>('startVpn', {
-        'instanceName': instance.name,
+        'instanceName': activeName,
         'vpnConfig': config,
       });
-      _activeVpnInstanceName = instance.name;
+      _activeVpnInstanceName = activeName;
       _activeVpnInstanceId = instance.id ?? _activeVpnInstanceId;
       _activeVpnConfigSignature = signature;
       if (!_disposed) {
@@ -583,7 +595,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           CoreRuntimeEvent(
             type: CoreRuntimeEventTypes.vpnConfigRefreshed,
             data: {
-              'instance_name': instance.name,
+              'instance_name': activeName,
               'addresses': config['addresses'],
               'routes': config['routes'],
               'dns': config['dns'],
@@ -706,10 +718,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   String _instanceNameFromPayload(Map<String, Object?> payloadMap) {
     return _readString(
-      payloadMap['instance_name'] ??
-          payloadMap['instanceName'] ??
-          payloadMap['network_name'] ??
-          payloadMap['networkName'],
+      payloadMap['instance_name'] ?? payloadMap['instanceName'],
     );
   }
 
@@ -717,6 +726,93 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     return _readString(
       payloadMap['instance_id'] ?? payloadMap['instanceId'] ?? payloadMap['id'],
     );
+  }
+
+  String _runtimeNetworkNameFromPayload(Map<String, Object?> payloadMap) {
+    return _readString(
+      payloadMap['network_name'] ??
+          payloadMap['networkName'] ??
+          payloadMap['runtime_network_name'] ??
+          payloadMap['runtimeNetworkName'],
+    );
+  }
+
+  void _rememberInstanceAliases({
+    required String instanceId,
+    required String instanceName,
+    required String runtimeNetworkName,
+  }) {
+    final runtimeName = runtimeNetworkName.trim();
+    if (runtimeName.isEmpty) {
+      return;
+    }
+    if (instanceId.trim().isNotEmpty) {
+      _instanceIdsByRuntimeName[runtimeName] = instanceId.trim();
+    }
+    if (instanceName.trim().isNotEmpty) {
+      _instanceNamesByRuntimeName[runtimeName] = instanceName.trim();
+    }
+  }
+
+  void _forgetInstanceAliases({
+    required String instanceId,
+    required String instanceName,
+    required String runtimeNetworkName,
+  }) {
+    final runtimeName = runtimeNetworkName.trim();
+    if (runtimeName.isNotEmpty) {
+      _instanceIdsByRuntimeName.remove(runtimeName);
+      _instanceNamesByRuntimeName.remove(runtimeName);
+      return;
+    }
+    final targetId = instanceId.trim();
+    final targetName = instanceName.trim();
+    if (targetId.isNotEmpty) {
+      _instanceIdsByRuntimeName.removeWhere((_, id) => id == targetId);
+    }
+    if (targetName.isNotEmpty) {
+      _instanceNamesByRuntimeName.removeWhere((_, name) => name == targetName);
+    }
+  }
+
+  AndroidNetworkInstanceInfo? _instanceMatchingRuntimeName(
+    AndroidNetworkInfoSnapshot snapshot,
+    String runtimeNetworkName,
+  ) {
+    final runtimeName = runtimeNetworkName.trim();
+    if (runtimeName.isEmpty) {
+      return null;
+    }
+    final direct = snapshot.instanceNamed(runtimeName);
+    if (direct != null) {
+      return direct;
+    }
+    final instanceName = _instanceNamesByRuntimeName[runtimeName];
+    if (instanceName != null && instanceName.isNotEmpty) {
+      final byInstanceName = snapshot.instanceNamed(instanceName);
+      if (byInstanceName != null) {
+        return byInstanceName;
+      }
+    }
+    final instanceId = _instanceIdsByRuntimeName[runtimeName];
+    if (instanceId != null && instanceId.isNotEmpty) {
+      return snapshot.instanceMatching(name: '', id: instanceId);
+    }
+    return null;
+  }
+
+  String _runtimeNameForInstance(AndroidNetworkInstanceInfo instance) {
+    for (final entry in _instanceIdsByRuntimeName.entries) {
+      if (entry.value == instance.id) {
+        return entry.key;
+      }
+    }
+    for (final entry in _instanceNamesByRuntimeName.entries) {
+      if (entry.value == instance.name) {
+        return entry.key;
+      }
+    }
+    return instance.name;
   }
 
   void _emitVpnError(Object error, StackTrace stackTrace) {

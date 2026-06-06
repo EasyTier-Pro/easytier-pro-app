@@ -80,7 +80,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
 - Android 运行态信息轮询采用 15 秒间隔和 15 秒 `collectNetworkInfos` 缓存，降低 JNI 轮询压力；随包 JNI 通过本仓库构建脚本的本地补丁释放 `collectNetworkInfos` 返回的 FFI 字符串。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
-- 随包 JNI 构建会给 config server callback 补充 `instance_name`；Dart 使用 `instance_id` 匹配 `collectNetworkInfos` 中以 UUID 为 key 的 running info，并使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，避免把 UUID 误当 EasyTier instance name 导致 TUN 注入失败。
+- 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`；Dart 使用 `instance_id` 匹配 `collectNetworkInfos` 中以 UUID 为 key 的 running info，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，并使用 `network_name` 关联首页 readiness、peer status 与流量统计，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入或路由刷新失败。
 - 已登录且运行中的 Android runtime 收到 `config_server_stopped` 事件时会自动重新连接；退出登录和工作区重建期间不会被该事件反向拉起。
 - workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
