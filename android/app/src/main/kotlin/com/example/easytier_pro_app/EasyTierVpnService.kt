@@ -16,6 +16,7 @@ class EasyTierVpnService : VpnService() {
     private var tunFd: Int? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
     private var activeInstanceName: String? = null
+    private var activeConfigServerConfig: ConfigServerConfig? = null
     private var configServerClientStarted = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,6 +70,16 @@ class EasyTierVpnService : VpnService() {
         require(hostname.isNotEmpty()) { "hostname is required" }
         require(machineId.isNotEmpty()) { "machineId is required" }
 
+        val config = ConfigServerConfig(url, hostname, machineId, secureMode)
+        if (configServerClientStarted) {
+            if (activeConfigServerConfig == config) {
+                startForeground(notificationId, notification("Connecting to EasyTier network"))
+                Log.i(logTag, "Config server client already started for host=$hostname")
+                return
+            }
+            stopConfigServerClient(stopServiceIfIdle = false, emitEvent = false)
+        }
+
         startForeground(notificationId, notification("Connecting to EasyTier network"))
         Log.i(logTag, "Starting config server client in foreground service host=$hostname")
         EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
@@ -82,24 +93,31 @@ class EasyTierVpnService : VpnService() {
             )
         }
         configServerClientStarted = true
+        activeConfigServerConfig = config
         EasyTierFlutterBridge.emitFromService(
             "config_server_started",
             mapOf("hostname" to hostname),
         )
     }
 
-    private fun stopConfigServerClient(stopServiceIfIdle: Boolean = true) {
+    private fun stopConfigServerClient(
+        stopServiceIfIdle: Boolean = true,
+        emitEvent: Boolean = true,
+    ) {
         if (!configServerClientStarted) {
             return
         }
         configServerClientStarted = false
+        activeConfigServerConfig = null
         try {
             EasyTierNative.stopConfigServerClient()
             Log.i(logTag, "Stopped config server client")
         } catch (error: Throwable) {
             Log.w(logTag, "Failed to stop config server client", error)
         }
-        EasyTierFlutterBridge.emitFromService("config_server_stopped", emptyMap())
+        if (emitEvent) {
+            EasyTierFlutterBridge.emitFromService("config_server_stopped", emptyMap())
+        }
         if (stopServiceIfIdle && activeInstanceName == null) {
             stopForegroundCompat()
             stopSelf()
@@ -300,6 +318,13 @@ class EasyTierVpnService : VpnService() {
     }
 
     private data class Cidr(val address: String, val prefixLength: Int)
+
+    private data class ConfigServerConfig(
+        val url: String,
+        val hostname: String,
+        val machineId: String,
+        val secureMode: Boolean,
+    )
 
     companion object {
         const val actionStartConfigServer = "net.easytier.pro.action.START_CONFIG_SERVER"
