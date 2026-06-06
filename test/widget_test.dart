@@ -327,7 +327,7 @@ void main() {
     _expectTrafficChartsStatic(tester);
 
     await gesture.moveTo(const Offset(1, 1));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('实时流量'), findsNothing);
     expect(find.byType(LineChart), findsOneWidget);

@@ -521,10 +521,28 @@ class _NetworkTrafficSparkline extends StatefulWidget {
       _NetworkTrafficSparklineState();
 }
 
-class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
+class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
+    with SingleTickerProviderStateMixin {
   OverlayEntry? _detailOverlay;
   Rect? _anchorRect;
   bool _overlayUpdateScheduled = false;
+  late final AnimationController _overlayAnimationController;
+  late final Animation<double> _overlayAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _overlayAnimationController = AnimationController(
+      vsync: this,
+      duration: appMotionShort,
+      reverseDuration: appMotionShort,
+    );
+    _overlayAnimation = CurvedAnimation(
+      parent: _overlayAnimationController,
+      curve: appMotionCurve,
+      reverseCurve: appMotionReverseCurve,
+    );
+  }
 
   @override
   void didUpdateWidget(covariant _NetworkTrafficSparkline oldWidget) {
@@ -536,7 +554,8 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
 
   @override
   void dispose() {
-    _hideDetails();
+    _removeDetailsImmediately();
+    _overlayAnimationController.dispose();
     super.dispose();
   }
 
@@ -568,6 +587,7 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
 
   void _showDetails() {
     if (_detailOverlay != null) {
+      _overlayAnimationController.forward();
       return;
     }
     _updateAnchorRect();
@@ -575,12 +595,30 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
       builder: (context) => _NetworkTrafficDetailOverlay(
         anchorRect: _anchorRect,
         history: widget.history,
+        animation: _overlayAnimation,
       ),
     );
     Overlay.of(context).insert(_detailOverlay!);
+    _overlayAnimationController.forward(from: 0);
   }
 
   void _hideDetails() {
+    final overlay = _detailOverlay;
+    if (overlay == null) {
+      return;
+    }
+
+    _overlayAnimationController.reverse().whenComplete(() {
+      if (_detailOverlay != overlay) {
+        return;
+      }
+
+      overlay.remove();
+      _detailOverlay = null;
+    });
+  }
+
+  void _removeDetailsImmediately() {
     _detailOverlay?.remove();
     _detailOverlay = null;
   }
@@ -617,10 +655,12 @@ class _NetworkTrafficDetailOverlay extends StatelessWidget {
   const _NetworkTrafficDetailOverlay({
     required this.anchorRect,
     required this.history,
+    required this.animation,
   });
 
   final Rect? anchorRect;
   final List<_TrafficHistoryPoint> history;
+  final Animation<double> animation;
 
   static const Size _panelSize = Size(320, 220);
   static const double _screenPadding = 12;
@@ -633,10 +673,14 @@ class _NetworkTrafficDetailOverlay extends StatelessWidget {
     }
 
     final screenSize = MediaQuery.sizeOf(context);
-    final topCandidate = anchor.top - _panelSize.height - 10;
-    final top = topCandidate >= _screenPadding
-        ? topCandidate
-        : math.min(anchor.bottom + 10, screenSize.height - _panelSize.height);
+    final preferredTop = anchor.bottom + 10;
+    final top = math.min(
+      preferredTop,
+      math.max(
+        _screenPadding,
+        screenSize.height - _panelSize.height - _screenPadding,
+      ),
+    );
     final left = (anchor.center.dx - (_panelSize.width / 2)).clamp(
       _screenPadding,
       math.max(
@@ -652,22 +696,34 @@ class _NetworkTrafficDetailOverlay extends StatelessWidget {
       height: _panelSize.height,
       child: ExcludeSemantics(
         child: IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withAlpha(22),
-                  blurRadius: 22,
-                  offset: const Offset(0, 10),
+          child: FadeTransition(
+            opacity: animation,
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, -6 + (6 * animation.value)),
+                  child: child,
+                );
+              },
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withAlpha(22),
+                      blurRadius: 22,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: _NetworkTrafficDetailChart(history: history),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _NetworkTrafficDetailChart(history: history),
+                ),
+              ),
             ),
           ),
         ),
