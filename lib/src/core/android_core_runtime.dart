@@ -139,8 +139,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'secureMode': true,
     });
 
-    final vpnPrepared =
-        await _methodChannel.invokeMethod<bool>('prepareVpn') ?? false;
+    final vpnPrepared = await _prepareVpn();
     _vpnPrepared = vpnPrepared;
     if (!vpnPrepared) {
       return CoreRuntimeStartResult(
@@ -279,8 +278,23 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   Future<void> _prepareNotifications() async {
     try {
       await _methodChannel.invokeMethod<bool>('prepareNotifications');
+    } on PlatformException catch (error) {
+      if (error.code != 'NOTIFICATION_PERMISSION_PENDING') {
+        rethrow;
+      }
     } on MissingPluginException {
       return;
+    }
+  }
+
+  Future<bool> _prepareVpn() async {
+    try {
+      return await _methodChannel.invokeMethod<bool>('prepareVpn') ?? false;
+    } on PlatformException catch (error) {
+      if (error.code == 'VPN_PERMISSION_PENDING') {
+        return false;
+      }
+      rethrow;
     }
   }
 

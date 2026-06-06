@@ -358,7 +358,7 @@ void main() {
     late AndroidCoreRuntime runtime;
     late List<MethodCall> calls;
     late Map<String, Object?> networkInfos;
-    var vpnPrepared = true;
+    Object? vpnPrepared = true;
     var configServerConnected = false;
     Object? notificationResult = true;
 
@@ -409,7 +409,11 @@ void main() {
                 }
                 return result;
               case 'prepareVpn':
-                return vpnPrepared;
+                final result = vpnPrepared;
+                if (result is Exception) {
+                  throw result;
+                }
+                return result;
               case 'collectNetworkInfos':
                 return jsonEncode(networkInfos);
               default:
@@ -532,6 +536,46 @@ void main() {
         ]),
       );
     });
+
+    test('continues when notification permission request is pending', () async {
+      notificationResult = PlatformException(
+        code: 'NOTIFICATION_PERMISSION_PENDING',
+        message: 'Notification permission request is already pending',
+      );
+
+      final result = await runtime.ensureRunning(
+        _androidBootstrap(),
+        forceReinstall: false,
+      );
+
+      expect(result.phase, CoreRunPhase.running);
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder([
+          'prepareNotifications',
+          'startConfigServerClient',
+          'prepareVpn',
+        ]),
+      );
+    });
+
+    test(
+      'reports VPN permission needed when request is already pending',
+      () async {
+        vpnPrepared = PlatformException(
+          code: 'VPN_PERMISSION_PENDING',
+          message: 'VPN permission request is already pending',
+        );
+
+        final result = await runtime.ensureRunning(
+          _androidBootstrap(),
+          forceReinstall: false,
+        );
+
+        expect(result.phase, CoreRunPhase.needsVpnPermission);
+        expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+      },
+    );
 
     test('uses low-frequency Android runtime polling intervals', () {
       expect(runtime.networkTrafficPollInterval, const Duration(seconds: 15));
