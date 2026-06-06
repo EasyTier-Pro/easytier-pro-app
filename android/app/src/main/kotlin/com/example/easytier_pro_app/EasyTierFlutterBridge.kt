@@ -1,8 +1,10 @@
 package com.example.easytier_pro_app
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import io.flutter.embedding.engine.FlutterEngine
@@ -20,6 +22,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
 
     private var eventSink: EventChannel.EventSink? = null
     private var pendingVpnResult: MethodChannel.Result? = null
+    private var pendingNotificationResult: MethodChannel.Result? = null
 
     fun configure(flutterEngine: FlutterEngine) {
         MethodChannel(
@@ -55,6 +58,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                     EasyTierNative.retainNetworkInstance(names)
                     result.success(null)
                 }
+                "prepareNotifications" -> prepareNotifications(result)
                 "prepareVpn" -> prepareVpn(result)
                 "startVpn" -> startVpn(call, result)
                 "stopVpn" -> {
@@ -91,6 +95,24 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         return true
     }
 
+    fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ): Boolean {
+        if (requestCode != notificationRequestCode) {
+            return false
+        }
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        pendingNotificationResult?.success(granted)
+        pendingNotificationResult = null
+        emit(
+            if (granted) "notification_permission_granted" else "notification_permission_denied",
+            mapOf("granted" to granted),
+        )
+        return true
+    }
+
     private fun startConfigServerClient(call: MethodCall, result: MethodChannel.Result) {
         val url = call.argument<String>("url")?.trim().orEmpty()
         val hostname = call.argument<String>("hostname")?.trim().orEmpty()
@@ -110,6 +132,34 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             )
         }
         result.success(null)
+    }
+
+    private fun prepareNotifications(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            emit("notification_permission_granted", mapOf("granted" to true))
+            result.success(true)
+            return
+        }
+        if (activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            emit("notification_permission_granted", mapOf("granted" to true))
+            result.success(true)
+            return
+        }
+        if (pendingNotificationResult != null) {
+            result.error(
+                "NOTIFICATION_PERMISSION_PENDING",
+                "Notification permission request is already pending",
+                null,
+            )
+            return
+        }
+        pendingNotificationResult = result
+        activity.requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            notificationRequestCode,
+        )
     }
 
     private fun prepareVpn(result: MethodChannel.Result) {
@@ -215,6 +265,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         private const val preferencesName = "easytier_core_runtime"
         private const val machineIdKey = "machine_id"
         private const val vpnRequestCode = 42020
+        private const val notificationRequestCode = 42021
 
         @Volatile
         private var activeBridge: EasyTierFlutterBridge? = null

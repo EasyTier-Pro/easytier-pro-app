@@ -77,6 +77,10 @@ class CoreRuntimeEventTypes {
   static const String vpnPermissionDenied = 'vpn_permission_denied';
   static const String vpnStarted = 'vpn_started';
   static const String vpnStopped = 'vpn_stopped';
+  static const String notificationPermissionGranted =
+      'notification_permission_granted';
+  static const String notificationPermissionDenied =
+      'notification_permission_denied';
   static const String configServer = 'config_server';
   static const String error = 'error';
 }

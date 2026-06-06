@@ -161,6 +161,8 @@ void main() {
               case 'stopVpn':
               case 'stopConfigServerClient':
                 return null;
+              case 'prepareNotifications':
+                return true;
               case 'prepareVpn':
                 return vpnPrepared;
               case 'collectNetworkInfos':
@@ -198,6 +200,10 @@ void main() {
 
     test('starts VPN when config server requests a network instance', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder(['prepareNotifications', 'prepareVpn']),
+      );
 
       nativeEvents.add({
         'type': CoreRuntimeEventTypes.configServer,

@@ -94,6 +94,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'secureMode': true,
     });
 
+    await _prepareNotifications();
+
     final vpnPrepared =
         await _methodChannel.invokeMethod<bool>('prepareVpn') ?? false;
     _vpnPrepared = vpnPrepared;
@@ -194,6 +196,14 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     return Platform.localHostname.trim().isEmpty
         ? 'android-device'
         : Platform.localHostname.trim();
+  }
+
+  Future<void> _prepareNotifications() async {
+    try {
+      await _methodChannel.invokeMethod<bool>('prepareNotifications');
+    } on MissingPluginException {
+      return;
+    }
   }
 
   Future<AndroidNetworkInfoSnapshot> _readNetworkInfoSnapshot() async {
