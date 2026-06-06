@@ -567,10 +567,9 @@ class ConsoleAuthService implements AuthService {
     }
 
     final configServerRaw =
-        releaseBody['web_config_server_url']?.toString() ??
-        'tcp://api.console.easytier.net:22020';
-    final configServer = configServerRaw.trim().isEmpty
-        ? 'tcp://api.console.easytier.net:22020'
+        releaseBody['web_config_server_url']?.toString().trim() ?? '';
+    final configServer = configServerRaw.isEmpty
+        ? _fallbackConfigServerUrl()
         : configServerRaw;
 
     return CoreBootstrapConfig(
@@ -673,6 +672,15 @@ class ConsoleAuthService implements AuthService {
   static String _stripCancelToken(String url) {
     final parts = url.split('?cancelToken=');
     return parts.first;
+  }
+
+  String _fallbackConfigServerUrl() {
+    final uri = Uri.tryParse(consoleBaseUrl.trim());
+    final host = uri?.host.trim() ?? '';
+    if (host.isEmpty || host.endsWith('console.easytier.net')) {
+      return 'tcp://api.console.easytier.net:22020';
+    }
+    return 'tcp://$host:22020';
   }
 
   static String _enrollmentKeyDisplayName() {

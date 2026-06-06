@@ -2057,6 +2057,52 @@ void main() {
     },
   );
 
+  test(
+    'console service derives local config server fallback from console host',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+
+      Future<String> prepareConfigServer(String consoleBaseUrl) async {
+        final service = ConsoleAuthService(
+          tokenStore: OAuthTokenStore(preferences),
+          consoleBaseUrl: consoleBaseUrl,
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/api/v1/releases/latest') {
+              return _jsonResponse({
+                'stable': {'version': 'v2.6.4'},
+                'web_config_server_url': '',
+              });
+            }
+            if (request.url.path ==
+                '/api/v1/tenants/tenant-1/device-enrollment-keys') {
+              if (request.method == 'GET') {
+                return _jsonResponse([]);
+              }
+              return _jsonResponse({'bootstrap_token': 'bootstrap-token'}, 201);
+            }
+            return http.Response('{}', 404);
+          }),
+        );
+
+        final bootstrap = await service.prepareCoreBootstrap(
+          accessToken: 'token',
+          workspaceId: 'tenant-1',
+        );
+        return bootstrap.configServer;
+      }
+
+      expect(
+        await prepareConfigServer('http://10.147.223.128:14173'),
+        'tcp://10.147.223.128:22020',
+      );
+      expect(
+        await prepareConfigServer('https://api.console.easytier.net'),
+        'tcp://api.console.easytier.net:22020',
+      );
+    },
+  );
+
   test('network lifecycle operations use tenant scoped console API', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
