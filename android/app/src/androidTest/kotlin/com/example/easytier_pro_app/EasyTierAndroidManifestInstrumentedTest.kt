@@ -10,6 +10,8 @@ import android.net.VpnService
 import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.util.zip.ZipFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,6 +34,34 @@ class EasyTierAndroidManifestInstrumentedTest {
 
         assertTrue(
             applicationInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC != 0,
+        )
+    }
+
+    @Test
+    fun packagesEasyTierJniForCurrentDeviceAbi() {
+        val libraryName = "libeasytier_android_jni.so"
+        val library = File(
+            context.applicationInfo.nativeLibraryDir,
+            libraryName,
+        )
+        if (library.isFile && library.length() > 0) {
+            return
+        }
+
+        val expectedEntries = Build.SUPPORTED_ABIS
+            .map { abi -> "lib/$abi/$libraryName" }
+            .toSet()
+        val apkFiles = listOf(context.applicationInfo.sourceDir) +
+            context.applicationInfo.splitSourceDirs.orEmpty()
+        val packaged = apkFiles.any { apkPath ->
+            ZipFile(apkPath).use { apk ->
+                expectedEntries.any { entry -> apk.getEntry(entry) != null }
+            }
+        }
+
+        assertTrue(
+            "Expected packaged JNI library in ${apkFiles.joinToString()} for ${Build.SUPPORTED_ABIS.joinToString()}",
+            packaged,
         )
     }
 

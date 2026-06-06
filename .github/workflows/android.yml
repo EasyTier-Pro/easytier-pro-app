@@ -56,6 +56,10 @@ jobs:
           -AndroidSdk $env:ANDROID_HOME
           -SkipCopy
 
+      - name: Verify packaged Android JNI libraries
+        shell: pwsh
+        run: ./scripts/verify_android_jni_libs.ps1
+
       - name: Build Android debug APK
         run: flutter build apk --debug
 
