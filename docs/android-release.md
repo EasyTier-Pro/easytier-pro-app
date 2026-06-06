@@ -77,7 +77,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
 - Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
 - Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS 和 disallowed applications 上报错误，并只清理本次 VPN 启动状态；如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
-- Android VPN 后续成功建立或配置刷新后，Dart 运行态会把此前的 VPN 运行时错误恢复为 running，避免诊断错误在已恢复连接后继续占据首页状态。
+- Android VPN 后续收到原生 `vpn_started` 后，Dart 运行态会把此前的 VPN 运行时错误恢复为 running，避免诊断错误在已恢复连接后继续占据首页状态；Dart 侧 `vpn_config_refreshed` 只表示已请求原生服务刷新配置，不作为 TUN 注入成功证据。
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
 - Android 运行态信息轮询采用 15 秒间隔和 15 秒 `collectNetworkInfos` 缓存，降低 JNI 轮询压力；随包 JNI 通过本仓库构建脚本的本地补丁释放 `collectNetworkInfos` 返回的 FFI 字符串。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
@@ -95,7 +95,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 
 如果手机已加入网络但无法访问虚拟网或子网，优先按以下顺序判断：
 
-- 先看应用内“设置 -> 诊断日志”的 `Android VPN established` 或 `Android VPN config refreshed`。`addresses` 应包含本机 `my_node_info.virtual_ipv4`，`routes` 应至少包含虚拟网 CIDR，并包含控制台授权的子网 CIDR，`disallowed_applications` 应包含 `net.easytier.pro`。
+- 先看应用内“设置 -> 诊断日志”的 `Android VPN established`。`addresses` 应包含本机 `my_node_info.virtual_ipv4`，`routes` 应至少包含虚拟网 CIDR，并包含控制台授权的子网 CIDR，`disallowed_applications` 应包含 `net.easytier.pro`。`Android VPN config refresh requested` 只能说明 Dart 已解析到新路由并请求原生服务刷新，不能单独证明系统 VPN interface 和 TUN fd 已经建立成功。
 - 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题在 Dart 对 `collectNetworkInfos` / config server 下发结果的解析或路由刷新链路。
 - 如果日志 routes 正确但未被排除的浏览器、Termux 或 ping 工具仍无法访问虚拟 IP/子网，问题更可能在系统 VPN interface、TUN fd 注入或 EasyTier data-plane 转发链路。
 - 不要用 EasyTier Pro 自己访问虚拟网作为连通性判断，因为应用自身会被 `addDisallowedApplication(packageName)` 排除在 VPN 外，用来避免控制面和 EasyTier 底层传输路由回环。
@@ -113,7 +113,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android emulator 或真机登录控制台。
 - 完成 VPN 授权。
 - 控制台下发 `run_network_instance` 后，日志出现 `vpn_started` 或 native `Injected TUN fd`。
-- 应用内“设置 -> 诊断日志”出现 `Android VPN established` 或 `Android VPN config refreshed`，且 `routes` 包含虚拟网 CIDR 与已授权子网 CIDR，`disallowed_applications` 至少包含 `net.easytier.pro`。
+- 应用内“设置 -> 诊断日志”出现 `Android VPN established`，且 `routes` 包含虚拟网 CIDR 与已授权子网 CIDR，`disallowed_applications` 至少包含 `net.easytier.pro`。
 - 使用未被排除的应用访问虚拟 IP 和子网地址，确认系统 VPN route 能承载数据面流量。
 - 退出登录后，应用内诊断日志出现 `Android VPN stopped` 和 `Android config server client stopped`，确认 config server client 与 VPN 均停止。
 

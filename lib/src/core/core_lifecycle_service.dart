@@ -956,14 +956,11 @@ cd /d "$installerDir"
       'Runtime event received',
       context: {'type': event.type, ...event.data},
     );
-    if (event.type == CoreRuntimeEventTypes.vpnStarted ||
-        event.type == CoreRuntimeEventTypes.vpnConfigRefreshed) {
+    if (event.type == CoreRuntimeEventTypes.vpnStarted) {
       final payload = _runtimeEventPayload(event);
       _logger.info(
         'core.vpn',
-        event.type == CoreRuntimeEventTypes.vpnStarted
-            ? 'Android VPN established'
-            : 'Android VPN config refreshed',
+        'Android VPN established',
         context: {
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
@@ -977,6 +974,20 @@ cd /d "$installerDir"
         },
       );
       _restoreRunningStatusAfterVpnRecovery();
+    }
+    if (event.type == CoreRuntimeEventTypes.vpnConfigRefreshed) {
+      final payload = _runtimeEventPayload(event);
+      _logger.info(
+        'core.vpn',
+        'Android VPN config refresh requested',
+        context: {
+          'instance_name':
+              payload['instanceName'] ?? payload['instance_name'] ?? '',
+          'addresses': payload['addresses'] ?? const <String>[],
+          'routes': payload['routes'] ?? const <String>[],
+          'dns': payload['dns'] ?? payload['dnsServers'] ?? const <String>[],
+        },
+      );
     }
     if (event.type == CoreRuntimeEventTypes.vpnStopped) {
       final payload = _runtimeEventPayload(event);

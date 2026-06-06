@@ -139,35 +139,38 @@ void main() {
       expect(service.status.value.phase, CoreRunPhase.signedOut);
     });
 
-    test('does not reconnect after Android runtime is intentionally stopped', () async {
-      final authService = _LifecycleAuthService();
-      final runtime = _LifecycleRuntime();
-      final service = CoreLifecycleService(
-        authService: authService,
-        runtime: runtime,
-      );
-      addTearDown(service.dispose);
+    test(
+      'does not reconnect after Android runtime is intentionally stopped',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
 
-      await service.bindSession(_session('tenant-1'));
-      runtime.connected = false;
-      runtime.emit(
-        const CoreRuntimeEvent(
-          type: CoreRuntimeEventTypes.configServerStopped,
-          data: {
-            'payload': {'reason': 'user_disconnect'},
-          },
-        ),
-      );
+        await service.bindSession(_session('tenant-1'));
+        runtime.connected = false;
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.configServerStopped,
+            data: {
+              'payload': {'reason': 'user_disconnect'},
+            },
+          ),
+        );
 
-      await _waitUntil(
-        () => service.status.value.phase == CoreRunPhase.stopped,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+        await _waitUntil(
+          () => service.status.value.phase == CoreRunPhase.stopped,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
 
-      expect(runtime.ensureRunningCount, 1);
-      expect(service.status.value.message, '连接已断开');
-      expect(service.status.value.machineId, 'machine-1');
-    });
+        expect(runtime.ensureRunningCount, 1);
+        expect(service.status.value.message, '连接已断开');
+        expect(service.status.value.machineId, 'machine-1');
+      },
+    );
 
     test('restores running status when Android VPN recovers', () async {
       final authService = _LifecycleAuthService();
@@ -185,9 +188,7 @@ void main() {
           data: {'error': 'Android VPN route setup failed'},
         ),
       );
-      await _waitUntil(
-        () => service.status.value.phase == CoreRunPhase.error,
-      );
+      await _waitUntil(() => service.status.value.phase == CoreRunPhase.error);
 
       runtime.emit(
         const CoreRuntimeEvent(
@@ -208,6 +209,57 @@ void main() {
       expect(service.status.value.machineId, 'machine-1');
       expect(service.status.value.details, 'EasyTier 2.6.4');
     });
+
+    test(
+      'does not restore running status until Android VPN is established',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.error,
+            data: {'error': 'Android VPN route setup failed'},
+          ),
+        );
+        await _waitUntil(
+          () => service.status.value.phase == CoreRunPhase.error,
+        );
+
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnConfigRefreshed,
+            data: {
+              'instance_name': 'network-a',
+              'routes': ['10.10.0.0/24'],
+            },
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(service.status.value.phase, CoreRunPhase.error);
+
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnStarted,
+            data: {
+              'payload': {
+                'instanceName': 'network-a',
+                'routes': ['10.10.0.0/24'],
+              },
+            },
+          ),
+        );
+        await _waitUntil(
+          () => service.status.value.phase == CoreRunPhase.running,
+        );
+      },
+    );
   });
 }
 
