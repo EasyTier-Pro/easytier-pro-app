@@ -58,21 +58,26 @@ class EasyTierVpnService : VpnService() {
             if (instanceName.isNotEmpty()) {
                 payload["instanceName"] = instanceName
             }
+            if (action == actionStart) {
+                payload["addresses"] = intentStringList(intent, extraAddresses)
+                payload["routes"] = intentStringList(intent, extraRoutes)
+                payload["dnsServers"] = intentStringList(intent, extraDnsServers)
+                payload["disallowedApplications"] = intentStringList(
+                    intent,
+                    extraDisallowedApplications,
+                )
+                payload["mtu"] = intent?.getIntExtra(extraMtu, 0) ?: 0
+            }
             EasyTierFlutterBridge.emitFromService(
                 "error",
                 payload,
             )
             if (action == actionStart) {
-                if (instanceName.isNotEmpty()) {
-                    EasyTierFlutterBridge.emitFromService(
-                        "vpn_stopped",
-                        mapOf(
-                            "instanceName" to instanceName,
-                            "reason" to "start_failed",
-                        ),
-                    )
-                }
-                stopVpn(stopService = !configServerClientStarted)
+                stopVpn(
+                    stopService = !configServerClientStarted,
+                    reason = "start_failed",
+                    fallbackInstanceName = instanceName,
+                )
             } else {
                 stopVpn()
             }
@@ -230,9 +235,14 @@ class EasyTierVpnService : VpnService() {
         )
     }
 
-    private fun stopVpn(stopService: Boolean = true) {
+    private fun stopVpn(
+        stopService: Boolean = true,
+        reason: String? = null,
+        fallbackInstanceName: String? = null,
+    ) {
         val fd = tunFd
         val instanceName = activeInstanceName
+            ?: fallbackInstanceName?.takeIf { it.isNotEmpty() }
         tunFd = null
         activeInstanceName = null
         tunDescriptor?.close()
@@ -240,9 +250,18 @@ class EasyTierVpnService : VpnService() {
         if (fd != null) {
             closeDetachedTunFd(fd)
             Log.i(logTag, "Stopped VPN fd=$fd instance=$instanceName")
+        }
+        if (fd != null || reason != null) {
+            val payload = mutableMapOf<String, Any?>("instanceName" to instanceName)
+            if (fd != null) {
+                payload["fd"] = fd
+            }
+            if (reason != null) {
+                payload["reason"] = reason
+            }
             EasyTierFlutterBridge.emitFromService(
                 "vpn_stopped",
-                mapOf("fd" to fd, "instanceName" to instanceName),
+                payload,
             )
         }
         if (configServerClientStarted && !stopService) {
@@ -253,6 +272,14 @@ class EasyTierVpnService : VpnService() {
         if (stopService) {
             stopSelf()
         }
+    }
+
+    private fun intentStringList(intent: Intent?, extraName: String): List<String> {
+        return intent
+            ?.getStringArrayListExtra(extraName)
+            .orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
     }
 
     private fun closeDetachedTunFd(fd: Int) {
