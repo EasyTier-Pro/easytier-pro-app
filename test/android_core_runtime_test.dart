@@ -260,6 +260,30 @@ void main() {
       expect(startVpn.arguments, containsPair('instanceName', 'network-a'));
     });
 
+    test('does not start VPN after native permission denial', () async {
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.vpnPermissionDenied,
+        'payload': {'granted': false},
+      });
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_name': 'network-a',
+        },
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.vpnPermissionGranted,
+        'payload': {'granted': true},
+      });
+      final startVpn = await _waitForCall(calls, 'startVpn');
+      expect(startVpn.arguments, containsPair('instanceName', 'network-a'));
+    });
+
     test('stops active VPN when config server deletes the instance', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       nativeEvents.add({

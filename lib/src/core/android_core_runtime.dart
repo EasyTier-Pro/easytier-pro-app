@@ -259,6 +259,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       _vpnPrepared = true;
       unawaited(_startPendingVpns());
     }
+    if (runtimeEvent.type == CoreRuntimeEventTypes.vpnPermissionDenied) {
+      _vpnPrepared = false;
+    }
     if (runtimeEvent.type == CoreRuntimeEventTypes.configServer) {
       _handleConfigServerEvent(runtimeEvent.data);
     }
