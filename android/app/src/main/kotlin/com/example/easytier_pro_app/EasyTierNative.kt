@@ -1,5 +1,6 @@
 package com.example.easytier_pro_app
 
+import com.easytier.jni.ConfigServerEventCallback
 import java.lang.IllegalStateException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -21,7 +22,7 @@ object EasyTierNative {
         secureMode: Boolean,
         callback: (String) -> Unit,
     ) {
-        val function: (String) -> Unit = { payload ->
+        val function = ConfigServerEventCallback { payload ->
             callback(payload)
         }
         invoke("startConfigServerClient", url, hostname, machineId, secureMode, function)
