@@ -88,14 +88,14 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       bootstrap.bootstrapToken,
     );
 
+    await _prepareNotifications();
+
     await _methodChannel.invokeMethod<void>('startConfigServerClient', {
       'url': fullUrl,
       'hostname': hostname,
       'machineId': machineId,
       'secureMode': true,
     });
-
-    await _prepareNotifications();
 
     final vpnPrepared =
         await _methodChannel.invokeMethod<bool>('prepareVpn') ?? false;

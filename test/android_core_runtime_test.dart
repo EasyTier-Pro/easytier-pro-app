@@ -205,7 +205,11 @@ void main() {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       expect(
         calls.map((call) => call.method),
-        containsAllInOrder(['prepareNotifications', 'prepareVpn']),
+        containsAllInOrder([
+          'prepareNotifications',
+          'startConfigServerClient',
+          'prepareVpn',
+        ]),
       );
 
       nativeEvents.add({

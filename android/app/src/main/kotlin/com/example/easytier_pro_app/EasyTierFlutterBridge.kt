@@ -44,7 +44,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 "getHostname" -> result.success(getHostname())
                 "startConfigServerClient" -> startConfigServerClient(call, result)
                 "stopConfigServerClient" -> {
-                    EasyTierNative.stopConfigServerClient()
+                    stopConfigServerClient()
                     result.success(null)
                 }
                 "isConfigServerClientConnected" -> {
@@ -126,17 +126,15 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         require(hostname.isNotEmpty()) { "hostname is required" }
         require(machineId.isNotEmpty()) { "machineId is required" }
 
-        Log.i(logTag, "Starting config server client for host=$hostname")
-        EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
-            Log.d(logTag, "Received config server event")
-            emit(
-                "config_server",
-                mapOf(
-                    "raw" to payload,
-                    "payload" to (parseJson(payload) ?: mapOf("raw" to payload)),
-                ),
-            )
+        Log.i(logTag, "Starting config server client service for host=$hostname")
+        val intent = Intent(activity, EasyTierVpnService::class.java).apply {
+            action = EasyTierVpnService.actionStartConfigServer
+            putExtra(EasyTierVpnService.extraConfigServerUrl, url)
+            putExtra(EasyTierVpnService.extraHostname, hostname)
+            putExtra(EasyTierVpnService.extraMachineId, machineId)
+            putExtra(EasyTierVpnService.extraSecureMode, secureMode)
         }
+        startRuntimeService(intent)
         result.success(null)
     }
 
@@ -210,12 +208,16 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 putExtra(EasyTierVpnService.extraMtu, it)
             }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            activity.startForegroundService(intent)
-        } else {
-            activity.startService(intent)
-        }
+        startRuntimeService(intent)
         result.success(null)
+    }
+
+    private fun stopConfigServerClient() {
+        Log.i(logTag, "Stopping config server client service")
+        val intent = Intent(activity, EasyTierVpnService::class.java).apply {
+            action = EasyTierVpnService.actionStopConfigServer
+        }
+        activity.startService(intent)
     }
 
     private fun stopVpn() {
@@ -224,6 +226,14 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
             action = EasyTierVpnService.actionStop
         }
         activity.startService(intent)
+    }
+
+    private fun startRuntimeService(intent: Intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.startForegroundService(intent)
+        } else {
+            activity.startService(intent)
+        }
     }
 
     private fun getMachineId(): String {
@@ -319,7 +329,7 @@ private fun cidrFromMap(value: Map<*, *>): String {
     return if (address.isNotEmpty() && prefix.isNotEmpty()) "$address/$prefix" else address
 }
 
-private fun parseJson(text: String): Any? {
+fun parseJson(text: String): Any? {
     return try {
         val trimmed = text.trim()
         when {

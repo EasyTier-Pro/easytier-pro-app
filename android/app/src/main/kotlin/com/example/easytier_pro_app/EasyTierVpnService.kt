@@ -15,17 +15,30 @@ class EasyTierVpnService : VpnService() {
     private var tunFd: Int? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
     private var activeInstanceName: String? = null
+    private var configServerClientStarted = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
             when (intent?.action) {
+                actionStartConfigServer -> {
+                    startConfigServerClient(intent)
+                    START_REDELIVER_INTENT
+                }
+                actionStopConfigServer -> {
+                    stopConfigServerClient()
+                    START_NOT_STICKY
+                }
+                actionStopRuntime -> {
+                    stopRuntime()
+                    START_NOT_STICKY
+                }
                 actionStop -> {
-                    stopVpn()
+                    stopVpn(stopService = !configServerClientStarted)
                     START_NOT_STICKY
                 }
                 actionStart -> {
                     startVpn(intent)
-                    START_STICKY
+                    START_REDELIVER_INTENT
                 }
                 else -> START_NOT_STICKY
             }
@@ -41,8 +54,60 @@ class EasyTierVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopVpn()
+        stopConfigServerClient(stopServiceIfIdle = false)
+        stopVpn(stopService = false)
         super.onDestroy()
+    }
+
+    private fun startConfigServerClient(intent: Intent) {
+        val url = intent.getStringExtra(extraConfigServerUrl)?.trim().orEmpty()
+        val hostname = intent.getStringExtra(extraHostname)?.trim().orEmpty()
+        val machineId = intent.getStringExtra(extraMachineId)?.trim().orEmpty()
+        val secureMode = intent.getBooleanExtra(extraSecureMode, true)
+        require(url.isNotEmpty()) { "config server url is required" }
+        require(hostname.isNotEmpty()) { "hostname is required" }
+        require(machineId.isNotEmpty()) { "machineId is required" }
+
+        startForeground(notificationId, notification("Connecting to EasyTier network"))
+        Log.i(logTag, "Starting config server client in foreground service host=$hostname")
+        EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
+            Log.d(logTag, "Received config server event")
+            EasyTierFlutterBridge.emitFromService(
+                "config_server",
+                mapOf(
+                    "raw" to payload,
+                    "payload" to (parseJson(payload) ?: mapOf("raw" to payload)),
+                ),
+            )
+        }
+        configServerClientStarted = true
+        EasyTierFlutterBridge.emitFromService(
+            "config_server_started",
+            mapOf("hostname" to hostname),
+        )
+    }
+
+    private fun stopConfigServerClient(stopServiceIfIdle: Boolean = true) {
+        if (!configServerClientStarted) {
+            return
+        }
+        configServerClientStarted = false
+        try {
+            EasyTierNative.stopConfigServerClient()
+            Log.i(logTag, "Stopped config server client")
+        } catch (error: Throwable) {
+            Log.w(logTag, "Failed to stop config server client", error)
+        }
+        EasyTierFlutterBridge.emitFromService("config_server_stopped", emptyMap())
+        if (stopServiceIfIdle && activeInstanceName == null) {
+            stopForegroundCompat()
+            stopSelf()
+        }
+    }
+
+    private fun stopRuntime() {
+        stopConfigServerClient(stopServiceIfIdle = false)
+        stopVpn()
     }
 
     private fun startVpn(intent: Intent) {
@@ -55,7 +120,7 @@ class EasyTierVpnService : VpnService() {
         stopVpn(stopService = false)
         Log.i(logTag, "Establishing VPN for instance=$instanceName addresses=${addresses.size}")
 
-        startForeground(notificationId, notification(instanceName))
+        startForeground(notificationId, notification("Connected to $instanceName"))
 
         val builder = Builder()
             .setSession("EasyTier Pro")
@@ -115,7 +180,11 @@ class EasyTierVpnService : VpnService() {
                 mapOf("fd" to fd, "instanceName" to instanceName),
             )
         }
-        stopForegroundCompat()
+        if (configServerClientStarted && !stopService) {
+            startForeground(notificationId, notification("Waiting for network config"))
+        } else {
+            stopForegroundCompat()
+        }
         if (stopService) {
             stopSelf()
         }
@@ -129,7 +198,7 @@ class EasyTierVpnService : VpnService() {
         }
     }
 
-    private fun notification(instanceName: String): Notification {
+    private fun notification(contentText: String): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             val channel = NotificationChannel(
@@ -150,12 +219,12 @@ class EasyTierVpnService : VpnService() {
         return builder
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("EasyTier Pro")
-            .setContentText("Connected to $instanceName")
+            .setContentText(contentText)
             .setContentIntent(openAppPendingIntent())
             .addAction(
                 applicationInfo.icon,
                 "Disconnect",
-                stopVpnPendingIntent(),
+                stopRuntimePendingIntent(),
             )
             .setOngoing(true)
             .build()
@@ -173,9 +242,9 @@ class EasyTierVpnService : VpnService() {
         )
     }
 
-    private fun stopVpnPendingIntent(): PendingIntent {
+    private fun stopRuntimePendingIntent(): PendingIntent {
         val intent = Intent(this, EasyTierVpnService::class.java).apply {
-            action = actionStop
+            action = actionStopRuntime
         }
         return PendingIntent.getService(
             this,
@@ -204,8 +273,15 @@ class EasyTierVpnService : VpnService() {
     private data class Cidr(val address: String, val prefixLength: Int)
 
     companion object {
+        const val actionStartConfigServer = "net.easytier.pro.action.START_CONFIG_SERVER"
+        const val actionStopConfigServer = "net.easytier.pro.action.STOP_CONFIG_SERVER"
+        const val actionStopRuntime = "net.easytier.pro.action.STOP_RUNTIME"
         const val actionStart = "net.easytier.pro.action.START_VPN"
         const val actionStop = "net.easytier.pro.action.STOP_VPN"
+        const val extraConfigServerUrl = "configServerUrl"
+        const val extraHostname = "hostname"
+        const val extraMachineId = "machineId"
+        const val extraSecureMode = "secureMode"
         const val extraInstanceName = "instanceName"
         const val extraAddresses = "addresses"
         const val extraRoutes = "routes"
