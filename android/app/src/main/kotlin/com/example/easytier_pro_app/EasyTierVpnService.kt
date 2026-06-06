@@ -130,30 +130,20 @@ class EasyTierVpnService : VpnService() {
     }
 
     private fun startVpn(intent: Intent) {
-        val instanceName = intent.getStringExtra(extraInstanceName)?.trim().orEmpty()
-        require(instanceName.isNotEmpty()) { "VPN instanceName is required" }
-
-        val addresses = intent.getStringArrayListExtra(extraAddresses) ?: arrayListOf()
-        require(addresses.isNotEmpty()) { "VPN address is required before establishing TUN" }
+        val config = EasyTierVpnStartConfigParser.fromIntent(intent, packageName)
 
         stopVpn(stopService = false)
-        val routes = intent.getStringArrayListExtra(extraRoutes) ?: arrayListOf()
-        val dnsServers = intent.getStringArrayListExtra(extraDnsServers) ?: arrayListOf()
-        val disallowedApplications = disallowedApplications(
-            intent.getStringArrayListExtra(extraDisallowedApplications) ?: arrayListOf(),
-        )
-        val mtu = intent.getIntExtra(extraMtu, 0)
         Log.i(
             logTag,
-            "Establishing VPN for instance=$instanceName addresses=$addresses routes=$routes dns=$dnsServers mtu=$mtu disallowed=$disallowedApplications",
+            "Establishing VPN for instance=${config.instanceName} addresses=${config.addresses} routes=${config.routes} dns=${config.dnsServers} mtu=${config.mtu} disallowed=${config.disallowedApplications}",
         )
 
-        startForeground(notificationId, notification("Connected to $instanceName"))
+        startForeground(notificationId, notification("Connected to ${config.instanceName}"))
 
         val builder = Builder()
             .setSession("EasyTier Pro")
 
-        for (application in disallowedApplications) {
+        for (application in config.disallowedApplications) {
             try {
                 builder.addDisallowedApplication(application)
             } catch (error: PackageManager.NameNotFoundException) {
@@ -161,21 +151,21 @@ class EasyTierVpnService : VpnService() {
             }
         }
 
-        if (mtu > 0) {
-            builder.setMtu(mtu)
+        if (config.mtu > 0) {
+            builder.setMtu(config.mtu)
         }
 
-        for (address in addresses) {
-            val cidr = parseCidr(address)
+        for (address in config.addresses) {
+            val cidr = EasyTierVpnStartConfigParser.parseCidr(address)
             builder.addAddress(cidr.address, cidr.prefixLength)
         }
 
-        for (route in routes) {
-            val cidr = parseCidr(route)
+        for (route in config.routes) {
+            val cidr = EasyTierVpnStartConfigParser.parseCidr(route)
             builder.addRoute(cidr.address, cidr.prefixLength)
         }
 
-        for (server in dnsServers) {
+        for (server in config.dnsServers) {
             builder.addDnsServer(server)
         }
 
@@ -188,27 +178,20 @@ class EasyTierVpnService : VpnService() {
         val fd = descriptor.detachFd()
         tunDescriptor = null
         tunFd = fd
-        activeInstanceName = instanceName
-        EasyTierNative.setTunFd(instanceName, fd)
-        Log.i(logTag, "Injected TUN fd for instance=$instanceName")
+        activeInstanceName = config.instanceName
+        EasyTierNative.setTunFd(config.instanceName, fd)
+        Log.i(logTag, "Injected TUN fd for instance=${config.instanceName}")
         EasyTierFlutterBridge.emitFromService(
             "vpn_started",
             mapOf(
-                "instanceName" to instanceName,
-                "addresses" to addresses,
-                "routes" to routes,
-                "dnsServers" to dnsServers,
-                "mtu" to mtu,
-                "disallowedApplications" to disallowedApplications,
+                "instanceName" to config.instanceName,
+                "addresses" to config.addresses,
+                "routes" to config.routes,
+                "dnsServers" to config.dnsServers,
+                "mtu" to config.mtu,
+                "disallowedApplications" to config.disallowedApplications,
             ),
         )
-    }
-
-    private fun disallowedApplications(extraPackages: List<String>): List<String> {
-        return (listOf(packageName) + extraPackages)
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
     }
 
     private fun stopVpn(stopService: Boolean = true) {
@@ -308,16 +291,6 @@ class EasyTierVpnService : VpnService() {
             stopForeground(true)
         }
     }
-
-    private fun parseCidr(value: String): Cidr {
-        val parts = value.trim().split("/", limit = 2)
-        require(parts.firstOrNull()?.isNotEmpty() == true) { "Invalid CIDR: $value" }
-        val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 32
-        require(prefix in 0..32) { "Invalid CIDR prefix: $value" }
-        return Cidr(parts[0], prefix)
-    }
-
-    private data class Cidr(val address: String, val prefixLength: Int)
 
     private data class ConfigServerConfig(
         val url: String,
