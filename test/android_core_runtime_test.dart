@@ -138,6 +138,7 @@ void main() {
     late MethodChannel methodChannel;
     late AndroidCoreRuntime runtime;
     late List<MethodCall> calls;
+    late Map<String, Object?> networkInfos;
     var vpnPrepared = true;
 
     setUp(() {
@@ -146,6 +147,20 @@ void main() {
       methodChannel = const MethodChannel('test.easytier/core_runtime');
       calls = <MethodCall>[];
       vpnPrepared = true;
+      networkInfos = {
+        'instances': [
+          {
+            'instance_id': 'instance-a',
+            'instance_name': 'network-a',
+            'running': true,
+            'ipv4_cidr': '10.10.0.2/24',
+            'routes': [
+              {'address': '10.20.0.0', 'prefix': 16},
+            ],
+            'dns_servers': ['10.10.0.1'],
+          },
+        ],
+      };
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(methodChannel, (MethodCall call) async {
@@ -166,19 +181,7 @@ void main() {
               case 'prepareVpn':
                 return vpnPrepared;
               case 'collectNetworkInfos':
-                return jsonEncode({
-                  'instances': [
-                    {
-                      'instance_name': 'network-a',
-                      'running': true,
-                      'ipv4_cidr': '10.10.0.2/24',
-                      'routes': [
-                        {'address': '10.20.0.0', 'prefix': 16},
-                      ],
-                      'dns_servers': ['10.10.0.1'],
-                    },
-                  ],
-                });
+                return jsonEncode(networkInfos);
               default:
                 fail('Unexpected Android method call: ${call.method}');
             }
@@ -232,6 +235,54 @@ void main() {
         },
       });
     });
+
+    test('resolves instance id events before starting VPN', () async {
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': 'instance-a',
+          },
+        },
+      });
+
+      final startVpn = await _waitForCall(calls, 'startVpn');
+      expect(startVpn.arguments, {
+        'instanceName': 'network-a',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.20.0.0/16'],
+          'dns': ['10.10.0.1'],
+        },
+      });
+    });
+
+    test(
+      'stops active VPN when config server deletes by instance id',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': 'instance-a',
+          },
+        });
+        await _waitForCall(calls, 'startVpn');
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'delete_network_instance',
+            'instance_id': 'instance-a',
+          },
+        });
+
+        await _waitForCallCount(calls, 'stopVpn', 1);
+      },
+    );
 
     test('refreshes active VPN when same instance routes change', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
