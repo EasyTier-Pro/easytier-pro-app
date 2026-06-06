@@ -59,6 +59,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 
 - EasyTier Pro 会创建一个用户可见的 VPN 连接，用于接入已授权的零信任网络。
 - Android config server client 由原生前台 `VpnService` 启动并保持运行，Flutter 负责发起启动/停止命令和展示状态。
+- 原生服务事件会在 Flutter `EventChannel` 暂未监听时短暂缓存，避免回前台或 engine 重建期间丢失 config server/VPN 状态事件。
 - VPN 连接会显示常驻通知；用户可以点击通知返回应用，也可以通过通知动作、系统 VPN 设置或应用内退出/断开操作停止连接。
 - 应用不会在客户端硬编码只适用于生产环境的控制面地址；控制台和本地 E2E 环境应继续通过上层配置或控制台接口提供。
 - Android 13+ 需要通知权限；拒绝通知权限不应绕过 VPN 授权流程。

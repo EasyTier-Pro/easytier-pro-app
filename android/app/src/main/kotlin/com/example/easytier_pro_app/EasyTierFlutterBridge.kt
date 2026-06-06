@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.ArrayDeque
 import java.util.Locale
 import java.util.UUID
 
@@ -77,6 +78,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
+        flushBufferedEvents()
     }
 
     override fun onCancel(arguments: Any?) {
@@ -262,8 +264,29 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
     }
 
     private fun emit(type: String, payload: Map<String, Any?>) {
+        deliverEvent(eventOf(type, payload))
+    }
+
+    private fun deliverEvent(event: Map<String, Any?>) {
         activity.runOnUiThread {
-            eventSink?.success(mapOf("type" to type, "payload" to payload))
+            val sink = eventSink
+            if (sink == null) {
+                bufferServiceEvent(event)
+                return@runOnUiThread
+            }
+            for (buffered in drainBufferedServiceEvents()) {
+                sink.success(buffered)
+            }
+            sink.success(event)
+        }
+    }
+
+    private fun flushBufferedEvents() {
+        activity.runOnUiThread {
+            val sink = eventSink ?: return@runOnUiThread
+            for (event in drainBufferedServiceEvents()) {
+                sink.success(event)
+            }
         }
     }
 
@@ -287,12 +310,45 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         private const val machineIdKey = "machine_id"
         private const val vpnRequestCode = 42020
         private const val notificationRequestCode = 42021
+        private const val maxBufferedServiceEvents = 64
 
         @Volatile
         private var activeBridge: EasyTierFlutterBridge? = null
+        private val bufferedServiceEvents = ArrayDeque<Map<String, Any?>>()
 
         fun emitFromService(type: String, payload: Map<String, Any?>) {
-            activeBridge?.emit(type, payload)
+            val event = eventOf(type, payload)
+            val bridge = activeBridge
+            if (bridge == null) {
+                bufferServiceEvent(event)
+                return
+            }
+            bridge.deliverEvent(event)
+        }
+
+        private fun eventOf(type: String, payload: Map<String, Any?>): Map<String, Any?> {
+            return mapOf("type" to type, "payload" to payload)
+        }
+
+        private fun bufferServiceEvent(event: Map<String, Any?>) {
+            synchronized(bufferedServiceEvents) {
+                if (bufferedServiceEvents.size >= maxBufferedServiceEvents) {
+                    bufferedServiceEvents.removeFirst()
+                    Log.w(logTag, "Dropping oldest buffered native event")
+                }
+                bufferedServiceEvents.addLast(event)
+            }
+        }
+
+        private fun drainBufferedServiceEvents(): List<Map<String, Any?>> {
+            synchronized(bufferedServiceEvents) {
+                if (bufferedServiceEvents.isEmpty()) {
+                    return emptyList()
+                }
+                val events = bufferedServiceEvents.toList()
+                bufferedServiceEvents.clear()
+                return events
+            }
         }
     }
 }
