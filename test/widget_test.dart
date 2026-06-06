@@ -573,11 +573,15 @@ void main() {
     );
     expect(find.text('desktop-1'), findsOneWidget);
 
-    final summaryBottom = tester
-        .getBottomLeft(find.textContaining('1 / 1 在线'))
+    final scrollTop = tester
+        .getTopLeft(
+          find.byKey(const ValueKey<String>('network-node-list-scroll')),
+        )
         .dy;
-    final nodeTop = tester.getTopLeft(find.text('desktop-1').last).dy;
-    expect(nodeTop - summaryBottom, lessThan(56));
+    final nodeTop = tester
+        .getTopLeft(find.byKey(const ValueKey<String>('network-node-node-1')))
+        .dy;
+    expect(nodeTop - scrollTop, lessThan(8));
   });
 
   testWidgets('network detail device list scrolls when content overflows', (
