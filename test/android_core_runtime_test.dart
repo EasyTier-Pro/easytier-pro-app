@@ -296,6 +296,77 @@ void main() {
       });
     });
 
+    test('maps upstream running info to peer statuses', () async {
+      networkInfos = {
+        'map': {
+          'network-a': {
+            'running': true,
+            'my_node_info': {
+              'virtual_ipv4': {
+                'address': {'addr': 168427522},
+                'network_length': 24,
+              },
+              'hostname': 'android-phone',
+              'peer_id': 123,
+              'version': '2.6.4',
+              'stun_info': {'udp_nat_type': 3},
+            },
+            'peer_route_pairs': [
+              {
+                'route': {
+                  'peer_id': 456,
+                  'ipv4_addr': {
+                    'address': {'addr': 168427523},
+                    'network_length': 24,
+                  },
+                  'hostname': 'desktop-peer',
+                  'cost': 1,
+                  'path_latency': 4,
+                  'version': '2.6.4',
+                  'stun_info': {'udp_nat_type': 6},
+                },
+                'peer': {
+                  'peer_id': 456,
+                  'conns': [
+                    {
+                      'stats': {
+                        'rx_bytes': 1024,
+                        'tx_bytes': 2048,
+                        'latency_us': 3452,
+                      },
+                      'loss_rate': 0.01,
+                      'tunnel': {'tunnel_type': 'udp'},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      final statuses = await runtime.readNetworkPeerStatuses('network-a');
+
+      expect(statuses.keys, containsAll(['10.10.0.2', '10.10.0.3']));
+      final local = statuses['10.10.0.2']!;
+      expect(local.hostname, 'android-phone');
+      expect(local.isLocal, isTrue);
+      expect(local.peerId, '123');
+      expect(local.natType, 'FullCone');
+
+      final remote = statuses['10.10.0.3']!;
+      expect(remote.hostname, 'desktop-peer');
+      expect(remote.peerId, '456');
+      expect(remote.cost, '1');
+      expect(remote.latencyText, '3.452');
+      expect(remote.lossText, '0.01');
+      expect(remote.rxBytes, '1024');
+      expect(remote.txBytes, '2048');
+      expect(remote.tunnelProto, 'udp');
+      expect(remote.natType, 'Symmetric');
+      expect(remote.version, '2.6.4');
+    });
+
     test(
       'falls back to the only collected instance for id-only events',
       () async {

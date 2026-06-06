@@ -863,16 +863,35 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
     }
 
-    copyIfMissing('ipv4', ['ip', 'ipv4_addr', 'virtual_ip', 'address']);
-    copyIfMissing('cidr', ['ipv4_cidr', 'virtual_ip_cidr']);
+    copyIfMissing('ipv4', [
+      'ip',
+      'ipv4_addr',
+      'ipv4Addr',
+      'virtual_ip',
+      'virtualIp',
+      'virtual_ipv4',
+      'virtualIpv4',
+      'address',
+    ]);
+    copyIfMissing('cidr', [
+      'ipv4_cidr',
+      'ipv4Cidr',
+      'virtual_ip_cidr',
+      'virtualIpCidr',
+    ]);
     copyIfMissing('hostname', ['host_name', 'name']);
     copyIfMissing('lat_ms', ['latency_ms', 'latency', 'latency_text']);
-    copyIfMissing('loss_rate', ['loss', 'packet_loss']);
-    copyIfMissing('rx_bytes', ['rx', 'received_bytes']);
-    copyIfMissing('tx_bytes', ['tx', 'transmitted_bytes']);
+    copyIfMissing('loss_rate', [
+      'loss',
+      'lossRate',
+      'packet_loss',
+      'packetLoss',
+    ]);
+    copyIfMissing('rx_bytes', ['rx', 'rxBytes', 'received_bytes']);
+    copyIfMissing('tx_bytes', ['tx', 'txBytes', 'transmitted_bytes']);
     copyIfMissing('tunnel_proto', ['tunnel_protocol', 'proto']);
     copyIfMissing('nat_type', ['nat']);
-    copyIfMissing('peer_id', ['id']);
+    copyIfMissing('peer_id', ['peerId', 'id']);
     return normalized;
   }
 }
@@ -1071,29 +1090,353 @@ class AndroidNetworkInstanceInfo {
   }
 
   static List<Map<String, dynamic>> _extractPeers(Map<String, Object?> json) {
-    const peerKeys = <String>[
-      'peers',
-      'peer_infos',
-      'peerInfos',
-      'peer_list',
-      'peerList',
-      'peer_route_pairs',
-      'peerRoutePairs',
-    ];
+    const peerKeys = <String>['peers', 'peer_infos', 'peerInfos'];
+    const directPeerKeys = <String>['peer_list', 'peerList'];
+    const routeKeys = <String>['routes', 'route_infos', 'routeInfos'];
+    const peerRoutePairKeys = <String>['peer_route_pairs', 'peerRoutePairs'];
     final peers = <Map<String, dynamic>>[];
+
+    final myNodeInfo = AndroidCoreRuntime._readMap(
+      json['my_node_info'] ?? json['myNodeInfo'],
+    );
+    final myPeerId = _peerIdFromMap(myNodeInfo);
+    if (myNodeInfo != null) {
+      final localPeer = _localPeerFromMyNodeInfo(myNodeInfo);
+      if (localPeer.isNotEmpty) {
+        peers.add(localPeer);
+      }
+    }
+
+    final peersById = <String, Map<String, Object?>>{};
     for (final key in peerKeys) {
-      final value = json[key];
-      if (value is List) {
-        for (final item in value) {
-          if (item is Map) {
-            final map = _stringObjectMap(item);
-            final peer = map['peer'];
-            peers.add(peer is Map ? _stringDynamicMap(peer) : map);
-          }
+      for (final item in AndroidCoreRuntime._readList(json[key])) {
+        final peer = AndroidCoreRuntime._readMap(item);
+        final peerId = _peerIdFromMap(peer);
+        if (peer == null) {
+          continue;
+        }
+        if (peerId.isEmpty) {
+          peers.add(_stringDynamicMap(peer));
+        } else {
+          peersById[peerId] = peer;
+        }
+      }
+    }
+
+    for (final key in directPeerKeys) {
+      for (final item in AndroidCoreRuntime._readList(json[key])) {
+        final peer = AndroidCoreRuntime._readMap(item);
+        if (peer != null) {
+          peers.add(_stringDynamicMap(peer));
+        }
+      }
+    }
+
+    for (final key in peerRoutePairKeys) {
+      for (final item in AndroidCoreRuntime._readList(json[key])) {
+        final pair = AndroidCoreRuntime._readMap(item);
+        final peer = AndroidCoreRuntime._readMap(pair?['peer']);
+        final peerId = _peerIdFromMap(peer);
+        if (peer != null && peerId.isNotEmpty) {
+          peersById[peerId] = peer;
+        }
+      }
+    }
+
+    for (final peer in peersById.values) {
+      final runtimePeer = _peerFromPeerInfo(peer);
+      if (runtimePeer.isNotEmpty) {
+        peers.add(runtimePeer);
+      }
+    }
+
+    for (final key in routeKeys) {
+      for (final item in AndroidCoreRuntime._readList(json[key])) {
+        final route = _routeFromValue(item);
+        if (route == null) {
+          continue;
+        }
+        final peer = peersById[_peerIdFromMap(route)];
+        final runtimePeer = _peerFromRoute(route, peer, myPeerId: myPeerId);
+        if (runtimePeer.isNotEmpty) {
+          peers.add(runtimePeer);
+        }
+      }
+    }
+
+    for (final key in peerRoutePairKeys) {
+      for (final item in AndroidCoreRuntime._readList(json[key])) {
+        final pair = AndroidCoreRuntime._readMap(item);
+        final route = _routeFromValue(pair?['route'] ?? pair?['route_info']);
+        if (route == null) {
+          continue;
+        }
+        final peer =
+            AndroidCoreRuntime._readMap(pair?['peer']) ??
+            peersById[_peerIdFromMap(route)];
+        final runtimePeer = _peerFromRoute(route, peer, myPeerId: myPeerId);
+        if (runtimePeer.isNotEmpty) {
+          peers.add(runtimePeer);
         }
       }
     }
     return peers;
+  }
+
+  static Map<String, dynamic> _localPeerFromMyNodeInfo(
+    Map<String, Object?> myNodeInfo,
+  ) {
+    final cidr = AndroidCoreRuntime._cidrFromValue(
+      myNodeInfo['virtual_ipv4'] ?? myNodeInfo['virtualIpv4'],
+    );
+    if (cidr.isEmpty) {
+      return const <String, dynamic>{};
+    }
+    return <String, dynamic>{
+      'cidr': cidr,
+      'ipv4': cidr,
+      'hostname': _firstScalarString([
+        myNodeInfo['hostname'],
+        myNodeInfo['hostName'],
+        myNodeInfo['name'],
+      ]),
+      'cost': 'Local',
+      'lat_ms': '-',
+      'loss_rate': '-',
+      'rx_bytes': '-',
+      'tx_bytes': '-',
+      'tunnel_proto': '-',
+      'nat_type': _natTypeText(
+        AndroidCoreRuntime._readMap(myNodeInfo['stun_info']) ??
+            AndroidCoreRuntime._readMap(myNodeInfo['stunInfo']),
+      ),
+      'peer_id': _peerIdFromMap(myNodeInfo),
+      'id': _peerIdFromMap(myNodeInfo),
+      'version': _firstScalarString([myNodeInfo['version']]),
+    };
+  }
+
+  static Map<String, dynamic> _peerFromPeerInfo(Map<String, Object?> peer) {
+    final conn = _selectedPeerConn(peer);
+    final stats = _peerConnStats(conn);
+    final tunnel = _peerConnTunnel(conn);
+    return <String, dynamic>{
+      'peer_id': _peerIdFromMap(peer),
+      'id': _peerIdFromMap(peer),
+      'lat_ms': _latencyText(stats, conn),
+      'loss_rate': _firstScalarString([
+        conn?['loss_rate'],
+        conn?['lossRate'],
+        stats?['loss_rate'],
+        stats?['lossRate'],
+      ]),
+      'rx_bytes': _firstScalarString([stats?['rx_bytes'], stats?['rxBytes']]),
+      'tx_bytes': _firstScalarString([stats?['tx_bytes'], stats?['txBytes']]),
+      'tunnel_proto': _firstScalarString([
+        tunnel?['tunnel_type'],
+        tunnel?['tunnelType'],
+        conn?['tunnel_proto'],
+        conn?['tunnelProto'],
+      ]),
+    }..removeWhere((_, value) => _readString(value).isEmpty);
+  }
+
+  static Map<String, dynamic> _peerFromRoute(
+    Map<String, Object?> route,
+    Map<String, Object?>? peer, {
+    required String myPeerId,
+  }) {
+    final peerId = _peerIdFromMap(route);
+    final hasPeerAddressShape =
+        route.containsKey('ipv4_addr') ||
+        route.containsKey('ipv4Addr') ||
+        route.containsKey('ipv6_addr') ||
+        route.containsKey('ipv6Addr');
+    if (peerId.isEmpty && !hasPeerAddressShape) {
+      return const <String, dynamic>{};
+    }
+
+    final cidr = AndroidCoreRuntime._cidrFromValue(
+      route['ipv4_addr'] ??
+          route['ipv4Addr'] ??
+          route['ipv4'] ??
+          route['address'],
+    );
+    if (cidr.isEmpty) {
+      return const <String, dynamic>{};
+    }
+
+    final peerInfo = peer == null
+        ? const <String, dynamic>{}
+        : _peerFromPeerInfo(peer);
+    final local = peerId.isNotEmpty && peerId == myPeerId;
+    final routeLatency = _firstScalarString([
+      route['path_latency_latency_first'],
+      route['pathLatencyLatencyFirst'],
+      route['path_latency'],
+      route['pathLatency'],
+    ]);
+
+    return <String, dynamic>{
+      ...peerInfo,
+      'cidr': cidr,
+      'ipv4': cidr,
+      'hostname': _firstScalarString([
+        route['hostname'],
+        route['hostName'],
+        peer?['hostname'],
+        peer?['name'],
+      ]),
+      'cost': local ? 'Local' : _costText(route),
+      if (_readString(peerInfo['lat_ms']).isEmpty) 'lat_ms': routeLatency,
+      'nat_type': _natTypeText(
+        AndroidCoreRuntime._readMap(route['stun_info']) ??
+            AndroidCoreRuntime._readMap(route['stunInfo']),
+      ),
+      'peer_id': peerId,
+      'id': peerId,
+      'version': _firstScalarString([route['version'], peer?['version']]),
+    }..removeWhere((_, value) => _readString(value).isEmpty);
+  }
+
+  static Map<String, Object?>? _routeFromValue(Object? value) {
+    final map = AndroidCoreRuntime._readMap(value);
+    if (map == null) {
+      return null;
+    }
+    final nested = AndroidCoreRuntime._readMap(
+      map['route'] ?? map['route_info'] ?? map['routeInfo'],
+    );
+    return nested ?? map;
+  }
+
+  static Map<String, Object?>? _selectedPeerConn(Map<String, Object?> peer) {
+    const keys = <String>['conns', 'connections', 'conn_infos', 'connInfos'];
+    for (final key in keys) {
+      final conns = AndroidCoreRuntime._readList(peer[key]);
+      for (final item in conns) {
+        final conn = AndroidCoreRuntime._readMap(item);
+        if (conn == null) {
+          continue;
+        }
+        if (_readBool(conn['is_closed'] ?? conn['isClosed']) != true) {
+          return conn;
+        }
+      }
+      for (final item in conns) {
+        final conn = AndroidCoreRuntime._readMap(item);
+        if (conn != null) {
+          return conn;
+        }
+      }
+    }
+    return null;
+  }
+
+  static Map<String, Object?>? _peerConnStats(Map<String, Object?>? conn) {
+    if (conn == null) {
+      return null;
+    }
+    return AndroidCoreRuntime._readMap(conn['stats']) ?? conn;
+  }
+
+  static Map<String, Object?>? _peerConnTunnel(Map<String, Object?>? conn) {
+    if (conn == null) {
+      return null;
+    }
+    return AndroidCoreRuntime._readMap(conn['tunnel']) ??
+        AndroidCoreRuntime._readMap(conn['tunnel_info']) ??
+        AndroidCoreRuntime._readMap(conn['tunnelInfo']);
+  }
+
+  static String _peerIdFromMap(Map<String, Object?>? map) {
+    if (map == null) {
+      return '';
+    }
+    return _firstScalarString([map['peer_id'], map['peerId'], map['id']]) ?? '';
+  }
+
+  static String? _firstScalarString(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = AndroidCoreRuntime._readScalarString(value);
+      if (text != null && text.isNotEmpty) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  static String _latencyText(
+    Map<String, Object?>? stats,
+    Map<String, Object?>? conn,
+  ) {
+    final latencyUs = AndroidCoreRuntime._readIntValue(
+      stats?['latency_us'] ?? stats?['latencyUs'] ?? conn?['latency_us'],
+    );
+    if (latencyUs != null && latencyUs > 0) {
+      return _trimTrailingZeros((latencyUs / 1000).toStringAsFixed(3));
+    }
+    return _firstScalarString([
+          stats?['lat_ms'],
+          stats?['latMs'],
+          stats?['latency_ms'],
+          stats?['latencyMs'],
+          conn?['lat_ms'],
+          conn?['latency_ms'],
+        ]) ??
+        '';
+  }
+
+  static String _costText(Map<String, Object?> route) {
+    final latencyFirst = _firstScalarString([
+      route['cost_latency_first'],
+      route['costLatencyFirst'],
+    ]);
+    if (latencyFirst != null) {
+      return latencyFirst;
+    }
+    return _firstScalarString([route['cost']]) ?? '';
+  }
+
+  static String _natTypeText(Map<String, Object?>? stunInfo) {
+    if (stunInfo == null) {
+      return '';
+    }
+    return _natTypeValueText(
+      stunInfo['udp_nat_type'] ??
+          stunInfo['udpNatType'] ??
+          stunInfo['nat_type'],
+    );
+  }
+
+  static String _natTypeValueText(Object? value) {
+    final text = AndroidCoreRuntime._readScalarString(value);
+    if (text == null || text.isEmpty) {
+      return '';
+    }
+    final index = int.tryParse(text);
+    if (index == null) {
+      return text;
+    }
+    const names = <String>[
+      'Unknown',
+      'OpenInternet',
+      'NoPAT',
+      'FullCone',
+      'Restricted',
+      'PortRestricted',
+      'Symmetric',
+      'SymUdpFirewall',
+      'SymmetricEasyInc',
+      'SymmetricEasyDec',
+    ];
+    return index >= 0 && index < names.length ? names[index] : text;
+  }
+
+  static String _trimTrailingZeros(String value) {
+    return value
+        .replaceFirst(RegExp(r'\.?0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 }
 
