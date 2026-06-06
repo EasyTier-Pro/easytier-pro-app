@@ -522,13 +522,15 @@ class _NetworkTrafficSparkline extends StatefulWidget {
 }
 
 class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   OverlayEntry? _detailOverlay;
   OverlayEntry? _fullscreenOverlay;
   Rect? _anchorRect;
   bool _overlayUpdateScheduled = false;
   late final AnimationController _overlayAnimationController;
   late final Animation<double> _overlayAnimation;
+  late final AnimationController _fullscreenAnimationController;
+  late final Animation<double> _fullscreenAnimation;
 
   @override
   void initState() {
@@ -540,6 +542,16 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     );
     _overlayAnimation = CurvedAnimation(
       parent: _overlayAnimationController,
+      curve: appMotionCurve,
+      reverseCurve: appMotionReverseCurve,
+    );
+    _fullscreenAnimationController = AnimationController(
+      vsync: this,
+      duration: appMotionShort,
+      reverseDuration: appMotionShort,
+    );
+    _fullscreenAnimation = CurvedAnimation(
+      parent: _fullscreenAnimationController,
       curve: appMotionCurve,
       reverseCurve: appMotionReverseCurve,
     );
@@ -558,6 +570,7 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     _removeDetailsImmediately();
     _removeFullscreenImmediately();
     _overlayAnimationController.dispose();
+    _fullscreenAnimationController.dispose();
     super.dispose();
   }
 
@@ -634,21 +647,41 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     final overlay = _fullscreenOverlay;
     if (overlay != null) {
       overlay.markNeedsBuild();
+      _fullscreenAnimationController.forward();
       return;
     }
 
     _fullscreenOverlay = OverlayEntry(
       builder: (context) => _NetworkTrafficFullscreenOverlay(
         history: widget.history,
-        onClose: _removeFullscreenImmediately,
+        animation: _fullscreenAnimation,
+        onClose: _hideFullscreen,
       ),
     );
     Overlay.of(context).insert(_fullscreenOverlay!);
+    _fullscreenAnimationController.forward(from: 0);
+  }
+
+  void _hideFullscreen() {
+    final overlay = _fullscreenOverlay;
+    if (overlay == null) {
+      return;
+    }
+
+    _fullscreenAnimationController.reverse().whenComplete(() {
+      if (_fullscreenOverlay != overlay) {
+        return;
+      }
+
+      overlay.remove();
+      _fullscreenOverlay = null;
+    });
   }
 
   void _removeFullscreenImmediately() {
     _fullscreenOverlay?.remove();
     _fullscreenOverlay = null;
+    _fullscreenAnimationController.reset();
   }
 
   void _scheduleDetailOverlayUpdate() {
@@ -683,10 +716,12 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
 class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
   const _NetworkTrafficFullscreenOverlay({
     required this.history,
+    required this.animation,
     required this.onClose,
   });
 
   final List<_TrafficHistoryPoint> history;
+  final Animation<double> animation;
   final VoidCallback onClose;
 
   static const double _screenPadding = 24;
@@ -703,66 +738,78 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
     return Positioned.fill(
       child: Material(
         color: Colors.transparent,
-        child: GestureDetector(
-          key: const ValueKey<String>('traffic-fullscreen-overlay'),
-          behavior: HitTestBehavior.opaque,
-          onTap: onClose,
-          child: Container(
-            color: const Color(0xFF020617).withAlpha(170),
-            padding: const EdgeInsets.all(_screenPadding),
-            child: Center(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {},
-                child: SizedBox(
-                  width: panelWidth,
-                  height: panelHeight,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF020617).withAlpha(60),
-                          blurRadius: 34,
-                          offset: const Offset(0, 18),
+        child: FadeTransition(
+          key: const ValueKey<String>('traffic-fullscreen-animation'),
+          opacity: animation,
+          child: GestureDetector(
+            key: const ValueKey<String>('traffic-fullscreen-overlay'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onClose,
+            child: Container(
+              color: const Color(0xFF020617).withAlpha(170),
+              padding: const EdgeInsets.all(_screenPadding),
+              child: Center(
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.98, end: 1).animate(animation),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    child: SizedBox(
+                      width: panelWidth,
+                      height: panelHeight,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF020617).withAlpha(60),
+                              blurRadius: 34,
+                              offset: const Offset(0, 18),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(22),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        child: Padding(
+                          padding: const EdgeInsets.all(22),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '实时流量详情',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0F172A),
+                              Row(
+                                children: [
+                                  Text(
+                                    '实时流量',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                  ),
+                                  const Spacer(),
+                                  FButton(
+                                    key: const ValueKey<String>(
+                                      'traffic-fullscreen-close',
                                     ),
+                                    variant: .ghost,
+                                    size: .sm,
+                                    onPress: onClose,
+                                    mainAxisSize: MainAxisSize.min,
+                                    child: const Icon(Icons.close, size: 18),
+                                  ),
+                                ],
                               ),
-                              const Spacer(),
-                              FButton(
-                                key: const ValueKey<String>(
-                                  'traffic-fullscreen-close',
+                              const SizedBox(height: 14),
+                              Expanded(
+                                child: _NetworkTrafficDetailChart(
+                                  history: history,
+                                  showTitle: false,
                                 ),
-                                variant: .ghost,
-                                size: .sm,
-                                onPress: onClose,
-                                mainAxisSize: MainAxisSize.min,
-                                child: const Icon(Icons.close, size: 18),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 14),
-                          Expanded(
-                            child: _NetworkTrafficDetailChart(history: history),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -858,9 +905,13 @@ class _NetworkTrafficDetailOverlay extends StatelessWidget {
 }
 
 class _NetworkTrafficDetailChart extends StatelessWidget {
-  const _NetworkTrafficDetailChart({required this.history});
+  const _NetworkTrafficDetailChart({
+    required this.history,
+    this.showTitle = true,
+  });
 
   final List<_TrafficHistoryPoint> history;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -872,14 +923,16 @@ class _NetworkTrafficDetailChart extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '实时流量',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF0F172A),
+        if (showTitle) ...[
+          Text(
+            '实时流量',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         Wrap(
           spacing: 10,
           runSpacing: 4,

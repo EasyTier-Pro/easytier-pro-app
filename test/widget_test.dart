@@ -348,7 +348,12 @@ void main() {
       find.byKey(const ValueKey<String>('traffic-fullscreen-overlay')),
       findsOneWidget,
     );
-    expect(find.text('实时流量详情'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-animation')),
+      findsOneWidget,
+    );
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.text('实时流量详情'), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
       findsNothing,
@@ -366,6 +371,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('实时流量详情'), findsNothing);
+    expect(find.text('实时流量'), findsNothing);
     expect(find.byType(LineChart), findsOneWidget);
 
     await gesture.removePointer();
