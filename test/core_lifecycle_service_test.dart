@@ -298,6 +298,44 @@ void main() {
     });
 
     test(
+      'logs repeated Android config server starts as already started',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.configServerStarted,
+            data: {
+              'payload': {'hostname': 'android-phone', 'alreadyStarted': true},
+            },
+          ),
+        );
+
+        await _waitUntil(
+          () => AppLogger.instance.recentSnapshot.any(
+            (entry) =>
+                entry.message == 'Android config server client started' &&
+                entry.context['already_started'] == true,
+          ),
+        );
+        final entry = AppLogger.instance.recentSnapshot.lastWhere(
+          (entry) =>
+              entry.message == 'Android config server client started' &&
+              entry.context['already_started'] == true,
+        );
+
+        expect(entry.context['hostname'], 'android-phone');
+      },
+    );
+
+    test(
       'does not restore running status until Android VPN is established',
       () async {
         final authService = _LifecycleAuthService();

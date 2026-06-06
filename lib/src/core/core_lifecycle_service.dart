@@ -1021,7 +1021,11 @@ cd /d "$installerDir"
       _logger.info(
         'core.runtime',
         'Android config server client started',
-        context: {'hostname': payload['hostname'] ?? ''},
+        context: {
+          'hostname': payload['hostname'] ?? '',
+          'already_started':
+              payload['alreadyStarted'] ?? payload['already_started'] ?? false,
+        },
       );
     }
     if (event.type == CoreRuntimeEventTypes.configServerStopped) {

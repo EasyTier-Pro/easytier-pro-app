@@ -71,7 +71,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 
 - EasyTier Pro 会创建一个用户可见的 VPN 连接，用于接入已授权的零信任网络。
 - Android config server client 由原生前台 `VpnService` 启动并保持运行，Flutter 负责发起启动/停止命令和展示状态。
-- 原生 service 对相同 config server 启动命令保持幂等；若收到不同 URL/hostname/machineId/secureMode 配置，会先静默停止旧 client 再启动新 client，避免系统重投递命令时重复启动 JNI client。
+- 原生 service 对相同 config server 启动命令保持幂等；若收到相同配置，会重新发出带 `alreadyStarted=true` 的 `config_server_started` 事件，保证诊断日志能证明 client 仍在运行；若收到不同 URL/hostname/machineId/secureMode 配置，会先静默停止旧 client 再启动新 client，避免系统重投递命令时重复启动 JNI client。
 - 原生服务事件会在 Flutter `EventChannel` 暂未监听时短暂缓存，避免回前台或 engine 重建期间丢失 config server/VPN 状态事件。
 - Android Dart runtime 在本轮进程尚未确认 `VpnService.prepare()` 已授权前，不会仅凭 config server client 在线就报告 running；这会强制重新进入 VPN 授权/恢复路径，避免控制面在线但系统 VPN route 未恢复时出现假阳性。
 - Android runtime 主动停止时会清空 Dart 侧本轮 VPN 授权确认状态，避免退出登录、工作区失效或登录态失效后的 stop 过程中继续凭旧状态报告 running。

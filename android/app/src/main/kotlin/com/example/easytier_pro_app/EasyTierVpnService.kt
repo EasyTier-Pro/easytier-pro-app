@@ -114,6 +114,7 @@ class EasyTierVpnService : VpnService() {
             if (activeConfigServerConfig == config) {
                 startForeground(notificationId, notification("Connecting to EasyTier network"))
                 Log.i(logTag, "Config server client already started for host=$hostname")
+                emitConfigServerStarted(hostname, alreadyStarted = true)
                 return
             }
             stopConfigServerClient(stopServiceIfIdle = false, emitEvent = false)
@@ -133,9 +134,16 @@ class EasyTierVpnService : VpnService() {
         }
         configServerClientStarted = true
         activeConfigServerConfig = config
+        emitConfigServerStarted(hostname, alreadyStarted = false)
+    }
+
+    private fun emitConfigServerStarted(hostname: String, alreadyStarted: Boolean) {
         EasyTierFlutterBridge.emitFromService(
             "config_server_started",
-            mapOf("hostname" to hostname),
+            mapOf(
+                "hostname" to hostname,
+                "alreadyStarted" to alreadyStarted,
+            ),
         )
     }
 
