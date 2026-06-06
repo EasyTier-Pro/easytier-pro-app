@@ -1025,7 +1025,7 @@ void main() {
   testWidgets('create network dialog submits selected CIDR preset', (
     WidgetTester tester,
   ) async {
-    _useDesktopViewport(tester);
+    _useDesktopViewport(tester, size: const Size(900, 560));
 
     final authService = _FakeAuthService(
       networks: const <ConsoleNetwork>[
@@ -1049,10 +1049,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
     expect(
       find.descendant(
         of: find.byType(FDialog),
         matching: find.byType(SingleChildScrollView),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.byType(Scrollbar),
       ),
       findsNothing,
     );
