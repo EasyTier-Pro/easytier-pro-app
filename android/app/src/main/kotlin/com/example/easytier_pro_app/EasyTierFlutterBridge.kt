@@ -206,6 +206,17 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 EasyTierVpnService.extraDnsServers,
                 ArrayList(stringList(vpnConfig["dns"] ?: vpnConfig["dns_servers"])),
             )
+            putStringArrayListExtra(
+                EasyTierVpnService.extraDisallowedApplications,
+                ArrayList(
+                    stringList(
+                        vpnConfig["disallowedApplications"] ?:
+                            vpnConfig["disallowed_applications"] ?:
+                            vpnConfig["disallowedPackages"] ?:
+                            vpnConfig["disallowed_packages"],
+                    ),
+                ),
+            )
             (vpnConfig["mtu"] as? Number)?.toInt()?.let {
                 putExtra(EasyTierVpnService.extraMtu, it)
             }

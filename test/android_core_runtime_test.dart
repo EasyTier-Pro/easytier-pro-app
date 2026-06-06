@@ -141,6 +141,41 @@ void main() {
       ]);
     });
 
+    test('extracts peer virtual routes and subnet route aliases', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'address': '10.10.0.2/32',
+        'peer_route_pairs': [
+          {
+            'route': {
+              'ipv4_addr': {
+                'address': {'addr': 168427523},
+                'network_length': 32,
+              },
+              'subnet_cidrs': ['192.168.50.0/24'],
+            },
+          },
+        ],
+        'proxy_cidrs': ['172.20.0.0/16'],
+      });
+
+      expect(config['addresses'], ['10.10.0.2/32']);
+      expect(config['routes'], [
+        '10.10.0.2/32',
+        '10.10.0.3/32',
+        '192.168.50.0/24',
+        '172.20.0.0/16',
+      ]);
+    });
+
+    test('preserves configured Android VPN disallowed applications', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'address': '10.10.0.2/24',
+        'disallowed_applications': ['com.example.extra'],
+      });
+
+      expect(config['disallowedApplications'], ['com.example.extra']);
+    });
+
     test('parses upstream running info map for Android VPN config', () {
       final snapshot = AndroidNetworkInfoSnapshot.parse(
         jsonEncode({

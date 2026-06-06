@@ -732,6 +732,12 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'dns': normalizedStrings(
         config['dns'] ?? config['dns_servers'] ?? config['dnsServers'],
       ),
+      'disallowedApplications': normalizedStrings(
+        config['disallowedApplications'] ??
+            config['disallowed_applications'] ??
+            config['disallowedPackages'] ??
+            config['disallowed_packages'],
+      ),
       'mtu': _readString(config['mtu']),
     });
   }
@@ -780,10 +786,31 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       if (ipv4Inet.isNotEmpty) {
         return ipv4Inet;
       }
+      for (final key in const <String>[
+        'ipv4_addr',
+        'ipv4Addr',
+        'ipv4_address',
+        'ipv4Address',
+        'virtual_ip',
+        'virtualIp',
+        'virtual_ipv4',
+        'virtualIpv4',
+      ]) {
+        final nested = map[key];
+        if (nested == null) {
+          continue;
+        }
+        final nestedCidr = _cidrFromValue(nested);
+        if (nestedCidr.isNotEmpty) {
+          return nestedCidr;
+        }
+      }
       final cidr = _firstNonEmptyString([
         map['cidr'],
         map['ipv4_cidr'],
         map['ipv4Cidr'],
+        map['ip_cidr'],
+        map['ipCidr'],
         map['destination'],
         map['dest'],
         _readScalarString(map['address']),
@@ -893,23 +920,33 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
       final cidr = _cidrFromValue(map);
       if (cidr.isNotEmpty) {
-        cidrs.add(cidr);
+        cidrs.add(_routeCidr(cidr));
       }
-      cidrs.addAll(
-        _readCidrList(
-          map['proxy_cidrs'] ??
-              map['proxyCidrs'] ??
-              map['proxy_cidr'] ??
-              map['proxyCidr'],
-        ),
-      );
+      for (final key in const <String>[
+        'proxy_cidrs',
+        'proxyCidrs',
+        'proxy_cidr',
+        'proxyCidr',
+        'subnet_cidrs',
+        'subnetCidrs',
+        'subnet_routes',
+        'subnetRoutes',
+        'subnets',
+        'subnet',
+      ]) {
+        cidrs.addAll(_readCidrList(map[key]).map(_routeCidr));
+      }
       return;
     }
 
     final cidr = _cidrFromValue(value);
     if (cidr.isNotEmpty) {
-      cidrs.add(cidr);
+      cidrs.add(_routeCidr(cidr));
     }
+  }
+
+  static String _routeCidr(String cidr) {
+    return _networkRouteFromAddressCidr(cidr) ?? cidr;
   }
 
   static String? _networkRouteFromAddressCidr(String value) {
@@ -996,6 +1033,12 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       ..._readRouteCidrs(json['routeInfos']),
       ..._readRouteCidrs(json['peer_route_pairs']),
       ..._readRouteCidrs(json['peerRoutePairs']),
+      ..._readRouteCidrs(json['proxy_cidrs']),
+      ..._readRouteCidrs(json['proxyCidrs']),
+      ..._readRouteCidrs(json['subnet_cidrs']),
+      ..._readRouteCidrs(json['subnetCidrs']),
+      ..._readRouteCidrs(json['subnet_routes']),
+      ..._readRouteCidrs(json['subnetRoutes']),
     }..removeWhere((value) => value.isEmpty);
 
     final dns = <String>{
@@ -1004,11 +1047,23 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       ..._readStringList(json['dnsServers']),
     };
 
+    final disallowedApplications = <String>{
+      ..._readStringList(json['disallowedApplications']),
+      ..._readStringList(json['disallowed_applications']),
+      ..._readStringList(json['disallowedPackages']),
+      ..._readStringList(json['disallowed_packages']),
+    };
+
     final config = <String, Object?>{
       'addresses': addresses.toList(growable: false),
       'routes': routes.toList(growable: false),
       'dns': dns.toList(growable: false),
     };
+    if (disallowedApplications.isNotEmpty) {
+      config['disallowedApplications'] = disallowedApplications.toList(
+        growable: false,
+      );
+    }
     final mtu = json['mtu'];
     if (mtu is num) {
       config['mtu'] = mtu.toInt();

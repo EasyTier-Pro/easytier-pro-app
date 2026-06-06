@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -120,17 +121,27 @@ class EasyTierVpnService : VpnService() {
         stopVpn(stopService = false)
         val routes = intent.getStringArrayListExtra(extraRoutes) ?: arrayListOf()
         val dnsServers = intent.getStringArrayListExtra(extraDnsServers) ?: arrayListOf()
+        val disallowedApplications = disallowedApplications(
+            intent.getStringArrayListExtra(extraDisallowedApplications) ?: arrayListOf(),
+        )
         val mtu = intent.getIntExtra(extraMtu, 0)
         Log.i(
             logTag,
-            "Establishing VPN for instance=$instanceName addresses=$addresses routes=$routes dns=$dnsServers mtu=$mtu disallowed=$packageName",
+            "Establishing VPN for instance=$instanceName addresses=$addresses routes=$routes dns=$dnsServers mtu=$mtu disallowed=$disallowedApplications",
         )
 
         startForeground(notificationId, notification("Connected to $instanceName"))
 
         val builder = Builder()
             .setSession("EasyTier Pro")
-            .addDisallowedApplication(packageName)
+
+        for (application in disallowedApplications) {
+            try {
+                builder.addDisallowedApplication(application)
+            } catch (error: PackageManager.NameNotFoundException) {
+                Log.w(logTag, "Ignoring unknown disallowed application=$application", error)
+            }
+        }
 
         if (mtu > 0) {
             builder.setMtu(mtu)
@@ -170,9 +181,16 @@ class EasyTierVpnService : VpnService() {
                 "routes" to routes,
                 "dnsServers" to dnsServers,
                 "mtu" to mtu,
-                "disallowedApplications" to listOf(packageName),
+                "disallowedApplications" to disallowedApplications,
             ),
         )
+    }
+
+    private fun disallowedApplications(extraPackages: List<String>): List<String> {
+        return (listOf(packageName) + extraPackages)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
 
     private fun stopVpn(stopService: Boolean = true) {
@@ -297,6 +315,7 @@ class EasyTierVpnService : VpnService() {
         const val extraAddresses = "addresses"
         const val extraRoutes = "routes"
         const val extraDnsServers = "dnsServers"
+        const val extraDisallowedApplications = "disallowedApplications"
         const val extraMtu = "mtu"
 
         private const val logTag = "EasyTierVpnService"
