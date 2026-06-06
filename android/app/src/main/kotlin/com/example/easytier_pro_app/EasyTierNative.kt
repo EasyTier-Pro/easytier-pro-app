@@ -2,6 +2,7 @@ package com.example.easytier_pro_app
 
 import com.easytier.jni.ConfigServerEventCallback
 import java.lang.IllegalStateException
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -105,7 +106,11 @@ object EasyTierNative {
 
     private fun invoke(method: Method, vararg args: Any?): Any? {
         val receiver = if (Modifier.isStatic(method.modifiers)) null else receiver()
-        return method.invoke(receiver, *args)
+        try {
+            return method.invoke(receiver, *args)
+        } catch (error: InvocationTargetException) {
+            throw error.targetException
+        }
     }
 
     private fun findMethod(name: String, parameterCount: Int): Method {

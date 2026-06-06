@@ -5,12 +5,14 @@ object EasyTierAndroidErrorClassifier {
     const val androidRuntimeError = "ANDROID_RUNTIME_ERROR"
 
     fun code(error: Throwable): String {
-        val message = error.message.orEmpty()
-        return if (isJniUnavailable(message)) {
-            jniUnavailable
-        } else {
-            androidRuntimeError
+        var current: Throwable? = error
+        while (current != null) {
+            if (isJniUnavailable(current.message.orEmpty())) {
+                return jniUnavailable
+            }
+            current = current.cause
         }
+        return androidRuntimeError
     }
 
     private fun isJniUnavailable(message: String): Boolean {

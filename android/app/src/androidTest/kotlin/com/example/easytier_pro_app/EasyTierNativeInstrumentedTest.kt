@@ -2,10 +2,12 @@ package com.example.easytier_pro_app
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.lang.reflect.InvocationTargetException
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.json.JSONObject
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,5 +56,36 @@ class EasyTierNativeInstrumentedTest {
     @Test
     fun stopAllInstancesIsAvailable() {
         EasyTierNative.stopAllInstances()
+    }
+
+    @Test
+    fun unwrapsReflectedNativeExceptions() {
+        val invoke = EasyTierNative::class.java.getDeclaredMethod(
+            "invoke",
+            java.lang.reflect.Method::class.java,
+            Array<Any?>::class.java,
+        )
+        invoke.isAccessible = true
+        val throwingMethod = ThrowingNativeMethods::class.java.getDeclaredMethod(
+            "throwNativeError",
+        )
+
+        try {
+            invoke.invoke(EasyTierNative, throwingMethod, emptyArray<Any?>())
+            fail("Expected native exception")
+        } catch (error: InvocationTargetException) {
+            assertTrue(error.targetException is IllegalStateException)
+            assertEquals(
+                "EasyTier JNI setTunFd failed: native status -7",
+                error.targetException.message,
+            )
+        }
+    }
+
+    private object ThrowingNativeMethods {
+        @JvmStatic
+        fun throwNativeError() {
+            throw IllegalStateException("EasyTier JNI setTunFd failed: native status -7")
+        }
     }
 }
