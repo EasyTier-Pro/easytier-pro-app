@@ -80,6 +80,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
 - Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
 - Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS 和已归一化的 disallowed applications 上报错误，并只清理本次 VPN 启动状态；即使配置解析失败，失败 payload 也会补上 EasyTier Pro 自身包名，便于排查路由回环防护是否生效。如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
+- Dart 侧收到 Android runtime error 时会写入 `Android runtime error` 诊断日志，保留 action、instance、addresses、routes、DNS、disallowed applications 和 `self_disallowed`，便于在 `Android VPN established` 缺失时反查失败前的 VPN 配置。
 - Android VPN 后续收到原生 `vpn_started` 后，Dart 运行态会把此前的 VPN 运行时错误恢复为 running，避免诊断错误在已恢复连接后继续占据首页状态；Dart 侧 `vpn_config_refreshed` 只表示已请求原生服务刷新配置，不作为 TUN 注入成功证据。
 - Android 通知权限或 VPN 授权请求已在系统弹窗中等待时，重复启动不会进入运行时错误；通知权限 pending 会继续后续流程，VPN 授权 pending 会继续展示 `needsVpnPermission` 等待用户处理。
 - 用户拒绝系统 VPN 授权时，Dart 运行态会继续展示 `needsVpnPermission`，并在诊断状态中记录授权被拒绝，避免被误判为 config server 或 JNI 运行时错误。
@@ -103,6 +104,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 如果手机已加入网络但无法访问虚拟网或子网，优先按以下顺序判断：
 
 - 先看应用内“设置 -> 诊断日志”的 `Android VPN established`。该日志只会在 `VpnService.Builder.establish()` 成功且 `EasyTierJNI.setTunFd(instanceName, fd)` 返回后出现，`tun_fd` 应为非空；`addresses` 应包含本机 `my_node_info.virtual_ipv4`，`routes` 应至少包含虚拟网 CIDR，并包含控制台授权的子网 CIDR；如果控制台配置了映射子网，日志里应出现 mapped CIDR，而不是 `real_cidr->mapped_cidr` 原始字符串。`disallowed_applications` 应包含 `net.easytier.pro`，`self_disallowed` 应为 `true`。`Android VPN config refresh requested` 只能说明 Dart 已解析到新路由并请求原生服务刷新，不能单独证明系统 VPN interface 和 TUN fd 已经建立成功。
+- 如果没有 `Android VPN established`，先看同一时间附近的 `Android runtime error`，其中的 `action`、addresses、routes 和 `disallowed_applications` 可以判断是 VPN 配置缺失、route 解析失败、TUN 建立失败，还是 JNI `setTunFd` 失败。
 - 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题在 Dart 对 `collectNetworkInfos` / config server 下发结果的解析或路由刷新链路。
 - 如果日志 routes 正确但未被排除的浏览器、Termux 或 ping 工具仍无法访问虚拟 IP/子网，问题更可能在系统 VPN interface、TUN fd 注入或 EasyTier data-plane 转发链路。
 - 不要用 EasyTier Pro 自己访问虚拟网作为连通性判断，因为应用自身会被 `addDisallowedApplication(packageName)` 排除在 VPN 外，用来避免控制面和 EasyTier 底层传输路由回环。

@@ -1086,7 +1086,34 @@ cd /d "$installerDir"
       return;
     }
     if (event.type == CoreRuntimeEventTypes.error) {
-      final message = event.data['error']?.toString().trim() ?? '';
+      final payload = _runtimeEventPayload(event);
+      final message = payload['error']?.toString().trim() ?? '';
+      _logger.error(
+        'core.runtime',
+        'Android runtime error',
+        context: {
+          'error': message,
+          'action': payload['action'] ?? '',
+          'instance_name':
+              payload['instanceName'] ?? payload['instance_name'] ?? '',
+          'addresses': payload['addresses'] ?? const <String>[],
+          'address_count':
+              payload['addressCount'] ??
+              _payloadListLength(payload['addresses']),
+          'routes': payload['routes'] ?? const <String>[],
+          'route_count':
+              payload['routeCount'] ?? _payloadListLength(payload['routes']),
+          'dns': payload['dns'] ?? payload['dnsServers'] ?? const <String>[],
+          'disallowed_applications':
+              payload['disallowedApplications'] ??
+              payload['disallowed_applications'] ??
+              const <String>[],
+          'package_name':
+              payload['packageName'] ?? payload['package_name'] ?? '',
+          'self_disallowed':
+              payload['selfDisallowed'] ?? payload['self_disallowed'] ?? '',
+        },
+      );
       if (message.isNotEmpty) {
         status.value = CoreRunStatus(
           phase: CoreRunPhase.error,

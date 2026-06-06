@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
+import 'package:easytier_pro_app/src/logging/app_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -246,6 +247,55 @@ void main() {
         expect(service.status.value.details, 'EasyTier 2.6.4');
       },
     );
+
+    test('logs Android runtime errors with VPN diagnostic payload', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      runtime.emit(
+        const CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.error,
+          data: {
+            'payload': {
+              'error': 'Android VPN 缺少虚拟 IP 配置',
+              'action': 'net.easytier.pro.action.START_VPN',
+              'instanceName': 'network-a',
+              'routes': ['10.10.0.0/24', '192.168.50.0/24'],
+              'disallowedApplications': ['net.easytier.pro'],
+              'selfDisallowed': true,
+            },
+          },
+        ),
+      );
+
+      await _waitUntil(
+        () => AppLogger.instance.recentSnapshot.any(
+          (entry) =>
+              entry.message == 'Android runtime error' &&
+              entry.context['error'] == 'Android VPN 缺少虚拟 IP 配置',
+        ),
+      );
+      final entry = AppLogger.instance.recentSnapshot.lastWhere(
+        (entry) =>
+            entry.message == 'Android runtime error' &&
+            entry.context['error'] == 'Android VPN 缺少虚拟 IP 配置',
+      );
+
+      expect(entry.scope, 'core.runtime');
+      expect(entry.context['action'], 'net.easytier.pro.action.START_VPN');
+      expect(entry.context['instance_name'], 'network-a');
+      expect(entry.context['routes'], ['10.10.0.0/24', '192.168.50.0/24']);
+      expect(entry.context['route_count'], 2);
+      expect(entry.context['disallowed_applications'], ['net.easytier.pro']);
+      expect(entry.context['self_disallowed'], isTrue);
+      expect(service.status.value.phase, CoreRunPhase.error);
+    });
 
     test(
       'does not restore running status until Android VPN is established',
