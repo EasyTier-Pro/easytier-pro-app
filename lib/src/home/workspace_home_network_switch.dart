@@ -572,8 +572,7 @@ class _NetworkTrafficSparkline extends StatelessWidget {
                 ),
             ],
           ),
-          duration: appMotionMedium,
-          curve: appMotionCurve,
+          duration: Duration.zero,
         ),
       ),
     );
