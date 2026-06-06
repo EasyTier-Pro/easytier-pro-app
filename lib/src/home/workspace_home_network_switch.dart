@@ -976,6 +976,9 @@ Widget _trafficYAxisTitle({
     space: 6,
     child: Text(
       _formatTrafficRate(maxY),
+      maxLines: 1,
+      overflow: TextOverflow.visible,
+      softWrap: false,
       style: const TextStyle(
         color: Color(0xFF64748B),
         fontSize: 10,
@@ -1009,6 +1012,9 @@ Widget _trafficXAxisTitle({
       _formatTrafficTime(
         isMin ? visibleHistory.first.timestamp : visibleHistory.last.timestamp,
       ),
+      maxLines: 1,
+      overflow: TextOverflow.visible,
+      softWrap: false,
       style: const TextStyle(
         color: Color(0xFF64748B),
         fontSize: 10,

@@ -320,6 +320,7 @@ void main() {
     expect(find.text('采样点'), findsNothing);
     expect(find.text('0 B/s'), findsNothing);
     expect(find.text('10.0 KiB/s'), findsOneWidget);
+    _expectTextSingleLine(tester, find.text('10.0 KiB/s'));
     expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartYScalesFixed(tester);
@@ -1907,6 +1908,13 @@ Finder _trafficTimeLabels() {
   return find.byWidgetPredicate(
     (widget) => widget is Text && timePattern.hasMatch(widget.data ?? ''),
   );
+}
+
+void _expectTextSingleLine(WidgetTester tester, Finder finder) {
+  final text = tester.widget<Text>(finder);
+  expect(text.maxLines, 1);
+  expect(text.softWrap, isFalse);
+  expect(text.overflow, TextOverflow.visible);
 }
 
 bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
