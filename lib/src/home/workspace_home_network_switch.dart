@@ -1011,6 +1011,7 @@ Widget _trafficXAxisTitle({
   return SideTitleWidget(
     meta: meta,
     space: 6,
+    fitInside: SideTitleFitInsideData.fromTitleMeta(meta, distanceFromEdge: 4),
     child: Text(
       _formatTrafficTime(
         isMin ? visibleHistory.first.timestamp : visibleHistory.last.timestamp,

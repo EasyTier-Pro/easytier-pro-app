@@ -322,6 +322,7 @@ void main() {
     expect(find.text('10.0 KiB/s'), findsOneWidget);
     _expectTextSingleLine(tester, find.text('10.0 KiB/s'));
     expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
+    _expectTrafficTimeLabelsFitInside(tester);
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartYScalesFixed(tester);
     _expectTrafficChartsStatic(tester);
@@ -1915,6 +1916,22 @@ void _expectTextSingleLine(WidgetTester tester, Finder finder) {
   expect(text.maxLines, 1);
   expect(text.softWrap, isFalse);
   expect(text.overflow, TextOverflow.visible);
+}
+
+void _expectTrafficTimeLabelsFitInside(WidgetTester tester) {
+  final timePattern = RegExp(r'^\d{2}:\d{2}:\d{2}$');
+  final timeTitleWidgets = tester
+      .widgetList<SideTitleWidget>(find.byType(SideTitleWidget))
+      .where((widget) {
+        final child = widget.child;
+        return child is Text && timePattern.hasMatch(child.data ?? '');
+      })
+      .toList(growable: false);
+
+  expect(timeTitleWidgets, isNotEmpty);
+  for (final widget in timeTitleWidgets) {
+    expect(widget.fitInside.enabled, isTrue);
+  }
 }
 
 bool _hasSelectionAreaAncestor(WidgetTester tester, Finder finder) {
