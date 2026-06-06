@@ -264,6 +264,7 @@ void main() {
     late List<MethodCall> calls;
     late Map<String, Object?> networkInfos;
     var vpnPrepared = true;
+    Object? notificationResult = true;
 
     setUp(() {
       TestWidgetsFlutterBinding.ensureInitialized();
@@ -271,6 +272,7 @@ void main() {
       methodChannel = const MethodChannel('test.easytier/core_runtime');
       calls = <MethodCall>[];
       vpnPrepared = true;
+      notificationResult = true;
       networkInfos = {
         'instances': [
           {
@@ -301,7 +303,11 @@ void main() {
               case 'stopConfigServerClient':
                 return null;
               case 'prepareNotifications':
-                return true;
+                final result = notificationResult;
+                if (result is Exception) {
+                  throw result;
+                }
+                return result;
               case 'prepareVpn':
                 return vpnPrepared;
               case 'collectNetworkInfos':
@@ -362,6 +368,44 @@ void main() {
           'dns': ['10.10.0.1'],
         },
       });
+    });
+
+    test('continues when notification permission is denied', () async {
+      notificationResult = false;
+
+      final result = await runtime.ensureRunning(
+        _androidBootstrap(),
+        forceReinstall: false,
+      );
+
+      expect(result.phase, CoreRunPhase.running);
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder([
+          'prepareNotifications',
+          'startConfigServerClient',
+          'prepareVpn',
+        ]),
+      );
+    });
+
+    test('continues when notification permission plugin is missing', () async {
+      notificationResult = MissingPluginException('prepareNotifications');
+
+      final result = await runtime.ensureRunning(
+        _androidBootstrap(),
+        forceReinstall: false,
+      );
+
+      expect(result.phase, CoreRunPhase.running);
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder([
+          'prepareNotifications',
+          'startConfigServerClient',
+          'prepareVpn',
+        ]),
+      );
     });
 
     test('uses low-frequency Android runtime polling intervals', () {
