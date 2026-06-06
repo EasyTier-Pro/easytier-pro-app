@@ -92,6 +92,12 @@ class EasyTierVpnService : VpnService() {
         super.onDestroy()
     }
 
+    override fun onRevoke() {
+        Log.i(logTag, "VPN revoked by system")
+        stopRuntime(vpnStopReason = "revoked")
+        super.onRevoke()
+    }
+
     private fun startConfigServerClient(intent: Intent) {
         val url = intent.getStringExtra(extraConfigServerUrl)?.trim().orEmpty()
         val hostname = intent.getStringExtra(extraHostname)?.trim().orEmpty()
@@ -155,10 +161,10 @@ class EasyTierVpnService : VpnService() {
         }
     }
 
-    private fun stopRuntime() {
+    private fun stopRuntime(vpnStopReason: String? = null) {
         stopConfigServerClient(stopServiceIfIdle = false)
         stopNetworkInstances()
-        stopVpn()
+        stopVpn(reason = vpnStopReason)
     }
 
     private fun stopNetworkInstances() {

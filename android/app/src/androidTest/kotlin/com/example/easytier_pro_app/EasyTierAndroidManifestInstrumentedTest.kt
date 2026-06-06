@@ -90,6 +90,13 @@ class EasyTierAndroidManifestInstrumentedTest {
     }
 
     @Test
+    fun vpnServiceOverridesSystemRevokeCleanupHook() {
+        val method = EasyTierVpnService::class.java.getDeclaredMethod("onRevoke")
+
+        assertEquals(EasyTierVpnService::class.java, method.declaringClass)
+    }
+
+    @Test
     fun vpnPermissionFlowCanBePrepared() {
         val consentIntent = VpnService.prepare(context)
         if (consentIntent != null) {

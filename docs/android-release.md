@@ -62,7 +62,7 @@ cd android
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
+当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
 
 ## VPN 权限与后台运行说明
 
@@ -83,7 +83,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 已登录且运行中的 Android runtime 收到 `config_server_stopped` 事件时会自动重新连接；退出登录和工作区重建期间不会被该事件反向拉起。
 - workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
-- 退出登录、工作区失效、登录态失效、常驻通知 Disconnect 或 Android 销毁原生 service 时，会停止 config server client，调用 `retainNetworkInstance(null)` 清理 EasyTier core 网络实例，再停止 Android VPN interface。
+- 退出登录、工作区失效、登录态失效、常驻通知 Disconnect、系统 VPN 设置撤销连接或 Android 销毁原生 service 时，会停止 config server client，调用 `retainNetworkInstance(null)` 清理 EasyTier core 网络实例，再停止 Android VPN interface；系统撤销路径会在 `vpn_stopped` 事件中带 `reason=revoked`。
 - VPN 会通过 `addDisallowedApplication(packageName)` 排除 EasyTier Pro 自身，避免控制面连接和 EasyTier 底层传输被自己的 VPN 路由回环；因此连通性验证应使用浏览器、Termux、ping 工具等未排除的应用发起，不应用 EasyTier Pro 自己访问虚拟网作为判断依据。
 - VPN 连接会显示常驻通知；用户可以点击通知返回应用，也可以通过通知动作、系统 VPN 设置或应用内退出/断开操作停止连接。
 - 应用不会在客户端硬编码只适用于生产环境的控制面地址；控制台和本地 E2E 环境应继续通过上层配置或控制台接口提供。

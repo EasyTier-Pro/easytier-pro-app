@@ -987,6 +987,7 @@ cd /d "$installerDir"
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
           'fd': payload['fd'] ?? '',
+          'reason': payload['reason'] ?? '',
         },
       );
     }
