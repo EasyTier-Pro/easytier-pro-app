@@ -211,6 +211,43 @@ void main() {
     });
 
     test(
+      'reports Android VPN permission denial as an authorization state',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        service.status.value = const CoreRunStatus(
+          phase: CoreRunPhase.needsVpnPermission,
+          message: '需要授权 VPN 连接',
+          machineId: 'machine-1',
+          details: 'EasyTier 2.6.4',
+        );
+
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnPermissionDenied,
+            data: {
+              'payload': {'granted': false},
+            },
+          ),
+        );
+        await _waitUntil(
+          () => service.status.value.lastError?.contains('拒绝') == true,
+        );
+
+        expect(service.status.value.phase, CoreRunPhase.needsVpnPermission);
+        expect(service.status.value.machineId, 'machine-1');
+        expect(service.status.value.details, 'EasyTier 2.6.4');
+      },
+    );
+
+    test(
       'does not restore running status until Android VPN is established',
       () async {
         final authService = _LifecycleAuthService();

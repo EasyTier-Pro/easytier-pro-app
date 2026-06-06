@@ -1028,6 +1028,18 @@ cd /d "$installerDir"
       );
       return;
     }
+    if (event.type == CoreRuntimeEventTypes.vpnPermissionDenied &&
+        _session != null) {
+      final current = status.value;
+      status.value = CoreRunStatus(
+        phase: CoreRunPhase.needsVpnPermission,
+        message: '需要授权 VPN 连接',
+        lastError: '用户已拒绝 Android VPN 授权，请重新授权后继续。',
+        machineId: current.machineId,
+        details: current.details,
+      );
+      return;
+    }
     if (event.type == CoreRuntimeEventTypes.configServerStopped) {
       final payload = _runtimeEventPayload(event);
       final stopReason = payload['reason']?.toString().trim() ?? '';
