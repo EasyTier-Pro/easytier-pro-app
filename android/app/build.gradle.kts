@@ -16,6 +16,7 @@ if (releaseKeystorePropertiesFile.exists()) {
 val releaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
     taskName.contains("Release", ignoreCase = true)
 }
+val releaseAbiFilters = listOf("arm64-v8a", "x86_64")
 if (releaseBuildRequested) {
     val missingReleaseKeys = listOf(
         "storeFile",
@@ -51,7 +52,16 @@ android {
         versionName = flutter.versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += releaseAbiFilters
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = releaseBuildRequested
+            reset()
+            include(*releaseAbiFilters.toTypedArray())
+            isUniversalApk = false
         }
     }
 

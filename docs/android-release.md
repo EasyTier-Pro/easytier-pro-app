@@ -25,11 +25,11 @@ keyPassword=<key-password>
 
 ```powershell
 flutter build apk --debug
-flutter build apk --release
+flutter build apk --release --split-per-abi
 flutter build appbundle --release
 ```
 
-`flutter build apk --release` 和 `flutter build appbundle --release` 必须在签名配置存在后执行。
+`flutter build apk --release --split-per-abi` 和 `flutter build appbundle --release` 必须在签名配置存在后执行。
 
 ## ABI 与 JNI
 
@@ -45,7 +45,7 @@ Android MVP 当前随包包含：
 flutter build apk --debug
 ```
 
-正式渠道包如需进一步降低包体积，可以使用 Flutter/Gradle 的 ABI split 或按渠道分别产出 ABI 包；不要把未包含 JNI 的 ABI 发布给用户。
+Release APK 构建会启用 ABI split，只产出 `arm64-v8a` 和 `x86_64` 包；debug 构建保持单包，方便 `flutter run` 和本地模拟器调试。不要把未包含 JNI 的 ABI 发布给用户。
 
 ## VPN 权限与后台运行说明
 
@@ -63,7 +63,8 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - `dart analyze`
 - `flutter test`
 - `flutter build apk --debug`
-- `flutter build apk --release`
+- `flutter build apk --release --split-per-abi`
+- `flutter build appbundle --release`
 - Android emulator 或真机登录控制台。
 - 完成 VPN 授权。
 - 控制台下发 `run_network_instance` 后，日志出现 `vpn_started` 或 native `Injected TUN fd`。
