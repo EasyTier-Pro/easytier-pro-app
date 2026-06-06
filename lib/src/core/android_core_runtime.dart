@@ -87,6 +87,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   Future<CoreRuntimeStartResult?> readStatus(
     CoreBootstrapConfig bootstrap,
   ) async {
+    if (!_vpnPrepared) {
+      return null;
+    }
     try {
       final machineId = await _getMachineId();
       final connected =

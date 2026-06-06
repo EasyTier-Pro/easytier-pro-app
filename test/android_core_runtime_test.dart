@@ -359,6 +359,7 @@ void main() {
     late List<MethodCall> calls;
     late Map<String, Object?> networkInfos;
     var vpnPrepared = true;
+    var configServerConnected = false;
     Object? notificationResult = true;
 
     setUp(() {
@@ -367,6 +368,7 @@ void main() {
       methodChannel = const MethodChannel('test.easytier/core_runtime');
       calls = <MethodCall>[];
       vpnPrepared = true;
+      configServerConnected = false;
       notificationResult = true;
       networkInfos = {
         'instances': [
@@ -391,6 +393,8 @@ void main() {
                 return 'android-machine';
               case 'getHostname':
                 return 'android-host';
+              case 'isConfigServerClientConnected':
+                return configServerConnected;
               case 'startConfigServerClient':
               case 'retainNetworkInstance':
               case 'stopNetworkInstances':
@@ -464,6 +468,31 @@ void main() {
           'dns': ['10.10.0.1'],
         },
       });
+    });
+
+    test('does not report running before VPN permission is prepared', () async {
+      configServerConnected = true;
+
+      final status = await runtime.readStatus(_androidBootstrap());
+
+      expect(status, isNull);
+      expect(
+        calls.where((call) => call.method == 'isConfigServerClientConnected'),
+        isEmpty,
+      );
+    });
+
+    test('reports running after VPN permission is prepared', () async {
+      configServerConnected = true;
+
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      final status = await runtime.readStatus(_androidBootstrap());
+
+      expect(status?.phase, CoreRunPhase.running);
+      expect(
+        calls.map((call) => call.method),
+        contains('isConfigServerClientConnected'),
+      );
     });
 
     test('continues when notification permission is denied', () async {
