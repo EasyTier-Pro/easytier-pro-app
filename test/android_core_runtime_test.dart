@@ -259,6 +259,58 @@ void main() {
       });
     });
 
+    test('reports failed config server events without starting VPN', () async {
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      final eventFuture = runtime.events.firstWhere(
+        (event) => event.type == CoreRuntimeEventTypes.error,
+      );
+
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_id': 'instance-a',
+          'success': false,
+          'error': 'config build failed',
+        },
+      });
+
+      final event = await eventFuture;
+      expect(event.data['error'], 'config build failed');
+      expect(event.data['event'], 'run_network_instance');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+    });
+
+    test(
+      'starts VPN again after native stopped event clears active state',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': 'instance-a',
+          },
+        });
+        await _waitForCall(calls, 'startVpn');
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnStopped,
+          'payload': {'instanceName': 'network-a'},
+        });
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': 'instance-a',
+          },
+        });
+
+        await _waitForCallCount(calls, 'startVpn', 2);
+      },
+    );
+
     test(
       'stops active VPN when config server deletes by instance id',
       () async {

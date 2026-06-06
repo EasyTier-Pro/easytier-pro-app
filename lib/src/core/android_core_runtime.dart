@@ -264,6 +264,25 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     if (runtimeEvent.type == CoreRuntimeEventTypes.vpnPermissionDenied) {
       _vpnPrepared = false;
     }
+    if (runtimeEvent.type == CoreRuntimeEventTypes.vpnStarted) {
+      final payload = _runtimeEventPayload(runtimeEvent);
+      final instanceName = _readString(
+        payload['instanceName'] ?? payload['instance_name'],
+      );
+      if (instanceName.isNotEmpty) {
+        _activeVpnInstanceName = instanceName;
+      }
+    }
+    if (runtimeEvent.type == CoreRuntimeEventTypes.vpnStopped) {
+      final payload = _runtimeEventPayload(runtimeEvent);
+      final instanceName = _readString(
+        payload['instanceName'] ?? payload['instance_name'],
+      );
+      if (instanceName.isEmpty || instanceName == _activeVpnInstanceName) {
+        _activeVpnInstanceName = null;
+        _activeVpnInstanceId = null;
+      }
+    }
     if (runtimeEvent.type == CoreRuntimeEventTypes.configServer) {
       _handleConfigServerEvent(runtimeEvent.data);
     }
@@ -288,6 +307,31 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     );
     if (eventName != 'run_network_instance' &&
         eventName != 'delete_network_instance') {
+      return;
+    }
+
+    final callbackError = _firstNonEmptyString([
+      payloadMap['error'],
+      payloadMap['error_msg'],
+      payloadMap['errorMessage'],
+      payloadMap['message'],
+    ]);
+    final success = _readBool(payloadMap['success']);
+    if (callbackError != null || success == false) {
+      _events.add(
+        CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.error,
+          data: {
+            'error': callbackError ?? 'Android config server event failed',
+            'event': eventName,
+            'instance_id': _readString(
+              payloadMap['instance_id'] ??
+                  payloadMap['instanceId'] ??
+                  payloadMap['id'],
+            ),
+          },
+        ),
+      );
       return;
     }
 
@@ -321,6 +365,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     final outerMap = outer is Map ? _stringObjectMap(outer) : data;
     final inner = outerMap['payload'];
     return inner is Map ? _stringObjectMap(inner) : outerMap;
+  }
+
+  Map<String, Object?> _runtimeEventPayload(CoreRuntimeEvent event) {
+    final payload = event.data['payload'];
+    return payload is Map ? _stringObjectMap(payload) : event.data;
   }
 
   Future<void> _queueVpnStart(String instanceKey) {
