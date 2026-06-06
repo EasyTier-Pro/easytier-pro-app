@@ -432,6 +432,48 @@ void main() {
       expect(remote.version, '2.6.4');
     });
 
+    test('derives Android traffic totals from peer connection stats', () async {
+      networkInfos = {
+        'map': {
+          'network-a': {
+            'running': true,
+            'my_node_info': {
+              'virtual_ipv4': {
+                'address': {'addr': 168427522},
+                'network_length': 24,
+              },
+              'peer_id': 123,
+            },
+            'peer_route_pairs': [
+              {
+                'route': {
+                  'peer_id': 456,
+                  'ipv4_addr': {
+                    'address': {'addr': 168427523},
+                    'network_length': 24,
+                  },
+                },
+                'peer': {
+                  'peer_id': 456,
+                  'conns': [
+                    {
+                      'stats': {'rx_bytes': 1024, 'tx_bytes': 2048},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      final totals = await runtime.readNetworkTrafficTotals();
+
+      expect(totals.keys, ['network-a']);
+      expect(totals['network-a']!.downloadBytes, 1024);
+      expect(totals['network-a']!.uploadBytes, 2048);
+    });
+
     test(
       'falls back to the only collected instance for id-only events',
       () async {

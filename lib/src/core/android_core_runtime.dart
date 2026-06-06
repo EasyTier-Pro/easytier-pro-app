@@ -174,8 +174,25 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   @override
   Future<Map<String, CoreNetworkTrafficTotals>>
   readNetworkTrafficTotals() async {
-    // Android JNI does not yet expose a stats API equivalent to `easytier-cli stats`.
-    return const <String, CoreNetworkTrafficTotals>{};
+    final snapshot = await _readNetworkInfoSnapshot();
+    final sampledAt = DateTime.now();
+    final totals = <String, CoreNetworkTrafficTotals>{};
+    for (final instance in snapshot.instances.values) {
+      if (!instance.running) {
+        continue;
+      }
+      final traffic = _trafficTotalsFromPeers(instance.peers);
+      if (traffic == null) {
+        continue;
+      }
+      totals[instance.name] = CoreNetworkTrafficTotals(
+        runtimeNetworkName: instance.name,
+        downloadBytes: traffic.downloadBytes,
+        uploadBytes: traffic.uploadBytes,
+        sampledAt: sampledAt,
+      );
+    }
+    return totals;
   }
 
   @override
@@ -1146,6 +1163,75 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     copyIfMissing('nat_type', ['nat']);
     copyIfMissing('peer_id', ['peerId', 'id']);
     return normalized;
+  }
+
+  static _MutableNetworkTrafficTotals? _trafficTotalsFromPeers(
+    List<Map<String, dynamic>> peers,
+  ) {
+    final byPeer = <String, _MutableNetworkTrafficTotals>{};
+    var fallbackIndex = 0;
+    for (final peer in peers) {
+      final rxBytes = _readTrafficBytes(
+        peer['rx_bytes'] ?? peer['rxBytes'] ?? peer['received_bytes'],
+      );
+      final txBytes = _readTrafficBytes(
+        peer['tx_bytes'] ?? peer['txBytes'] ?? peer['transmitted_bytes'],
+      );
+      if (rxBytes == null && txBytes == null) {
+        continue;
+      }
+      final peerKey = _firstNonEmptyString([
+        peer['peer_id'],
+        peer['peerId'],
+        peer['id'],
+        peer['cidr'],
+        peer['ipv4'],
+      ]);
+      final key = peerKey ?? '#${fallbackIndex++}';
+      final traffic = byPeer.putIfAbsent(key, _MutableNetworkTrafficTotals.new);
+      if (rxBytes != null) {
+        if (!traffic.hasDownloadBytes || rxBytes > traffic.downloadBytes) {
+          traffic.downloadBytes = rxBytes;
+        }
+        traffic.hasDownloadBytes = true;
+      }
+      if (txBytes != null) {
+        if (!traffic.hasUploadBytes || txBytes > traffic.uploadBytes) {
+          traffic.uploadBytes = txBytes;
+        }
+        traffic.hasUploadBytes = true;
+      }
+    }
+
+    final total = _MutableNetworkTrafficTotals();
+    for (final peer in byPeer.values) {
+      if (peer.hasDownloadBytes) {
+        total.downloadBytes += peer.downloadBytes;
+        total.hasDownloadBytes = true;
+      }
+      if (peer.hasUploadBytes) {
+        total.uploadBytes += peer.uploadBytes;
+        total.hasUploadBytes = true;
+      }
+    }
+    return total.hasDownloadBytes || total.hasUploadBytes ? total : null;
+  }
+
+  static int? _readTrafficBytes(Object? value) {
+    final parsed = _readIntValue(value);
+    if (parsed != null) {
+      return parsed < 0 ? null : parsed;
+    }
+    final text = _readString(value);
+    if (text.isEmpty || text == '-' || text.toLowerCase() == 'null') {
+      return null;
+    }
+    final normalized = text.replaceAll(',', '');
+    final number = num.tryParse(normalized);
+    if (number == null || number < 0) {
+      return null;
+    }
+    return number.toInt();
   }
 }
 
