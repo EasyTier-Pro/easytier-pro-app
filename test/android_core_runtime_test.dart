@@ -293,6 +293,64 @@ void main() {
         '172.16.8.0/24',
       ]);
     });
+
+    test('parses fixed upstream JNI running info map routes', () {
+      final snapshot = AndroidNetworkInfoSnapshot.parse(
+        jsonEncode({
+          'map': {
+            'bce27f42-5c4c-41ff-9a49-2db5fd2560ca': {
+              'dev_name': 'network-a',
+              'running': true,
+              'my_node_info': {
+                'virtual_ipv4': {
+                  'address': {'addr': 168427522},
+                  'network_length': 24,
+                },
+                'hostname': 'android-phone',
+                'peer_id': 101,
+              },
+              'routes': [
+                {
+                  'peer_id': 202,
+                  'ipv4_addr': {
+                    'address': {'addr': 168427523},
+                    'network_length': 24,
+                  },
+                  'proxy_cidrs': ['192.168.50.0/24'],
+                  'hostname': 'subnet-router',
+                },
+                {
+                  'peer_id': 303,
+                  'ipv4_addr': {
+                    'address': {'addr': 168427524},
+                    'network_length': 24,
+                  },
+                  'proxy_cidrs': ['172.16.8.0/24'],
+                  'hostname': 'branch-router',
+                },
+              ],
+            },
+          },
+        }),
+      );
+
+      final instance = snapshot.instanceMatching(
+        name: '',
+        id: 'bce27f42-5c4c-41ff-9a49-2db5fd2560ca',
+      );
+      expect(instance, isNotNull);
+      expect(instance!.running, isTrue);
+      expect(instance.vpnConfig?['addresses'], ['10.10.0.2/24']);
+      expect(instance.vpnConfig?['routes'], [
+        '10.10.0.0/24',
+        '192.168.50.0/24',
+        '172.16.8.0/24',
+      ]);
+      expect(
+        instance.peers.map((peer) => peer['hostname']),
+        containsAll(['android-phone', 'subnet-router', 'branch-router']),
+      );
+    });
   });
 
   group('AndroidCoreRuntime native events', () {
