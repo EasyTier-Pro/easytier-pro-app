@@ -1,6 +1,7 @@
 package com.example.easytier_pro_app
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -51,6 +52,15 @@ class EasyTierAndroidManifestInstrumentedTest {
             assertTrue(
                 service.foregroundServiceType and
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE != 0,
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            assertEquals(
+                "User-visible EasyTier Pro VPN tunnel",
+                packageManager.getProperty(
+                    PackageManager.PROPERTY_SPECIAL_USE_FGS_SUBTYPE,
+                    ComponentName(context, EasyTierVpnService::class.java),
+                ).string,
             )
         }
     }
