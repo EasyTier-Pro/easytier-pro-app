@@ -977,6 +977,29 @@ cd /d "$installerDir"
         },
       );
     }
+    if (event.type == CoreRuntimeEventTypes.vpnStopped) {
+      final payload = _runtimeEventPayload(event);
+      _logger.info(
+        'core.vpn',
+        'Android VPN stopped',
+        context: {
+          'instance_name':
+              payload['instanceName'] ?? payload['instance_name'] ?? '',
+          'fd': payload['fd'] ?? '',
+        },
+      );
+    }
+    if (event.type == CoreRuntimeEventTypes.configServerStarted) {
+      final payload = _runtimeEventPayload(event);
+      _logger.info(
+        'core.runtime',
+        'Android config server client started',
+        context: {'hostname': payload['hostname'] ?? ''},
+      );
+    }
+    if (event.type == CoreRuntimeEventTypes.configServerStopped) {
+      _logger.info('core.runtime', 'Android config server client stopped');
+    }
     if (event.type == CoreRuntimeEventTypes.vpnPermissionGranted &&
         _session != null &&
         status.value.phase == CoreRunPhase.needsVpnPermission) {

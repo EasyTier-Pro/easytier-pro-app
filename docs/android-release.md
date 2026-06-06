@@ -98,7 +98,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 控制台下发 `run_network_instance` 后，日志出现 `vpn_started` 或 native `Injected TUN fd`。
 - 应用内“设置 -> 诊断日志”出现 `Android VPN established` 或 `Android VPN config refreshed`，且 `routes` 包含虚拟网 CIDR 与已授权子网 CIDR，`disallowed_applications` 至少包含 `net.easytier.pro`。
 - 使用未被排除的应用访问虚拟 IP 和子网地址，确认系统 VPN route 能承载数据面流量。
-- 退出登录后，config server client 和 VPN 均停止。
+- 退出登录后，应用内诊断日志出现 `Android VPN stopped` 和 `Android config server client stopped`，确认 config server client 与 VPN 均停止。
 
 仍需产品确认：
 
