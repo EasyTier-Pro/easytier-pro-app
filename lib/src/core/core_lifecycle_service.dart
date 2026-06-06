@@ -795,12 +795,10 @@ cd /d "$installerDir"
   static Map<String, CoreNetworkTrafficTotals>
   parseNetworkTrafficTotalsFromJson(String output, {DateTime? sampledAt}) {
     final decoded = jsonDecode(output);
-    if (decoded is! List<dynamic>) {
-      throw const FormatException('easytier-cli stats JSON 必须是数组');
-    }
+    final items = _extractMetricItems(decoded);
 
     final collected = <String, _MutableNetworkTrafficTotals>{};
-    for (final item in decoded) {
+    for (final item in items) {
       if (item is! Map<String, dynamic>) {
         continue;
       }
@@ -850,6 +848,22 @@ cd /d "$installerDir"
         ),
       );
     });
+  }
+
+  static List<dynamic> _extractMetricItems(Object? decoded) {
+    if (decoded is! List<dynamic>) {
+      throw const FormatException('easytier-cli stats JSON must be an array');
+    }
+
+    final items = <dynamic>[];
+    for (final item in decoded) {
+      if (item is Map<String, dynamic> && item['result'] is List<dynamic>) {
+        items.addAll(item['result'] as List<dynamic>);
+      } else {
+        items.add(item);
+      }
+    }
+    return items;
   }
 
   @visibleForTesting

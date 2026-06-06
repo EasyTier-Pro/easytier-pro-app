@@ -283,6 +283,84 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets(
+    'keeps idle joined networks connected when traffic stats are empty',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+
+      final authService = _FakeAuthService(
+        networks: const <ConsoleNetwork>[
+          ConsoleNetwork(
+            id: 'net-1',
+            name: 'office-network',
+            regions: ['ap-east'],
+            runtimeNetworkName: 'nt-office',
+          ),
+          ConsoleNetwork(
+            id: 'net-2',
+            name: 'lab-network',
+            regions: ['ap-east'],
+            runtimeNetworkName: 'nt-lab',
+          ),
+        ],
+        managedDevices: const <ManagedDevice>[
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'desktop-1',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+        networkDevices: const <String, List<NetworkDevice>>{
+          'net-1': <NetworkDevice>[
+            NetworkDevice(
+              id: 'node-1',
+              name: 'desktop-1',
+              online: true,
+              ipv4: '10.144.0.2',
+              deviceId: 'device-1',
+              machineId: 'machine-1',
+            ),
+          ],
+          'net-2': <NetworkDevice>[
+            NetworkDevice(
+              id: 'node-2',
+              name: 'desktop-1',
+              online: true,
+              ipv4: '10.145.0.2',
+              deviceId: 'device-1',
+              machineId: 'machine-1',
+            ),
+          ],
+        },
+      );
+      final coreLifecycleService = _NoopCoreLifecycleService(
+        authService: authService,
+        machineId: 'machine-1',
+        trafficSamples: const <Map<String, CoreNetworkTrafficTotals>>[
+          <String, CoreNetworkTrafficTotals>{},
+        ],
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump();
+
+      expect(find.text('实例启动中'), findsNothing);
+      expect(find.textContaining('10.144.0.2'), findsOneWidget);
+      expect(find.textContaining('10.145.0.2'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('network detail list stretches with window height', (
     WidgetTester tester,
   ) async {
@@ -1470,6 +1548,52 @@ void main() {
     expect(totals['nt-office']?.sampledAt, sampledAt);
   });
 
+  test('parses fanout traffic stats by runtime network name', () {
+    final totals = CoreLifecycleService.parseNetworkTrafficTotalsFromJson(
+      jsonEncode([
+        {
+          'instance_id': 'instance-1',
+          'instance_name': 'nt-office',
+          'result': [
+            {
+              'name': 'traffic_bytes_self_rx',
+              'value': 1024,
+              'labels': {'network_name': 'nt-office'},
+            },
+            {
+              'name': 'traffic_bytes_self_tx',
+              'value': 2048,
+              'labels': {'network_name': 'nt-office'},
+            },
+          ],
+        },
+        {
+          'instance_id': 'instance-2',
+          'instance_name': 'nt-lab',
+          'result': [
+            {
+              'name': 'traffic_bytes_self_rx',
+              'value': 4096,
+              'labels': {'network_name': 'nt-lab'},
+            },
+            {
+              'name': 'traffic_bytes_self_tx',
+              'value': 8192,
+              'labels': {'network_name': 'nt-lab'},
+            },
+          ],
+        },
+      ]),
+      sampledAt: DateTime.utc(2026, 1, 1),
+    );
+
+    expect(totals.length, 2);
+    expect(totals['nt-office']?.downloadBytes, 1024);
+    expect(totals['nt-office']?.uploadBytes, 2048);
+    expect(totals['nt-lab']?.downloadBytes, 4096);
+    expect(totals['nt-lab']?.uploadBytes, 8192);
+  });
+
   test('parses peer statuses by normalized ipv4', () {
     final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
       jsonEncode([
@@ -1644,6 +1768,48 @@ void main() {
     expect(nodes.single.osVersion, '6.8.0');
     expect(nodes.single.osDistribution, 'Ubuntu');
   });
+
+  test(
+    'console service prefers per-network node status over device status',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final service = ConsoleAuthService(
+        tokenStore: OAuthTokenStore(preferences),
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) async {
+          if (request.url.path ==
+              '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
+            return _jsonResponse([
+              {
+                'id': 'node-online',
+                'status': 'online',
+                'device': {'connectivity_state': 'offline'},
+              },
+              {
+                'id': 'node-offline',
+                'status': 'offline',
+                'device': {'connectivity_state': 'online'},
+              },
+            ]);
+          }
+          return http.Response('{}', 404);
+        }),
+      );
+
+      final nodes = await service.fetchNetworkDevices(
+        accessToken: 'token',
+        workspaceId: 'tenant-1',
+        networkId: 'net-1',
+      );
+
+      expect(nodes, hasLength(2));
+      expect(nodes[0].id, 'node-online');
+      expect(nodes[0].online, isTrue);
+      expect(nodes[1].id, 'node-offline');
+      expect(nodes[1].online, isFalse);
+    },
+  );
 
   test('network lifecycle operations use tenant scoped console API', () async {
     SharedPreferences.setMockInitialValues({});

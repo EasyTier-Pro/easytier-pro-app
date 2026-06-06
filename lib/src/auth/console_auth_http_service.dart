@@ -348,10 +348,10 @@ class ConsoleAuthService implements AuthService {
               device?['hostname']?.toString() ??
               device?['display_name']?.toString();
           final status =
-              item['connectivity_state']?.toString() ??
-              device?['connectivity_state']?.toString() ??
               item['status']?.toString() ??
+              item['connectivity_state']?.toString() ??
               item['state']?.toString() ??
+              device?['connectivity_state']?.toString() ??
               '';
           final online =
               status.toLowerCase() == 'online' ||

@@ -156,6 +156,7 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
       final nextHistories = Map<String, List<_TrafficHistoryPoint>>.from(
         _networkTrafficHistories,
       );
+      final instanceReadinessFallbacks = <ConsoleNetwork>[];
 
       for (final network in networks) {
         final runtimeName = network.runtimeNetworkName.trim();
@@ -164,7 +165,9 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
           nextTraffic.remove(network.id);
           nextPrevious.remove(runtimeName);
           nextHistories.remove(network.id);
-          nextInstanceReady[network.id] = false;
+          if (nextInstanceReady[network.id] != true) {
+            instanceReadinessFallbacks.add(network);
+          }
           continue;
         }
 
@@ -240,6 +243,9 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
           ..clear()
           ..addAll(nextHistory);
       });
+      if (instanceReadinessFallbacks.isNotEmpty) {
+        unawaited(_refreshNetworkInstanceStates(instanceReadinessFallbacks));
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -261,6 +267,26 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
     } finally {
       _isTrafficPollInFlight = false;
     }
+  }
+
+  Future<void> _refreshNetworkInstanceStates(
+    Iterable<ConsoleNetwork> networks,
+  ) async {
+    if (!mounted || !widget.coreLifecycleService.status.value.isRunning) {
+      return;
+    }
+    final targets = <String, ConsoleNetwork>{};
+    for (final network in networks) {
+      if (network.runtimeNetworkName.trim().isEmpty ||
+          _joinStateFor(network).phase != _JoinPhase.joined) {
+        continue;
+      }
+      targets[network.id] = network;
+    }
+    if (targets.isEmpty) {
+      return;
+    }
+    await Future.wait(targets.values.map(_refreshNetworkInstanceState));
   }
 
   Future<void> _refreshNetworkInstanceState(ConsoleNetwork network) async {
