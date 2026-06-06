@@ -2173,6 +2173,42 @@ void main() {
     },
   );
 
+  test('console service reports invalid auth during bootstrap', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/api/v1/releases/latest') {
+          return _jsonResponse({
+            'stable': {'version': 'v2.6.4'},
+            'web_config_server_url': 'tcp://config.test:22020',
+          });
+        }
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/device-enrollment-keys') {
+          return _jsonResponse({'message': 'unauthorized'}, 401);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+
+    await expectLater(
+      service.prepareCoreBootstrap(
+        accessToken: 'expired-token',
+        workspaceId: 'tenant-1',
+      ),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          '当前登录态已失效，请重新登录。',
+        ),
+      ),
+    );
+  });
+
   test('network lifecycle operations use tenant scoped console API', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

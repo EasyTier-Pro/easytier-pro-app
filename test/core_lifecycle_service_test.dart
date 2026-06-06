@@ -46,6 +46,47 @@ void main() {
     });
   });
 
+  group('CoreLifecycleService auth invalidation', () {
+    test('stops runtime when local token has expired', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.bindSession(_expiredSession('tenant-1'));
+
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 1);
+      expect(authService.workspaceIds, ['tenant-1']);
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(service.status.value.message, '登录态已失效，连接已停止');
+    });
+
+    test('stops runtime when bootstrap reports invalid auth', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      authService.bootstrapError = const AuthException('当前登录态已失效，请重新登录。');
+      await service.bindSession(_session('tenant-1'));
+
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 1);
+      expect(authService.prepareBootstrapCount, 2);
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(service.status.value.message, '登录态已失效，连接已停止');
+    });
+  });
+
   group('CoreLifecycleService runtime events', () {
     test(
       'reconnects when config server stops while session is active',
@@ -113,7 +154,7 @@ AuthSession _session(String workspaceId) {
       accessToken: 'access-token',
       tokenType: 'Bearer',
       expiresIn: 3600,
-      obtainedAt: DateTime.utc(2026, 1, 1),
+      obtainedAt: DateTime.now().toUtc(),
     ),
   );
 }
@@ -129,7 +170,25 @@ AuthSession _sessionWithoutWorkspace() {
       accessToken: 'access-token',
       tokenType: 'Bearer',
       expiresIn: 3600,
-      obtainedAt: DateTime.utc(2026, 1, 1),
+      obtainedAt: DateTime.now().toUtc(),
+    ),
+  );
+}
+
+AuthSession _expiredSession(String workspaceId) {
+  return AuthSession(
+    user: ConsoleUser(
+      email: 'tester@example.com',
+      displayName: 'Tester',
+      workspaces: <ConsoleWorkspace>[
+        ConsoleWorkspace(id: workspaceId, name: '测试工作区'),
+      ],
+    ),
+    tokenSet: TokenSet(
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      expiresIn: 1,
+      obtainedAt: DateTime.utc(2000, 1, 1),
     ),
   );
 }
@@ -229,6 +288,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
 
 class _LifecycleAuthService implements AuthService {
   var prepareBootstrapCount = 0;
+  Object? bootstrapError;
   final workspaceIds = <String>[];
 
   @override
@@ -322,6 +382,10 @@ class _LifecycleAuthService implements AuthService {
   }) async {
     prepareBootstrapCount++;
     workspaceIds.add(workspaceId);
+    final error = bootstrapError;
+    if (error != null) {
+      throw error;
+    }
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
       version: '2.6.4',

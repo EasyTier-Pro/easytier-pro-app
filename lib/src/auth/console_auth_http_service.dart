@@ -155,7 +155,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('读取网络列表失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '读取网络列表失败');
     }
 
     final items = _decodeObjectOrList(response.body);
@@ -176,7 +176,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('读取区域列表失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '读取区域列表失败');
     }
 
     final items = _decodeObjectOrList(response.body);
@@ -230,7 +230,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('创建网络失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '创建网络失败');
     }
 
     final network = _networkFromJson(_decodeObject(response.body));
@@ -255,7 +255,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('删除网络失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '删除网络失败');
     }
   }
 
@@ -292,7 +292,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('读取设备列表失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '读取设备列表失败');
     }
 
     final items = _decodeObjectOrList(response.body);
@@ -340,7 +340,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('读取设备列表失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '读取设备列表失败');
     }
 
     final items = _decodeObjectOrList(response.body);
@@ -433,7 +433,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('加入网络失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '加入网络失败');
     }
 
     final body = _decodeObject(response.body);
@@ -467,7 +467,7 @@ class ConsoleAuthService implements AuthService {
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
-      throw AuthException('退出网络失败：${_extractErrorMessage(response.body)}');
+      throw _authAwareException(response, '退出网络失败');
     }
   }
 
@@ -516,9 +516,7 @@ class ConsoleAuthService implements AuthService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     if (!keysResponse.statusCode.toString().startsWith('2')) {
-      throw AuthException(
-        '读取注册密钥失败：${_extractErrorMessage(keysResponse.body)}',
-      );
+      throw _authAwareException(keysResponse, '读取注册密钥失败');
     }
     final keyItems = _decodeObjectOrList(keysResponse.body);
 
@@ -571,9 +569,7 @@ class ConsoleAuthService implements AuthService {
         }),
       );
       if (!createResponse.statusCode.toString().startsWith('2')) {
-        throw AuthException(
-          '创建注册密钥失败：${_extractErrorMessage(createResponse.body)}',
-        );
+        throw _authAwareException(createResponse, '创建注册密钥失败');
       }
       final createBody = _decodeObject(createResponse.body);
       bootstrapToken = createBody['bootstrap_token']?.toString() ?? '';
@@ -792,6 +788,16 @@ class ConsoleAuthService implements AuthService {
         body?['error_description']?.toString() ??
         body?['description']?.toString() ??
         source;
+  }
+
+  static AuthException _authAwareException(
+    http.Response response,
+    String prefix,
+  ) {
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      return const AuthException('当前登录态已失效，请重新登录。');
+    }
+    return AuthException('$prefix：${_extractErrorMessage(response.body)}');
   }
 
   static String _stripCancelToken(String url) {

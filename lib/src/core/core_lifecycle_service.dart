@@ -372,6 +372,10 @@ cd /d "$installerDir"
       status.value = CoreRunStatus.signedOut;
       return;
     }
+    if (session.tokenSet.isExpired) {
+      await _stopRuntimeForAuthInvalid(const AuthException('当前登录态已失效，请重新登录。'));
+      return;
+    }
     final workspace = session.user.currentWorkspace;
     if (workspace == null) {
       _logger.error('core', 'No workspace available for lifecycle binding');
@@ -455,6 +459,10 @@ cd /d "$installerDir"
         'Ensure running failed',
         context: {'error': error.toString()},
       );
+      if (_isAuthInvalidError(error)) {
+        await _stopRuntimeForAuthInvalid(error);
+        return;
+      }
       if (error is _ElevationRequiredException) {
         status.value = const CoreRunStatus(
           phase: CoreRunPhase.needsElevation,
@@ -485,6 +493,37 @@ cd /d "$installerDir"
         context: {'error': error.toString()},
       );
     }
+  }
+
+  Future<void> _stopRuntimeForAuthInvalid(Object error) async {
+    try {
+      await _runtime.stop();
+      _logger.info(
+        'core',
+        'Stopped runtime because the auth session is invalid',
+      );
+    } catch (stopError) {
+      _logger.warn(
+        'core',
+        'Failed to stop runtime after auth became invalid',
+        context: {'error': stopError.toString()},
+      );
+    }
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.error,
+      message: '登录态已失效，连接已停止',
+      lastError: _normalizeError(error),
+    );
+  }
+
+  bool _isAuthInvalidError(Object error) {
+    if (error is! AuthException) {
+      return false;
+    }
+    final message = _normalizeError(error);
+    return message.contains('登录态已失效') ||
+        message.contains('请重新登录') ||
+        message.toLowerCase().contains('unauthorized');
   }
 
   Future<_DesktopCoreStatus?> _tryReadDesktopStatus(
