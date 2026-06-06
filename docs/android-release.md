@@ -47,6 +47,10 @@ flutter build apk --debug
 
 Release APK 构建会启用 ABI split，只产出 `arm64-v8a` 和 `x86_64` 包；debug 构建保持单包，方便 `flutter run` 和本地模拟器调试。不要把未包含 JNI 的 ABI 发布给用户。
 
+## CI
+
+`.github/workflows/android.yml` 会在 Windows runner 上检出 EasyTier 固定 commit，安装 Android NDK `28.2.13676358`，执行 `scripts/build_android_jni.ps1 -SkipCopy` 验证 JNI 可构建，并构建 Android debug APK。CI 当前不改写仓库内已提交的 `.so` 文件；更新随包 JNI 产物仍需在本地运行构建脚本并提交结果。
+
 ## VPN 权限与后台运行说明
 
 Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 注入 EasyTier core。应用需要向用户说明：

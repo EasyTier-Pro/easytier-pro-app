@@ -1,0 +1,54 @@
+name: Android
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  android-jni:
+    name: Android JNI and debug build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Checkout EasyTier core
+        uses: actions/checkout@v4
+        with:
+          repository: EasyTier/EasyTier
+          ref: 13f2ebfe12f9a0a0d8294dbe325503da62381a40
+          path: EasyTier
+          submodules: recursive
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        shell: pwsh
+        run: sdkmanager "ndk;28.2.13676358"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build EasyTier Android JNI
+        shell: pwsh
+        run: >
+          ./scripts/build_android_jni.ps1
+          -EasyTierRoot ./EasyTier
+          -AndroidSdk $env:ANDROID_HOME
+          -SkipCopy
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
