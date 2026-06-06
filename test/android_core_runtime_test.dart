@@ -814,6 +814,37 @@ void main() {
     });
 
     test(
+      'stop clears pending VPN and stops config server plus VPN service',
+      () async {
+        vpnPrepared = false;
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+          },
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+
+        await runtime.stop();
+        expect(
+          calls.map((call) => call.method),
+          containsAllInOrder(['stopConfigServerClient', 'stopVpn']),
+        );
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnPermissionGranted,
+          'payload': {'granted': true},
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+      },
+    );
+
+    test(
       'keeps only the latest pending VPN before permission is granted',
       () async {
         vpnPrepared = false;
