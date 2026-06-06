@@ -76,11 +76,22 @@ object EasyTierVpnStartConfigParser {
     }
 
     fun parseCidr(value: String): AndroidVpnCidr {
-        val parts = value.trim().split("/", limit = 2)
+        val normalized = routeEndpointCidr(value)
+        val parts = normalized.split("/", limit = 2)
         require(parts.firstOrNull()?.isNotEmpty() == true) { "Invalid CIDR: $value" }
         val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 32
         require(prefix in 0..32) { "Invalid CIDR prefix: $value" }
         return AndroidVpnCidr(parts[0], prefix)
+    }
+
+    private fun routeEndpointCidr(value: String): String {
+        val text = value.trim()
+        val mappedIndex = text.indexOf("->")
+        if (mappedIndex < 0) {
+            return text
+        }
+        val mapped = text.substring(mappedIndex + 2).trim()
+        return mapped.ifEmpty { text.substring(0, mappedIndex).trim() }
     }
 
     private fun stringList(intent: Intent?, extraName: String): List<String> {

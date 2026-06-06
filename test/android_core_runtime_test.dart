@@ -203,6 +203,34 @@ void main() {
       ]);
     });
 
+    test('extracts mapped proxy routes and nested runtime config routes', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'config': {
+          'virtual_ipv4': '10.60.0.9',
+          'network_length': 24,
+          'routes': ['10.61.0.42/24'],
+          'proxy_networks': [
+            {'cidr': '10.62.0.0/24', 'mapped_cidr': '192.168.62.0/24'},
+            '10.63.0.0/24->192.168.63.0/24',
+          ],
+        },
+        'routes': jsonEncode([
+          {
+            'proxy_cidrs': ['10.64.0.0/24->192.168.64.0/24'],
+          },
+        ]),
+      });
+
+      expect(config['addresses'], ['10.60.0.9/24']);
+      expect(config['routes'], [
+        '10.60.0.0/24',
+        '10.61.0.0/24',
+        '192.168.62.0/24',
+        '192.168.63.0/24',
+        '192.168.64.0/24',
+      ]);
+    });
+
     test('preserves configured Android VPN disallowed applications', () {
       final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
         'address': '10.10.0.2/24',

@@ -909,7 +909,14 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   static Map<String, Object?>? _readMap(Object? value) {
-    return value is Map ? _stringObjectMap(value) : null;
+    if (value is Map) {
+      return _stringObjectMap(value);
+    }
+    if (value is String) {
+      final decoded = _tryDecodeJson(value);
+      return decoded is Map ? _stringObjectMap(decoded) : null;
+    }
+    return null;
   }
 
   static List<Object?> _readList(Object? value) {
@@ -917,9 +924,29 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return value;
     }
     if (value is String && value.trim().isNotEmpty) {
+      final decoded = _tryDecodeJson(value);
+      if (decoded is List) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return <Object?>[decoded];
+      }
       return <Object?>[value.trim()];
     }
     return const <Object?>[];
+  }
+
+  static Object? _tryDecodeJson(String value) {
+    final text = value.trim();
+    if ((!text.startsWith('{') || !text.endsWith('}')) &&
+        (!text.startsWith('[') || !text.endsWith(']'))) {
+      return null;
+    }
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
   }
 
   static List<String> _readStringList(Object? value) {
@@ -939,6 +966,51 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         .where((value) => value.isNotEmpty)
         .toSet()
         .toList(growable: false);
+  }
+
+  static List<String> _readAddressCidrs(Map<String, Object?> json) {
+    final prefix = _firstNonEmptyString([
+      json['network_length'],
+      json['networkLength'],
+      json['prefix'],
+      json['prefix_length'],
+      json['prefixLength'],
+      json['mask'],
+    ]);
+    final cidrs = <String>{};
+
+    void add(Object? value) {
+      for (final cidr in _readCidrList(value)) {
+        if (cidr.contains('/') || prefix == null) {
+          cidrs.add(cidr);
+        } else {
+          cidrs.add('$cidr/$prefix');
+        }
+      }
+    }
+
+    for (final key in const <String>[
+      'addresses',
+      'address',
+      'ipv4',
+      'ipv4_addr',
+      'ipv4Addr',
+      'ipv4_address',
+      'ipv4Address',
+      'virtual_ip',
+      'virtualIp',
+      'virtual_ipv4',
+      'virtualIpv4',
+      'cidr',
+      'ip_cidr',
+      'ipCidr',
+      'ipv4_cidr',
+      'ipv4Cidr',
+    ]) {
+      add(json[key]);
+    }
+
+    return cidrs.toList(growable: false);
   }
 
   static String _cidrFromValue(Object? value) {
@@ -968,6 +1040,19 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         }
         final nestedCidr = _cidrFromValue(nested);
         if (nestedCidr.isNotEmpty) {
+          if (!nestedCidr.contains('/')) {
+            final prefix = _firstNonEmptyString([
+              map['network_length'],
+              map['networkLength'],
+              map['prefix'],
+              map['prefix_length'],
+              map['prefixLength'],
+              map['mask'],
+            ]);
+            if (prefix != null) {
+              return '$nestedCidr/$prefix';
+            }
+          }
           return nestedCidr;
         }
       }
@@ -998,6 +1083,36 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return prefix == null ? cidr : '$cidr/$prefix';
     }
     return _readString(value);
+  }
+
+  static String _routeCidrFromValue(Object? value) {
+    if (value is Map) {
+      final map = _stringObjectMap(value);
+      final mapped = _firstNonEmptyString([
+        map['mapped_cidr'],
+        map['mappedCidr'],
+        map['mappedCIDR'],
+        map['mapped'],
+      ]);
+      if (mapped != null) {
+        return _routeEndpointCidr(mapped);
+      }
+      return _routeEndpointCidr(_cidrFromValue(map));
+    }
+    return _routeEndpointCidr(_cidrFromValue(value));
+  }
+
+  static String _routeEndpointCidr(String value) {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return '';
+    }
+    final arrowIndex = text.indexOf('->');
+    if (arrowIndex < 0) {
+      return text;
+    }
+    final mapped = text.substring(arrowIndex + 2).trim();
+    return mapped.isNotEmpty ? mapped : text.substring(0, arrowIndex).trim();
   }
 
   static String _ipv4InetCidrFromMap(Map<String, Object?> map) {
@@ -1083,7 +1198,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           if (child is Map || child is List) {
             _addRouteCidrsFromValue(cidrs, child);
           } else {
-            final cidr = _cidrFromValue(child);
+            final cidr = _routeCidrFromValue(child);
             if (_looksLikeRouteCidrText(cidr)) {
               cidrs.add(_routeCidr(cidr));
             }
@@ -1109,7 +1224,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           _addRouteCidrsFromValue(cidrs, nested);
         }
       }
-      final cidr = _cidrFromValue(map);
+      final cidr = _routeCidrFromValue(map);
       if (cidr.isNotEmpty) {
         cidrs.add(_routeCidr(cidr));
       }
@@ -1118,6 +1233,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         'proxyCidrs',
         'proxy_cidr',
         'proxyCidr',
+        'proxy_network',
+        'proxyNetwork',
+        'proxy_networks',
+        'proxyNetworks',
         'subnet_cidrs',
         'subnetCidrs',
         'subnet_routes',
@@ -1140,7 +1259,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return;
     }
 
-    final cidr = _cidrFromValue(value);
+    final cidr = _routeCidrFromValue(value);
     if (cidr.isNotEmpty) {
       cidrs.add(_routeCidr(cidr));
     }
@@ -1162,6 +1281,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'proxyCidrs',
       'proxy_cidr',
       'proxyCidr',
+      'proxy_network',
+      'proxyNetwork',
+      'proxy_networks',
+      'proxyNetworks',
       'subnet_cidrs',
       'subnetCidrs',
       'subnet_routes',
@@ -1186,6 +1309,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'virtualIp',
       'virtual_ipv4',
       'virtualIpv4',
+      'mapped_cidr',
+      'mappedCidr',
+      'mappedCIDR',
+      'network_length',
+      'networkLength',
     };
     return map.keys.any(routeKeys.contains);
   }
@@ -1257,37 +1385,82 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   static Map<String, Object?> buildVpnConfigFromNetworkInfo(
     Map<String, Object?> json,
   ) {
-    final nested = _readMap(json['vpn_config'] ?? json['vpnConfig']);
-    final nestedConfig = nested == null
-        ? const <String, Object?>{}
-        : buildVpnConfigFromNetworkInfo(nested);
+    final nestedConfigs = <Map<String, Object?>>[];
+    for (final key in const <String>[
+      'vpn_config',
+      'vpnConfig',
+      'config',
+      'network_config',
+      'networkConfig',
+      'node_config',
+      'nodeConfig',
+      'runtime_config',
+      'runtimeConfig',
+      'effective_config',
+      'effectiveConfig',
+    ]) {
+      final nested = _readMap(json[key]);
+      if (nested != null) {
+        nestedConfigs.add(buildVpnConfigFromNetworkInfo(nested));
+      }
+    }
+    Object? firstNestedValue(String key) {
+      for (final config in nestedConfigs) {
+        final value = config[key];
+        if (_readString(value).isNotEmpty) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    Iterable<String> nestedCidrs(String primary, [String? secondary]) sync* {
+      for (final config in nestedConfigs) {
+        yield* _readCidrList(
+          secondary == null
+              ? config[primary]
+              : config[primary] ?? config[secondary],
+        );
+      }
+    }
+
+    Iterable<String> nestedRouteCidrs(
+      String primary, [
+      String? secondary,
+    ]) sync* {
+      for (final config in nestedConfigs) {
+        yield* _readRouteCidrs(
+          secondary == null
+              ? config[primary]
+              : config[primary] ?? config[secondary],
+        );
+      }
+    }
+
+    Iterable<String> nestedStrings(
+      String primary, [
+      String? secondary,
+      String? tertiary,
+    ]) sync* {
+      for (final config in nestedConfigs) {
+        yield* _readStringList(
+          config[primary] ??
+              (secondary == null ? null : config[secondary]) ??
+              (tertiary == null ? null : config[tertiary]),
+        );
+      }
+    }
 
     final myNodeInfo = _readMap(json['my_node_info'] ?? json['myNodeInfo']);
     final addresses = <String>{
-      ..._readCidrList(nestedConfig['addresses'] ?? nestedConfig['address']),
-      if (myNodeInfo != null)
-        ..._readCidrList(
-          myNodeInfo['virtual_ipv4'] ?? myNodeInfo['virtualIpv4'],
-        ),
-      ..._readCidrList(json['addresses']),
-      ..._readCidrList(json['address']),
-      ..._readCidrList(json['ipv4']),
-      ..._readCidrList(json['ipv4_addr']),
-      ..._readCidrList(json['ipv4_address']),
-      ..._readCidrList(json['ipv4Address']),
-      ..._readCidrList(json['virtual_ip']),
-      ..._readCidrList(json['virtualIp']),
-      ..._readCidrList(json['virtual_ipv4']),
-      ..._readCidrList(json['virtualIpv4']),
-      ..._readCidrList(json['cidr']),
-      ..._readCidrList(json['ip_cidr']),
-      ..._readCidrList(json['ipv4_cidr']),
-      ..._readCidrList(json['ipv4Cidr']),
+      ...nestedCidrs('addresses', 'address'),
+      if (myNodeInfo != null) ..._readAddressCidrs(myNodeInfo),
+      ..._readAddressCidrs(json),
     };
 
     final routes = <String>{
       ..._networkRoutesFromAddressCidrs(addresses),
-      ..._readRouteCidrs(nestedConfig['routes'] ?? nestedConfig['route']),
+      ...nestedRouteCidrs('routes', 'route'),
       ..._readRouteCidrs(json['routes']),
       ..._readRouteCidrs(json['route']),
       ..._readRouteCidrs(json['ipv4_routes']),
@@ -1300,6 +1473,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       ..._readRouteCidrs(json['peerRoutePairs']),
       ..._readRouteCidrs(json['proxy_cidrs']),
       ..._readRouteCidrs(json['proxyCidrs']),
+      ..._readRouteCidrs(json['proxy_network']),
+      ..._readRouteCidrs(json['proxyNetwork']),
+      ..._readRouteCidrs(json['proxy_networks']),
+      ..._readRouteCidrs(json['proxyNetworks']),
       ..._readRouteCidrs(json['subnet_cidrs']),
       ..._readRouteCidrs(json['subnetCidrs']),
       ..._readRouteCidrs(json['subnet_routes']),
@@ -1307,23 +1484,15 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     }..removeWhere((value) => value.isEmpty);
 
     final dns = <String>{
-      ..._readStringList(
-        nestedConfig['dns'] ??
-            nestedConfig['dns_servers'] ??
-            nestedConfig['dnsServers'],
-      ),
+      ...nestedStrings('dns', 'dns_servers', 'dnsServers'),
       ..._readStringList(json['dns']),
       ..._readStringList(json['dns_servers']),
       ..._readStringList(json['dnsServers']),
     };
 
     final disallowedApplications = <String>{
-      ..._readStringList(
-        nestedConfig['disallowedApplications'] ??
-            nestedConfig['disallowed_applications'] ??
-            nestedConfig['disallowedPackages'] ??
-            nestedConfig['disallowed_packages'],
-      ),
+      ...nestedStrings('disallowedApplications', 'disallowed_applications'),
+      ...nestedStrings('disallowedPackages', 'disallowed_packages'),
       ..._readStringList(json['disallowedApplications']),
       ..._readStringList(json['disallowed_applications']),
       ..._readStringList(json['disallowedPackages']),
@@ -1340,7 +1509,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         growable: false,
       );
     }
-    final mtu = json['mtu'] ?? nestedConfig['mtu'];
+    final mtu = json['mtu'] ?? firstNestedValue('mtu');
     if (mtu is num) {
       config['mtu'] = mtu.toInt();
     } else {

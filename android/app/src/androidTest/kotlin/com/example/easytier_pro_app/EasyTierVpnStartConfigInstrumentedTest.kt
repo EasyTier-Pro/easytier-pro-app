@@ -49,11 +49,14 @@ class EasyTierVpnStartConfigInstrumentedTest {
     fun parsesCidrPrefixAndDefaultsHostRoutesTo32() {
         val subnet = EasyTierVpnStartConfigParser.parseCidr(" 10.10.0.0/24 ")
         val host = EasyTierVpnStartConfigParser.parseCidr("10.10.0.2")
+        val mapped = EasyTierVpnStartConfigParser.parseCidr("10.2.0.0/24->192.168.2.0/24")
 
         assertEquals("10.10.0.0", subnet.address)
         assertEquals(24, subnet.prefixLength)
         assertEquals("10.10.0.2", host.address)
         assertEquals(32, host.prefixLength)
+        assertEquals("192.168.2.0", mapped.address)
+        assertEquals(24, mapped.prefixLength)
     }
 
     @Test
