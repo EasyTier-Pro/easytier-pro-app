@@ -662,7 +662,7 @@ class _NetworkTrafficDetailOverlay extends StatelessWidget {
   final List<_TrafficHistoryPoint> history;
   final Animation<double> animation;
 
-  static const Size _panelSize = Size(320, 220);
+  static const Size _panelSize = Size(320, 244);
   static const double _screenPadding = 12;
 
   @override
@@ -784,7 +784,48 @@ class _NetworkTrafficDetailChart extends StatelessWidget {
             duration: Duration.zero,
           ),
         ),
+        const SizedBox(height: 8),
+        _TrafficAxisSummary(chart: chart),
       ],
+    );
+  }
+}
+
+class _TrafficAxisSummary extends StatelessWidget {
+  const _TrafficAxisSummary({required this.chart});
+
+  final _TrafficSparklineData chart;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        _TrafficAxisText(
+          text: 'X ${chart.minX.round()}-${chart.maxX.round()} 采样点',
+        ),
+        _TrafficAxisText(text: 'Y 0 B/s-${_formatTrafficRate(chart.yMax)}'),
+        const _TrafficAxisText(text: '单位 X=采样点 · Y=速率'),
+      ],
+    );
+  }
+}
+
+class _TrafficAxisText extends StatelessWidget {
+  const _TrafficAxisText({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: const Color(0xFF94A3B8),
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

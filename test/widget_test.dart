@@ -316,6 +316,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('实时流量'), findsOneWidget);
+    expect(find.text('X 0-29 采样点'), findsOneWidget);
+    expect(find.textContaining('Y 0 B/s-'), findsOneWidget);
+    expect(find.text('单位 X=采样点 · Y=速率'), findsOneWidget);
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartsStatic(tester);
 
