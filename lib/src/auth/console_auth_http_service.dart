@@ -549,7 +549,7 @@ class ConsoleAuthService implements AuthService {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'display_name': 'Desktop Auto Key',
+          'display_name': _enrollmentKeyDisplayName(),
           'reusable': true,
           'pre_approved': true,
         }),
@@ -673,5 +673,11 @@ class ConsoleAuthService implements AuthService {
   static String _stripCancelToken(String url) {
     final parts = url.split('?cancelToken=');
     return parts.first;
+  }
+
+  static String _enrollmentKeyDisplayName() {
+    return defaultTargetPlatform == TargetPlatform.android
+        ? 'Android Auto Key'
+        : 'Desktop Auto Key';
   }
 }

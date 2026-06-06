@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -1995,6 +1996,64 @@ void main() {
       expect(nodes[0].online, isTrue);
       expect(nodes[1].id, 'node-offline');
       expect(nodes[1].online, isFalse);
+    },
+  );
+
+  test(
+    'console service creates platform scoped enrollment key names',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+
+      Future<String> createKeyNameFor(TargetPlatform platform) async {
+        debugDefaultTargetPlatformOverride = platform;
+        final requests = <http.Request>[];
+        final service = ConsoleAuthService(
+          tokenStore: OAuthTokenStore(preferences),
+          consoleBaseUrl: 'https://console.test',
+          httpClient: MockClient((request) async {
+            requests.add(request);
+            if (request.url.path == '/api/v1/releases/latest') {
+              return _jsonResponse({
+                'stable': {'version': 'v2.6.4'},
+                'web_config_server_url': 'tcp://config.test:22020',
+              });
+            }
+            if (request.url.path ==
+                '/api/v1/tenants/tenant-1/device-enrollment-keys') {
+              if (request.method == 'GET') {
+                return _jsonResponse([]);
+              }
+              return _jsonResponse({'bootstrap_token': 'bootstrap-token'}, 201);
+            }
+            return http.Response('{}', 404);
+          }),
+        );
+
+        await service.prepareCoreBootstrap(
+          accessToken: 'token',
+          workspaceId: 'tenant-1',
+        );
+        final createRequest = requests.singleWhere(
+          (request) => request.method == 'POST',
+        );
+        return (jsonDecode(createRequest.body)
+                as Map<String, dynamic>)['display_name']
+            as String;
+      }
+
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      expect(
+        await createKeyNameFor(TargetPlatform.android),
+        'Android Auto Key',
+      );
+      expect(
+        await createKeyNameFor(TargetPlatform.windows),
+        'Desktop Auto Key',
+      );
     },
   );
 
