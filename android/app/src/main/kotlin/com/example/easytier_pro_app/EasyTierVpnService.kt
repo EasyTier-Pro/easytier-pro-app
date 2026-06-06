@@ -46,11 +46,36 @@ class EasyTierVpnService : VpnService() {
             }
         } catch (error: Throwable) {
             Log.e(logTag, "VPN service command failed", error)
+            val action = intent?.action.orEmpty()
+            val instanceName = intent
+                ?.getStringExtra(extraInstanceName)
+                ?.trim()
+                .orEmpty()
+            val payload = mutableMapOf<String, Any?>(
+                "error" to (error.message ?: error.toString()),
+                "action" to action,
+            )
+            if (instanceName.isNotEmpty()) {
+                payload["instanceName"] = instanceName
+            }
             EasyTierFlutterBridge.emitFromService(
                 "error",
-                mapOf("error" to (error.message ?: error.toString())),
+                payload,
             )
-            stopVpn()
+            if (action == actionStart) {
+                if (instanceName.isNotEmpty()) {
+                    EasyTierFlutterBridge.emitFromService(
+                        "vpn_stopped",
+                        mapOf(
+                            "instanceName" to instanceName,
+                            "reason" to "start_failed",
+                        ),
+                    )
+                }
+                stopVpn(stopService = !configServerClientStarted)
+            } else {
+                stopVpn()
+            }
             START_NOT_STICKY
         }
     }
