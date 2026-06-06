@@ -958,19 +958,33 @@ cd /d "$installerDir"
     );
     if (event.type == CoreRuntimeEventTypes.vpnStarted) {
       final payload = _runtimeEventPayload(event);
+      final addresses = payload['addresses'] ?? const <String>[];
+      final routes = payload['routes'] ?? const <String>[];
+      final disallowedApplications =
+          payload['disallowedApplications'] ??
+          payload['disallowed_applications'] ??
+          const <String>[];
       _logger.info(
         'core.vpn',
         'Android VPN established',
         context: {
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
-          'addresses': payload['addresses'] ?? const <String>[],
-          'routes': payload['routes'] ?? const <String>[],
+          'tun_fd': payload['fd'] ?? payload['tunFd'] ?? '',
+          'addresses': addresses,
+          'address_count':
+              payload['addressCount'] ?? _payloadListLength(addresses),
+          'routes': routes,
+          'route_count': payload['routeCount'] ?? _payloadListLength(routes),
           'dns': payload['dns'] ?? payload['dnsServers'] ?? const <String>[],
-          'disallowed_applications':
-              payload['disallowedApplications'] ??
-              payload['disallowed_applications'] ??
-              const <String>[],
+          'disallowed_applications': disallowedApplications,
+          'disallowed_application_count':
+              payload['disallowedApplicationCount'] ??
+              _payloadListLength(disallowedApplications),
+          'package_name':
+              payload['packageName'] ?? payload['package_name'] ?? '',
+          'self_disallowed':
+              payload['selfDisallowed'] ?? payload['self_disallowed'] ?? '',
         },
       );
       _restoreRunningStatusAfterVpnRecovery();
@@ -1087,6 +1101,13 @@ cd /d "$installerDir"
 
   bool _isIntentionalAndroidRuntimeStop(String reason) {
     return reason == 'user_disconnect' || reason == 'revoked';
+  }
+
+  int _payloadListLength(Object? value) {
+    if (value is Iterable) {
+      return value.length;
+    }
+    return value == null ? 0 : 1;
   }
 
   void _restoreRunningStatusAfterVpnRecovery() {

@@ -239,11 +239,17 @@ class EasyTierVpnService : VpnService() {
             "vpn_started",
             mapOf(
                 "instanceName" to config.instanceName,
+                "fd" to fd,
                 "addresses" to config.addresses,
                 "routes" to config.routes,
                 "dnsServers" to config.dnsServers,
                 "mtu" to config.mtu,
                 "disallowedApplications" to config.disallowedApplications,
+                "packageName" to packageName,
+                "addressCount" to config.addresses.size,
+                "routeCount" to config.routes.size,
+                "disallowedApplicationCount" to config.disallowedApplications.size,
+                "selfDisallowed" to config.disallowedApplications.contains(packageName),
             ),
         )
     }
