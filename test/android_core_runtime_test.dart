@@ -233,6 +233,44 @@ void main() {
       });
     });
 
+    test('refreshes active VPN when same instance routes change', () async {
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_name': 'network-a',
+          'vpn_config': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.20.0.0/16'],
+          },
+        },
+      });
+      await _waitForCall(calls, 'startVpn');
+
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_name': 'network-a',
+          'vpn_config': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.30.0.0/16'],
+          },
+        },
+      });
+
+      await _waitForCallCount(calls, 'startVpn', 2);
+      final startVpnCalls = calls.where((call) => call.method == 'startVpn');
+      expect(startVpnCalls.last.arguments, {
+        'instanceName': 'network-a',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.30.0.0/16'],
+        },
+      });
+    });
+
     test('waits for VPN permission before starting pending instance', () async {
       vpnPrepared = false;
       final result = await runtime.ensureRunning(

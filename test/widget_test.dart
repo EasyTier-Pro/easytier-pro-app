@@ -9,6 +9,7 @@ import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
@@ -18,6 +19,48 @@ import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
+  testWidgets('android login waits until app resumes before polling token', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    final launcher = _FakeUrlLauncherPlatform();
+    final authService = _LoginFlowAuthService();
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    UrlLauncherPlatform.instance = launcher;
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FButton).first);
+      await tester.pumpAndSettle();
+
+      expect(launcher.launchCount, 1);
+      expect(authService.startDeviceAuthCount, 1);
+      expect(authService.completeDeviceAuthCount, 0);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      expect(authService.completeDeviceAuthCount, 0);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(authService.completeDeviceAuthCount, 1);
+    } finally {
+      UrlLauncherPlatform.instance = previousLauncher;
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {
@@ -1920,6 +1963,32 @@ void main() {
     expect(devices.single.removed, isFalse);
   });
 
+  test('console service reports host when DNS lookup fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      httpClient: MockClient((request) async {
+        throw http.ClientException(
+          "SocketException: Failed host lookup: '${request.url.host}' "
+          '(OS Error: No address associated with hostname, errno = 7)',
+          request.url,
+        );
+      }),
+    );
+
+    await expectLater(
+      service.startDeviceAuth(),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('api.console.easytier.net'), contains('无法解析')),
+        ),
+      ),
+    );
+  });
+
   test('console service preserves node operating system metadata', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -2370,6 +2439,164 @@ http.Response _jsonResponse(Object body, [int statusCode = 200]) {
     statusCode,
     headers: const {'content-type': 'application/json; charset=utf-8'},
   );
+}
+
+class _FakeUrlLauncherPlatform extends UrlLauncherPlatform {
+  int launchCount = 0;
+
+  @override
+  Null get linkDelegate => null;
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launchCount++;
+    return true;
+  }
+
+  @override
+  Future<bool> launch(
+    String url, {
+    required bool useSafariVC,
+    required bool useWebView,
+    required bool enableJavaScript,
+    required bool enableDomStorage,
+    required bool universalLinksOnly,
+    required Map<String, String> headers,
+    String? webOnlyWindowName,
+  }) async {
+    launchCount++;
+    return true;
+  }
+}
+
+class _LoginFlowAuthService implements AuthService {
+  int startDeviceAuthCount = 0;
+  int completeDeviceAuthCount = 0;
+
+  @override
+  Future<AuthSession?> restoreSession() async {
+    return null;
+  }
+
+  @override
+  Future<DeviceAuthInfo> startDeviceAuth() async {
+    startDeviceAuthCount++;
+    return const DeviceAuthInfo(
+      deviceCode: 'device-code',
+      userCode: 'USER-CODE',
+      verificationUri: 'https://auth.console.easytier.net/login/oauth/device',
+      verificationUriComplete:
+          'https://auth.console.easytier.net/login/oauth/device/test-code',
+      expiresIn: 600,
+      interval: 5,
+    );
+  }
+
+  @override
+  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) async {
+    completeDeviceAuthCount++;
+    return AuthSession(
+      user: const ConsoleUser(
+        email: 'tester@example.com',
+        displayName: 'Test User',
+        workspaces: <ConsoleWorkspace>[
+          ConsoleWorkspace(id: 'tenant-1', name: '涓汉绌洪棿'),
+        ],
+      ),
+      tokenSet: TokenSet(
+        accessToken: 'token',
+        tokenType: 'Bearer',
+        expiresIn: 3600,
+        obtainedAt: DateTime.utc(2026, 1, 1),
+      ),
+    );
+  }
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<List<ConsoleNetwork>> fetchNetworks({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return const <ConsoleNetwork>[];
+  }
+
+  @override
+  Future<List<ConsoleRegion>> fetchRegions({
+    required String accessToken,
+  }) async {
+    return const <ConsoleRegion>[];
+  }
+
+  @override
+  Future<ConsoleNetwork> createNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String name,
+    required List<String> regions,
+    String? ipv4Cidr,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> deleteNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ManagedDevice>> fetchManagedDevices({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return const <ManagedDevice>[];
+  }
+
+  @override
+  Future<List<NetworkDevice>> fetchNetworkDevices({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    return const <NetworkDevice>[];
+  }
+
+  @override
+  Future<AttachNetworkResult> attachDeviceToNetwork({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+    required String deviceId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> removeNetworkNode({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return const CoreBootstrapConfig(
+      bootstrapToken: 'bootstrap-token',
+      version: 'v1.0.0',
+      configServer: 'tcp://api.console.easytier.net:22020',
+    );
+  }
 }
 
 class _FakeAuthService implements AuthService {

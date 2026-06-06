@@ -29,6 +29,8 @@ class ConsoleAuthService implements AuthService {
         context: {'workspace_count': user.workspaces.length},
       );
       return AuthSession(user: user, tokenSet: tokenSet);
+    } on _ConsoleNetworkException {
+      rethrow;
     } on AuthException {
       _logger.warn('auth', 'Stored session invalid, clearing local token');
       await tokenStore.clear();
@@ -39,8 +41,9 @@ class ConsoleAuthService implements AuthService {
   @override
   Future<DeviceAuthInfo> startDeviceAuth() async {
     _logger.info('auth', 'Starting device authorization');
-    final response = await _httpClient.post(
+    final response = await _post(
       Uri.parse('$consoleBaseUrl/api/v1/auth/device'),
+      operation: 'startDeviceAuth',
       body: const {'client_id': '', 'scope': 'openid profile email'},
     );
 
@@ -78,8 +81,9 @@ class ConsoleAuthService implements AuthService {
     while (DateTime.now().toUtc().isBefore(deadline)) {
       await Future<void>.delayed(Duration(seconds: intervalSeconds));
 
-      final response = await _httpClient.post(
+      final response = await _post(
         Uri.parse('$consoleBaseUrl/api/v1/auth/device/token'),
+        operation: 'completeDeviceAuth',
         body: {
           'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
           'device_code': info.deviceCode,
@@ -144,8 +148,9 @@ class ConsoleAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
-    final response = await _httpClient.get(
+    final response = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/networks'),
+      operation: 'fetchNetworks',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -164,8 +169,9 @@ class ConsoleAuthService implements AuthService {
   Future<List<ConsoleRegion>> fetchRegions({
     required String accessToken,
   }) async {
-    final response = await _httpClient.get(
+    final response = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/regions'),
+      operation: 'fetchRegions',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -213,8 +219,9 @@ class ConsoleAuthService implements AuthService {
       body['ipv4_cidr'] = trimmedIPv4Cidr;
     }
 
-    final response = await _httpClient.post(
+    final response = await _post(
       Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/networks'),
+      operation: 'createNetwork',
       headers: {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
@@ -239,10 +246,11 @@ class ConsoleAuthService implements AuthService {
     required String workspaceId,
     required String networkId,
   }) async {
-    final response = await _httpClient.delete(
+    final response = await _delete(
       Uri.parse(
         '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId',
       ),
+      operation: 'deleteNetwork',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -277,8 +285,9 @@ class ConsoleAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
-    final response = await _httpClient.get(
+    final response = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/tenants/$workspaceId/devices'),
+      operation: 'fetchManagedDevices',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -322,10 +331,11 @@ class ConsoleAuthService implements AuthService {
     required String workspaceId,
     required String networkId,
   }) async {
-    final response = await _httpClient.get(
+    final response = await _get(
       Uri.parse(
         '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId/nodes',
       ),
+      operation: 'fetchNetworkDevices',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -410,10 +420,11 @@ class ConsoleAuthService implements AuthService {
     required String networkId,
     required String deviceId,
   }) async {
-    final response = await _httpClient.post(
+    final response = await _post(
       Uri.parse(
         '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId/nodes',
       ),
+      operation: 'attachDeviceToNetwork',
       headers: {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
@@ -447,10 +458,11 @@ class ConsoleAuthService implements AuthService {
     required String workspaceId,
     required String nodeId,
   }) async {
-    final response = await _httpClient.post(
+    final response = await _post(
       Uri.parse(
         '$consoleBaseUrl/api/v1/tenants/$workspaceId/nodes/$nodeId/remove',
       ),
+      operation: 'removeNetworkNode',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -469,8 +481,9 @@ class ConsoleAuthService implements AuthService {
       'Preparing core bootstrap payload',
       context: {'workspace_id': workspaceId},
     );
-    final releaseResponse = await _httpClient.get(
+    final releaseResponse = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/releases/latest'),
+      operation: 'prepareCoreBootstrap.release',
     );
     if (!releaseResponse.statusCode.toString().startsWith('2')) {
       throw AuthException(
@@ -495,10 +508,11 @@ class ConsoleAuthService implements AuthService {
     }
     final version = rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
 
-    final keysResponse = await _httpClient.get(
+    final keysResponse = await _get(
       Uri.parse(
         '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',
       ),
+      operation: 'prepareCoreBootstrap.keys',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     if (!keysResponse.statusCode.toString().startsWith('2')) {
@@ -519,10 +533,11 @@ class ConsoleAuthService implements AuthService {
     String bootstrapToken;
     if (key.isNotEmpty) {
       final keyId = key['id']!.toString();
-      final secretResponse = await _httpClient.get(
+      final secretResponse = await _get(
         Uri.parse(
           '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys/$keyId/secret',
         ),
+        operation: 'prepareCoreBootstrap.keySecret',
         headers: {'Authorization': 'Bearer $accessToken'},
       );
       if (secretResponse.statusCode.toString().startsWith('2')) {
@@ -540,10 +555,11 @@ class ConsoleAuthService implements AuthService {
         'auth.bootstrap',
         'No reusable key available, creating a new enrollment key',
       );
-      final createResponse = await _httpClient.post(
+      final createResponse = await _post(
         Uri.parse(
           '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys',
         ),
+        operation: 'prepareCoreBootstrap.createKey',
         headers: {
           'Authorization': 'Bearer $accessToken',
           'Content-Type': 'application/json',
@@ -579,9 +595,118 @@ class ConsoleAuthService implements AuthService {
     );
   }
 
+  Future<http.Response> _get(
+    Uri uri, {
+    required String operation,
+    Map<String, String>? headers,
+  }) {
+    return _request(
+      operation: operation,
+      uri: uri,
+      send: () => _httpClient.get(uri, headers: headers),
+    );
+  }
+
+  Future<http.Response> _post(
+    Uri uri, {
+    required String operation,
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    return _request(
+      operation: operation,
+      uri: uri,
+      send: () => _httpClient.post(uri, headers: headers, body: body),
+    );
+  }
+
+  Future<http.Response> _delete(
+    Uri uri, {
+    required String operation,
+    Map<String, String>? headers,
+  }) {
+    return _request(
+      operation: operation,
+      uri: uri,
+      send: () => _httpClient.delete(uri, headers: headers),
+    );
+  }
+
+  Future<http.Response> _request({
+    required String operation,
+    required Uri uri,
+    required Future<http.Response> Function() send,
+  }) async {
+    _logger.debug(
+      'auth.http',
+      'Console API request start',
+      context: {'operation': operation, 'host': uri.host, 'path': uri.path},
+    );
+
+    try {
+      final response = await send();
+      _logger.debug(
+        'auth.http',
+        'Console API request completed',
+        context: {
+          'operation': operation,
+          'host': uri.host,
+          'path': uri.path,
+          'status_code': response.statusCode,
+        },
+      );
+      return response;
+    } on http.ClientException catch (error) {
+      _throwNetworkAuthException(operation, uri, error);
+    } on SocketException catch (error) {
+      _throwNetworkAuthException(operation, uri, error);
+    } on IOException catch (error) {
+      _throwNetworkAuthException(operation, uri, error);
+    }
+  }
+
+  Never _throwNetworkAuthException(String operation, Uri uri, Object error) {
+    final message = _networkErrorMessage(operation, uri, error);
+    _logger.error(
+      'auth.http',
+      'Console API request failed',
+      context: {
+        'operation': operation,
+        'url': _redactedUri(uri),
+        'host': uri.host,
+        'error': error.toString(),
+      },
+    );
+    throw _ConsoleNetworkException(
+      message,
+      operation: operation,
+      host: uri.host,
+      cause: error.toString(),
+    );
+  }
+
+  static String _networkErrorMessage(String operation, Uri uri, Object error) {
+    final host = uri.host.trim().isEmpty ? uri.toString() : uri.host.trim();
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('no address associated') ||
+        lower.contains('failed host lookup')) {
+      return '网络请求失败：无法解析 $host。请检查模拟器 DNS、代理/VPN，或控制台地址配置。';
+    }
+    return '网络请求失败：无法连接 $host（$operation）：$text';
+  }
+
+  static String _redactedUri(Uri uri) {
+    if (uri.query.isEmpty) {
+      return uri.toString();
+    }
+    return uri.replace(query: '<redacted>').toString();
+  }
+
   Future<ConsoleUser> _fetchCurrentUser(String accessToken) async {
-    final response = await _httpClient.get(
+    final response = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/auth/me'),
+      operation: 'fetchCurrentUser',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -688,4 +813,17 @@ class ConsoleAuthService implements AuthService {
         ? 'Android Auto Key'
         : 'Desktop Auto Key';
   }
+}
+
+class _ConsoleNetworkException extends AuthException {
+  const _ConsoleNetworkException(
+    super.message, {
+    required this.operation,
+    required this.host,
+    required this.cause,
+  });
+
+  final String operation;
+  final String host;
+  final String cause;
 }

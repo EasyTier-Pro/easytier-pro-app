@@ -8,10 +8,12 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.IOException
 
 class EasyTierVpnService : VpnService() {
     private var tunFd: Int? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
+    private var activeInstanceName: String? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
@@ -48,12 +50,15 @@ class EasyTierVpnService : VpnService() {
 
         val addresses = intent.getStringArrayListExtra(extraAddresses) ?: arrayListOf()
         require(addresses.isNotEmpty()) { "VPN address is required before establishing TUN" }
+
+        stopVpn(stopService = false)
         Log.i(logTag, "Establishing VPN for instance=$instanceName addresses=${addresses.size}")
 
         startForeground(notificationId, notification())
 
         val builder = Builder()
             .setSession("EasyTier Pro")
+            .addDisallowedApplication(packageName)
 
         val mtu = intent.getIntExtra(extraMtu, 0)
         if (mtu > 0) {
@@ -83,7 +88,9 @@ class EasyTierVpnService : VpnService() {
         val descriptor = builder.establish() ?: throw IllegalStateException("VpnService establish returned null")
         tunDescriptor = descriptor
         val fd = descriptor.detachFd()
+        tunDescriptor = null
         tunFd = fd
+        activeInstanceName = instanceName
         EasyTierNative.setTunFd(instanceName, fd)
         Log.i(logTag, "Injected TUN fd for instance=$instanceName")
         EasyTierFlutterBridge.emitFromService(
@@ -92,17 +99,33 @@ class EasyTierVpnService : VpnService() {
         )
     }
 
-    private fun stopVpn() {
+    private fun stopVpn(stopService: Boolean = true) {
         val fd = tunFd
+        val instanceName = activeInstanceName
         tunFd = null
+        activeInstanceName = null
         tunDescriptor?.close()
         tunDescriptor = null
         if (fd != null) {
-            Log.i(logTag, "Stopped VPN fd=$fd")
-            EasyTierFlutterBridge.emitFromService("vpn_stopped", mapOf("fd" to fd))
+            closeDetachedTunFd(fd)
+            Log.i(logTag, "Stopped VPN fd=$fd instance=$instanceName")
+            EasyTierFlutterBridge.emitFromService(
+                "vpn_stopped",
+                mapOf("fd" to fd, "instanceName" to instanceName),
+            )
         }
         stopForegroundCompat()
-        stopSelf()
+        if (stopService) {
+            stopSelf()
+        }
+    }
+
+    private fun closeDetachedTunFd(fd: Int) {
+        try {
+            ParcelFileDescriptor.adoptFd(fd).close()
+        } catch (error: IOException) {
+            Log.w(logTag, "Failed to close detached TUN fd=$fd", error)
+        }
     }
 
     private fun notification(): Notification {

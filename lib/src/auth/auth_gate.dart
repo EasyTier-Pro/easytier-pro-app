@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:forui/forui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -35,17 +36,42 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   AuthStage _stage = AuthStage.checking;
   DeviceAuthInfo? _deviceAuthInfo;
+  DeviceAuthInfo? _pendingApprovalInfo;
   AuthSession? _session;
   String? _statusMessage;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  bool _approvalWaitInFlight = false;
+  bool _waitForBrowserReturn = false;
+  int _approvalGeneration = 0;
   final AppLogger _logger = AppLogger.instance;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_bootstrap());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    _logger.debug(
+      'auth.gate',
+      'App lifecycle changed',
+      context: {'state': state.name},
+    );
+    if (state == AppLifecycleState.resumed) {
+      _startApprovalPollingIfReady();
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -81,8 +107,29 @@ class _AuthGateState extends State<AuthGate> {
         _statusMessage = '请在浏览器完成授权，应用会自动继续登录。';
       });
 
-      await _openBrowser(info.verificationUriComplete);
-      unawaited(_waitForApproval(info));
+      final generation = ++_approvalGeneration;
+      setState(() {
+        _pendingApprovalInfo = info;
+        _waitForBrowserReturn = _shouldWaitForBrowserReturn;
+        _statusMessage = _waitForBrowserReturn
+            ? '请在浏览器完成授权，完成后返回 EasyTier Pro 继续登录。'
+            : '请在浏览器完成授权，应用会自动继续登录。';
+      });
+
+      final opened = await _openBrowser(info.verificationUriComplete);
+      if (!opened) {
+        _waitForBrowserReturn = false;
+        _startApprovalPollingIfReady(generation: generation);
+        return;
+      }
+      if (!_waitForBrowserReturn) {
+        _startApprovalPollingIfReady(generation: generation);
+      } else {
+        _logger.info(
+          'auth.gate',
+          'Deferring device authorization polling until app resumes',
+        );
+      }
     } catch (error) {
       _logger.error(
         'auth.gate',
@@ -93,24 +140,34 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  Future<void> _waitForApproval(DeviceAuthInfo info) async {
+  Future<void> _waitForApproval(DeviceAuthInfo info, int generation) async {
     try {
       final session = await widget.authService.completeDeviceAuth(info);
+      if (generation != _approvalGeneration) {
+        return;
+      }
       _setSession(session);
     } catch (error) {
+      if (generation != _approvalGeneration) {
+        return;
+      }
       _logger.error(
         'auth.gate',
         'Authorization completion failed',
         context: {'error': error.toString()},
       );
       _setError(error.toString());
+    } finally {
+      if (generation == _approvalGeneration) {
+        _approvalWaitInFlight = false;
+      }
     }
   }
 
-  Future<void> _openBrowser(String url) async {
+  Future<bool> _openBrowser(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
-      return;
+      return false;
     }
 
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -119,6 +176,29 @@ class _AuthGateState extends State<AuthGate> {
         _statusMessage = '未能自动打开浏览器，请手动复制链接完成授权。';
       });
     }
+    return opened;
+  }
+
+  void _startApprovalPollingIfReady({int? generation}) {
+    final info = _pendingApprovalInfo;
+    if (info == null ||
+        _stage != AuthStage.waitingForApproval ||
+        _approvalWaitInFlight) {
+      return;
+    }
+    if (_waitForBrowserReturn && _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final activeGeneration = generation ?? _approvalGeneration;
+    _approvalWaitInFlight = true;
+    _waitForBrowserReturn = false;
+    _logger.info(
+      'auth.gate',
+      'Starting device authorization polling',
+      context: {'generation': activeGeneration},
+    );
+    unawaited(_waitForApproval(info, activeGeneration));
   }
 
   Future<void> _logout() async {
@@ -132,6 +212,10 @@ class _AuthGateState extends State<AuthGate> {
     setState(() {
       _session = null;
       _deviceAuthInfo = null;
+      _pendingApprovalInfo = null;
+      _approvalWaitInFlight = false;
+      _waitForBrowserReturn = false;
+      _approvalGeneration++;
       _stage = AuthStage.loginRequired;
     });
   }
@@ -152,6 +236,9 @@ class _AuthGateState extends State<AuthGate> {
       _stage = AuthStage.authenticated;
       _session = session;
       _deviceAuthInfo = null;
+      _pendingApprovalInfo = null;
+      _approvalWaitInFlight = false;
+      _waitForBrowserReturn = false;
       _statusMessage = null;
     });
   }
@@ -168,6 +255,9 @@ class _AuthGateState extends State<AuthGate> {
     );
     setState(() {
       _stage = AuthStage.error;
+      _pendingApprovalInfo = null;
+      _approvalWaitInFlight = false;
+      _waitForBrowserReturn = false;
       _statusMessage = message.replaceFirst('Exception: ', '');
     });
   }
@@ -186,6 +276,10 @@ class _AuthGateState extends State<AuthGate> {
       _stage = stage;
       _statusMessage = statusMessage;
     });
+  }
+
+  bool get _shouldWaitForBrowserReturn {
+    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   }
 
   @override
