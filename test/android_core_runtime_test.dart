@@ -76,7 +76,7 @@ void main() {
       expect(instance.peers, hasLength(1));
       expect(instance.peers.single['hostname'], 'node-a');
       expect(instance.vpnConfig?['addresses'], ['10.1.0.1/24']);
-      expect(instance.vpnConfig?['routes'], ['10.2.0.0/24']);
+      expect(instance.vpnConfig?['routes'], ['10.1.0.0/24', '10.2.0.0/24']);
       expect(instance.vpnConfig?['dns'], ['10.1.0.53']);
     });
 
@@ -129,7 +129,40 @@ void main() {
       });
 
       expect(config['addresses'], ['10.1.0.1/24']);
-      expect(config['routes'], ['10.8.0.0/16', '10.9.0.0/16']);
+      expect(config['routes'], ['10.1.0.0/24', '10.8.0.0/16', '10.9.0.0/16']);
+    });
+
+    test('parses upstream running info map for Android VPN config', () {
+      final snapshot = AndroidNetworkInfoSnapshot.parse(
+        jsonEncode({
+          'map': {
+            'network-a': {
+              'running': true,
+              'my_node_info': {
+                'virtual_ipv4': {
+                  'address': {'addr': 168427522},
+                  'network_length': 24,
+                },
+              },
+              'routes': [
+                {
+                  'proxy_cidrs': ['10.20.0.0/16', '172.16.8.0/24'],
+                },
+              ],
+            },
+          },
+        }),
+      );
+
+      final instance = snapshot.instanceNamed('network-a');
+      expect(instance, isNotNull);
+      expect(instance!.running, isTrue);
+      expect(instance.vpnConfig?['addresses'], ['10.10.0.2/24']);
+      expect(instance.vpnConfig?['routes'], [
+        '10.10.0.0/24',
+        '10.20.0.0/16',
+        '172.16.8.0/24',
+      ]);
     });
   });
 
@@ -234,7 +267,7 @@ void main() {
         'instanceName': 'network-a',
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
-          'routes': ['10.20.0.0/16'],
+          'routes': ['10.10.0.0/24', '10.20.0.0/16'],
           'dns': ['10.10.0.1'],
         },
       });
@@ -257,11 +290,54 @@ void main() {
         'instanceName': 'network-a',
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
-          'routes': ['10.20.0.0/16'],
+          'routes': ['10.10.0.0/24', '10.20.0.0/16'],
           'dns': ['10.10.0.1'],
         },
       });
     });
+
+    test(
+      'falls back to the only collected instance for id-only events',
+      () async {
+        networkInfos = {
+          'map': {
+            'network-a': {
+              'running': true,
+              'my_node_info': {
+                'virtual_ipv4': {
+                  'address': {'addr': 168427522},
+                  'network_length': 24,
+                },
+              },
+              'routes': [
+                {
+                  'proxy_cidrs': ['10.20.0.0/16'],
+                },
+              ],
+            },
+          },
+        };
+
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': '8af8e8c8-4dd4-4f82-8e74-aaaaaaaaaaaa',
+          },
+        });
+
+        final startVpn = await _waitForCall(calls, 'startVpn');
+        expect(startVpn.arguments, {
+          'instanceName': 'network-a',
+          'vpnConfig': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.10.0.0/24', '10.20.0.0/16'],
+            'dns': <String>[],
+          },
+        });
+      },
+    );
 
     test('reports failed config server events without starting VPN', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
@@ -285,6 +361,43 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
     });
+
+    test(
+      'reports missing VPN address without exposing long id in message',
+      () async {
+        networkInfos = {
+          'map': {
+            'network-a': {
+              'running': true,
+              'routes': [
+                {
+                  'proxy_cidrs': ['10.20.0.0/16'],
+                },
+              ],
+            },
+          },
+        };
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        final eventFuture = runtime.events.firstWhere(
+          (event) => event.type == CoreRuntimeEventTypes.error,
+        );
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': '8af8e8c8-4dd4-4f82-8e74-aaaaaaaaaaaa',
+          },
+        });
+
+        final event = await eventFuture;
+        expect(event.data['error'], 'Android VPN 缺少虚拟 IP 配置');
+        expect(event.data['instance_name'], 'network-a');
+        expect(event.data['instance_key'], contains('8af8e8c8'));
+        expect(event.data['known_instances'], ['network-a']);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
+      },
+    );
 
     test(
       'starts VPN again after native stopped event clears active state',
@@ -373,7 +486,8 @@ void main() {
         'instanceName': 'network-a',
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
-          'routes': ['10.30.0.0/16'],
+          'routes': ['10.10.0.0/24', '10.30.0.0/16'],
+          'dns': <String>[],
         },
       });
     });

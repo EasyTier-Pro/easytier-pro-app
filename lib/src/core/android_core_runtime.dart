@@ -417,9 +417,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         CoreRuntimeEvent(
           type: CoreRuntimeEventTypes.error,
           data: {
-            'error': 'Android VPN 缺少 $instanceKey 的虚拟 IP 配置',
+            'error': 'Android VPN 缺少虚拟 IP 配置',
+            'instance_key': instanceKey,
             'instance_name': target.instanceName,
             'instance_id': target.instanceId,
+            'known_instances': target.knownInstanceNames,
           },
         ),
       );
@@ -453,40 +455,60 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     final direct = _readMap(
       payloadMap['vpn_config'] ?? payloadMap['vpnConfig'],
     );
-    if (direct != null &&
-        _vpnConfigHasAddress(direct) &&
+    final directConfig = direct == null
+        ? null
+        : buildVpnConfigFromNetworkInfo(direct);
+    if (directConfig != null &&
+        _vpnConfigHasAddress(directConfig) &&
         instanceName.isNotEmpty) {
       return _ResolvedAndroidVpnTarget(
         instanceName: instanceName,
         instanceId: instanceId.isEmpty ? null : instanceId,
-        vpnConfig: direct,
+        vpnConfig: directConfig,
+        knownInstanceNames: const <String>[],
       );
     }
 
+    var knownInstanceNames = const <String>[];
+    AndroidNetworkInstanceInfo? lastMatchedInstance;
     for (var attempt = 0; attempt < 5; attempt++) {
       if (attempt > 0) {
         await Future<void>.delayed(const Duration(milliseconds: 400));
       }
       _cachedNetworkInfosAt = null;
       final snapshot = await _readNetworkInfoSnapshot();
+      knownInstanceNames = snapshot.instances.keys
+          .take(8)
+          .toList(growable: false);
       final instance = snapshot.instanceMatching(
         name: instanceName.isEmpty ? instanceKey : instanceName,
         id: instanceId,
       );
+      if (instance != null) {
+        lastMatchedInstance = instance;
+      }
       final config = instance?.vpnConfig;
       if (config != null && _vpnConfigHasAddress(config)) {
         return _ResolvedAndroidVpnTarget(
           instanceName: instance!.name,
           instanceId: instance.id ?? instanceId,
           vpnConfig: config,
+          knownInstanceNames: knownInstanceNames,
         );
       }
     }
 
     return _ResolvedAndroidVpnTarget(
-      instanceName: instanceName.isEmpty ? instanceKey : instanceName,
-      instanceId: instanceId.isEmpty ? null : instanceId,
-      vpnConfig: direct ?? const <String, Object?>{},
+      instanceName:
+          lastMatchedInstance?.name ??
+          (instanceName.isEmpty ? instanceKey : instanceName),
+      instanceId:
+          lastMatchedInstance?.id ?? (instanceId.isEmpty ? null : instanceId),
+      vpnConfig:
+          directConfig ??
+          lastMatchedInstance?.vpnConfig ??
+          const <String, Object?>{},
+      knownInstanceNames: knownInstanceNames,
     );
   }
 
@@ -576,13 +598,17 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       if (nested is Map) {
         return _cidrFromValue(nested);
       }
+      final ipv4Inet = _ipv4InetCidrFromMap(map);
+      if (ipv4Inet.isNotEmpty) {
+        return ipv4Inet;
+      }
       final cidr = _firstNonEmptyString([
         map['cidr'],
         map['ipv4_cidr'],
         map['ipv4Cidr'],
         map['destination'],
         map['dest'],
-        map['address'],
+        _readScalarString(map['address']),
         map['ip'],
         map['ipv4'],
       ]);
@@ -603,6 +629,128 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     return _readString(value);
   }
 
+  static String _ipv4InetCidrFromMap(Map<String, Object?> map) {
+    final address = _ipv4AddressFromValue(map['address'] ?? map['addr']);
+    if (address == null || address.isEmpty) {
+      return '';
+    }
+    if (address.contains('/')) {
+      return address;
+    }
+    final prefix = _firstNonEmptyString([
+      map['network_length'],
+      map['networkLength'],
+      map['prefix'],
+      map['prefix_length'],
+      map['prefixLength'],
+      map['mask'],
+    ]);
+    return '$address/${prefix ?? 32}';
+  }
+
+  static String? _ipv4AddressFromValue(Object? value) {
+    if (value is Map) {
+      final map = _stringObjectMap(value);
+      final numeric = _readIntValue(map['addr'] ?? map['value']);
+      if (numeric != null) {
+        return _ipv4FromUint32(numeric);
+      }
+      return _firstNonEmptyString([map['address'], map['ip'], map['ipv4']]);
+    }
+    final numeric = _readIntValue(value);
+    if (numeric != null) {
+      return _ipv4FromUint32(numeric);
+    }
+    return _readScalarString(value);
+  }
+
+  static String _ipv4FromUint32(int value) {
+    final unsigned = value & 0xffffffff;
+    return [
+      (unsigned >> 24) & 0xff,
+      (unsigned >> 16) & 0xff,
+      (unsigned >> 8) & 0xff,
+      unsigned & 0xff,
+    ].join('.');
+  }
+
+  static int? _readIntValue(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(_readString(value));
+  }
+
+  static String? _readScalarString(Object? value) {
+    if (value is Map || value is List) {
+      return null;
+    }
+    final text = _readString(value);
+    return text.isEmpty ? null : text;
+  }
+
+  static List<String> _readRouteCidrs(Object? value) {
+    final cidrs = <String>{};
+    for (final item in _readList(value)) {
+      if (item is Map) {
+        final map = _stringObjectMap(item);
+        cidrs.addAll(_readCidrList(map['proxy_cidrs'] ?? map['proxyCidrs']));
+        final cidr = _cidrFromValue(map);
+        if (cidr.isNotEmpty) {
+          cidrs.add(cidr);
+        }
+      } else {
+        final cidr = _cidrFromValue(item);
+        if (cidr.isNotEmpty) {
+          cidrs.add(cidr);
+        }
+      }
+    }
+    return cidrs.toList(growable: false);
+  }
+
+  static String? _networkRouteFromAddressCidr(String value) {
+    final text = value.trim();
+    final slashIndex = text.indexOf('/');
+    if (slashIndex <= 0 || slashIndex == text.length - 1) {
+      return null;
+    }
+    final addressText = text.substring(0, slashIndex);
+    final prefix = int.tryParse(text.substring(slashIndex + 1));
+    if (prefix == null || prefix < 0 || prefix > 32) {
+      return null;
+    }
+    final octets = addressText.split('.');
+    if (octets.length != 4) {
+      return null;
+    }
+    var address = 0;
+    for (final octet in octets) {
+      final value = int.tryParse(octet);
+      if (value == null || value < 0 || value > 255) {
+        return null;
+      }
+      address = (address << 8) | value;
+    }
+    final mask = prefix == 0 ? 0 : (0xffffffff << (32 - prefix)) & 0xffffffff;
+    final network = address & mask;
+    return '${_ipv4FromUint32(network)}/$prefix';
+  }
+
+  static List<String> _networkRoutesFromAddressCidrs(Iterable<String> values) {
+    final routes = <String>[];
+    for (final value in values) {
+      final route = _networkRouteFromAddressCidr(value);
+      if (route != null) {
+        routes.add(route);
+      }
+    }
+    return routes;
+  }
+
   static Map<String, Object?> buildVpnConfigFromNetworkInfo(
     Map<String, Object?> json,
   ) {
@@ -614,7 +762,12 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
     }
 
+    final myNodeInfo = _readMap(json['my_node_info'] ?? json['myNodeInfo']);
     final addresses = <String>{
+      if (myNodeInfo != null)
+        ..._readCidrList(
+          myNodeInfo['virtual_ipv4'] ?? myNodeInfo['virtualIpv4'],
+        ),
       ..._readCidrList(json['addresses']),
       ..._readCidrList(json['address']),
       ..._readCidrList(json['ipv4']),
@@ -632,14 +785,15 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     };
 
     final routes = <String>{
-      ..._readCidrList(json['routes']),
-      ..._readCidrList(json['route']),
-      ..._readCidrList(json['ipv4_routes']),
-      ..._readCidrList(json['ipv4Routes']),
-      ..._readCidrList(json['peer_routes']),
-      ..._readCidrList(json['peerRoutes']),
-      ..._readCidrList(json['route_infos']),
-      ..._readCidrList(json['routeInfos']),
+      ..._networkRoutesFromAddressCidrs(addresses),
+      ..._readRouteCidrs(json['routes']),
+      ..._readRouteCidrs(json['route']),
+      ..._readRouteCidrs(json['ipv4_routes']),
+      ..._readRouteCidrs(json['ipv4Routes']),
+      ..._readRouteCidrs(json['peer_routes']),
+      ..._readRouteCidrs(json['peerRoutes']),
+      ..._readRouteCidrs(json['route_infos']),
+      ..._readRouteCidrs(json['routeInfos']),
       for (final pair in _readList(json['peer_route_pairs']))
         _cidrFromValue(pair),
       for (final pair in _readList(json['peerRoutePairs']))
@@ -762,6 +916,9 @@ class AndroidNetworkInfoSnapshot {
         return instance;
       }
     }
+    if (instances.length == 1) {
+      return instances.values.single;
+    }
     return null;
   }
 
@@ -826,6 +983,7 @@ class AndroidNetworkInfoSnapshot {
     'items',
     'result',
     'networks',
+    'map',
   };
 
   static bool _looksLikeInstanceMap(Map<String, Object?> map) {
@@ -836,7 +994,11 @@ class AndroidNetworkInfoSnapshot {
         map.containsKey('instance_id') ||
         map.containsKey('instanceId') ||
         map.containsKey('error') ||
+        map.containsKey('error_msg') ||
+        map.containsKey('errorMessage') ||
         map.containsKey('last_error') ||
+        map.containsKey('my_node_info') ||
+        map.containsKey('myNodeInfo') ||
         map.containsKey('vpn_config') ||
         map.containsKey('vpnConfig') ||
         map.containsKey('peers') ||
@@ -976,9 +1138,11 @@ class _ResolvedAndroidVpnTarget {
     required this.instanceName,
     required this.instanceId,
     required this.vpnConfig,
+    required this.knownInstanceNames,
   });
 
   final String instanceName;
   final String? instanceId;
   final Map<String, Object?> vpnConfig;
+  final List<String> knownInstanceNames;
 }
