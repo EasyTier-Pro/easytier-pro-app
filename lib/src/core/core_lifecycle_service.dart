@@ -956,6 +956,27 @@ cd /d "$installerDir"
       'Runtime event received',
       context: {'type': event.type, ...event.data},
     );
+    if (event.type == CoreRuntimeEventTypes.vpnStarted ||
+        event.type == CoreRuntimeEventTypes.vpnConfigRefreshed) {
+      final payload = _runtimeEventPayload(event);
+      _logger.info(
+        'core.vpn',
+        event.type == CoreRuntimeEventTypes.vpnStarted
+            ? 'Android VPN established'
+            : 'Android VPN config refreshed',
+        context: {
+          'instance_name':
+              payload['instanceName'] ?? payload['instance_name'] ?? '',
+          'addresses': payload['addresses'] ?? const <String>[],
+          'routes': payload['routes'] ?? const <String>[],
+          'dns': payload['dns'] ?? payload['dnsServers'] ?? const <String>[],
+          'disallowed_applications':
+              payload['disallowedApplications'] ??
+              payload['disallowed_applications'] ??
+              const <String>[],
+        },
+      );
+    }
     if (event.type == CoreRuntimeEventTypes.vpnPermissionGranted &&
         _session != null &&
         status.value.phase == CoreRunPhase.needsVpnPermission) {
@@ -1012,6 +1033,11 @@ cd /d "$installerDir"
       CoreRunPhase.error ||
       CoreRunPhase.needsElevation => false,
     };
+  }
+
+  Map<String, Object?> _runtimeEventPayload(CoreRuntimeEvent event) {
+    final payload = event.data['payload'];
+    return payload is Map ? _stringObjectMap(payload) : event.data;
   }
 
   Future<void> _enqueue(Future<void> Function() action) {

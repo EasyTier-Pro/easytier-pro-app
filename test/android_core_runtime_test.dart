@@ -176,6 +176,53 @@ void main() {
       expect(config['disallowedApplications'], ['com.example.extra']);
     });
 
+    test('merges nested VPN config with outer peer and subnet routes', () {
+      final config = AndroidCoreRuntime.buildVpnConfigFromNetworkInfo({
+        'vpn_config': {
+          'addresses': ['10.10.0.2/32'],
+          'routes': ['10.30.0.0/16'],
+          'dns': ['10.10.0.53'],
+          'disallowedApplications': ['com.example.extra-a'],
+          'mtu': 1280,
+        },
+        'routes': [
+          {
+            'proxy_cidrs': ['10.20.0.0/16'],
+          },
+        ],
+        'peer_route_pairs': [
+          {
+            'route': {
+              'ipv4_addr': {
+                'address': {'addr': 168427523},
+                'network_length': 32,
+              },
+              'subnet_cidrs': ['192.168.50.0/24'],
+            },
+          },
+        ],
+        'proxy_cidrs': ['172.20.0.0/16'],
+        'dns_servers': ['10.10.0.54'],
+        'disallowed_applications': ['com.example.extra-b'],
+      });
+
+      expect(config['addresses'], ['10.10.0.2/32']);
+      expect(config['routes'], [
+        '10.10.0.2/32',
+        '10.30.0.0/16',
+        '10.20.0.0/16',
+        '10.10.0.3/32',
+        '192.168.50.0/24',
+        '172.20.0.0/16',
+      ]);
+      expect(config['dns'], ['10.10.0.53', '10.10.0.54']);
+      expect(config['disallowedApplications'], [
+        'com.example.extra-a',
+        'com.example.extra-b',
+      ]);
+      expect(config['mtu'], 1280);
+    });
+
     test('parses upstream running info map for Android VPN config', () {
       final snapshot = AndroidNetworkInfoSnapshot.parse(
         jsonEncode({

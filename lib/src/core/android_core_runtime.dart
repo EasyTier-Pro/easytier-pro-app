@@ -584,6 +584,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
               'addresses': config['addresses'],
               'routes': config['routes'],
               'dns': config['dns'],
+              'disallowedApplications': config['disallowedApplications'],
             },
           ),
         );
@@ -1011,15 +1012,13 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     Map<String, Object?> json,
   ) {
     final nested = _readMap(json['vpn_config'] ?? json['vpnConfig']);
-    if (nested != null) {
-      final nestedConfig = buildVpnConfigFromNetworkInfo(nested);
-      if (_vpnConfigHasAddressStatic(nestedConfig)) {
-        return nestedConfig;
-      }
-    }
+    final nestedConfig = nested == null
+        ? const <String, Object?>{}
+        : buildVpnConfigFromNetworkInfo(nested);
 
     final myNodeInfo = _readMap(json['my_node_info'] ?? json['myNodeInfo']);
     final addresses = <String>{
+      ..._readCidrList(nestedConfig['addresses'] ?? nestedConfig['address']),
       if (myNodeInfo != null)
         ..._readCidrList(
           myNodeInfo['virtual_ipv4'] ?? myNodeInfo['virtualIpv4'],
@@ -1042,6 +1041,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
     final routes = <String>{
       ..._networkRoutesFromAddressCidrs(addresses),
+      ..._readRouteCidrs(nestedConfig['routes'] ?? nestedConfig['route']),
       ..._readRouteCidrs(json['routes']),
       ..._readRouteCidrs(json['route']),
       ..._readRouteCidrs(json['ipv4_routes']),
@@ -1061,12 +1061,23 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     }..removeWhere((value) => value.isEmpty);
 
     final dns = <String>{
+      ..._readStringList(
+        nestedConfig['dns'] ??
+            nestedConfig['dns_servers'] ??
+            nestedConfig['dnsServers'],
+      ),
       ..._readStringList(json['dns']),
       ..._readStringList(json['dns_servers']),
       ..._readStringList(json['dnsServers']),
     };
 
     final disallowedApplications = <String>{
+      ..._readStringList(
+        nestedConfig['disallowedApplications'] ??
+            nestedConfig['disallowed_applications'] ??
+            nestedConfig['disallowedPackages'] ??
+            nestedConfig['disallowed_packages'],
+      ),
       ..._readStringList(json['disallowedApplications']),
       ..._readStringList(json['disallowed_applications']),
       ..._readStringList(json['disallowedPackages']),
@@ -1083,7 +1094,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         growable: false,
       );
     }
-    final mtu = json['mtu'];
+    final mtu = json['mtu'] ?? nestedConfig['mtu'];
     if (mtu is num) {
       config['mtu'] = mtu.toInt();
     } else {
@@ -1093,15 +1104,6 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
     }
     return config;
-  }
-
-  static bool _vpnConfigHasAddressStatic(Map<String, Object?> config) {
-    return _readString(config['address']).isNotEmpty ||
-        _readString(config['ipv4']).isNotEmpty ||
-        _readString(config['virtual_ip']).isNotEmpty ||
-        _readString(config['cidr']).isNotEmpty ||
-        _readString(config['ipv4_cidr']).isNotEmpty ||
-        _readList(config['addresses']).isNotEmpty;
   }
 
   static String buildConfigServerClientUrl(
