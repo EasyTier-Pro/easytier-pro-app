@@ -1,6 +1,8 @@
 package com.example.easytier_pro_app
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -103,6 +105,81 @@ class EasyTierVpnStartConfigInstrumentedTest {
         }
     }
 
+    @Test
+    fun configuresNonBlockingTunRoutesAndDisallowedApplications() {
+        val builder = RecordingVpnBuilderOperations()
+        val config = AndroidVpnStartConfig(
+            instanceName = "network-a",
+            addresses = listOf("10.10.0.2/24"),
+            routes = listOf(
+                "10.10.0.0/24",
+                "10.2.0.0/24->192.168.2.0/24",
+            ),
+            dnsServers = listOf("10.10.0.53"),
+            disallowedApplications = listOf(context.packageName),
+            mtu = 1280,
+        )
+
+        EasyTierVpnBuilderConfigurator.configure(
+            builder,
+            config,
+            sdkInt = Build.VERSION_CODES.Q,
+        )
+
+        assertEquals(
+            listOf(
+                "setSession:EasyTier Pro",
+                "setBlocking:false",
+                "addDisallowedApplication:${context.packageName}",
+                "setMtu:1280",
+                "addAddress:10.10.0.2/24",
+                "addRoute:10.10.0.0/24",
+                "addRoute:192.168.2.0/24",
+                "addDnsServer:10.10.0.53",
+                "setMetered:false",
+            ),
+            builder.operations,
+        )
+    }
+
+    @Test
+    fun ignoresUnknownDisallowedApplicationsWhenConfiguringBuilder() {
+        val builder = RecordingVpnBuilderOperations(
+            unknownApplications = setOf("com.example.missing"),
+        )
+        val ignored = mutableListOf<String>()
+
+        EasyTierVpnBuilderConfigurator.configure(
+            builder,
+            AndroidVpnStartConfig(
+                instanceName = "network-a",
+                addresses = listOf("10.10.0.2/24"),
+                routes = emptyList(),
+                dnsServers = emptyList(),
+                disallowedApplications = listOf(
+                    context.packageName,
+                    "com.example.missing",
+                ),
+                mtu = 0,
+            ),
+            sdkInt = Build.VERSION_CODES.P,
+        ) { application, _ ->
+            ignored.add(application)
+        }
+
+        assertEquals(listOf("com.example.missing"), ignored)
+        assertEquals(
+            listOf(
+                "setSession:EasyTier Pro",
+                "setBlocking:false",
+                "addDisallowedApplication:${context.packageName}",
+                "addDisallowedApplication:com.example.missing",
+                "addAddress:10.10.0.2/24",
+            ),
+            builder.operations,
+        )
+    }
+
     private fun assertFailsWithMessage(
         expectedMessage: String,
         action: () -> Unit,
@@ -114,5 +191,46 @@ class EasyTierVpnStartConfigInstrumentedTest {
             return
         }
         throw AssertionError("Expected IllegalArgumentException containing $expectedMessage")
+    }
+
+    private class RecordingVpnBuilderOperations(
+        private val unknownApplications: Set<String> = emptySet(),
+    ) : EasyTierVpnBuilderOperations {
+        val operations = mutableListOf<String>()
+
+        override fun setSession(session: String) {
+            operations.add("setSession:$session")
+        }
+
+        override fun setBlocking(blocking: Boolean) {
+            operations.add("setBlocking:$blocking")
+        }
+
+        override fun addDisallowedApplication(packageName: String) {
+            operations.add("addDisallowedApplication:$packageName")
+            if (packageName in unknownApplications) {
+                throw PackageManager.NameNotFoundException(packageName)
+            }
+        }
+
+        override fun setMtu(mtu: Int) {
+            operations.add("setMtu:$mtu")
+        }
+
+        override fun addAddress(address: String, prefixLength: Int) {
+            operations.add("addAddress:$address/$prefixLength")
+        }
+
+        override fun addRoute(address: String, prefixLength: Int) {
+            operations.add("addRoute:$address/$prefixLength")
+        }
+
+        override fun addDnsServer(server: String) {
+            operations.add("addDnsServer:$server")
+        }
+
+        override fun setMetered(metered: Boolean) {
+            operations.add("setMetered:$metered")
+        }
     }
 }

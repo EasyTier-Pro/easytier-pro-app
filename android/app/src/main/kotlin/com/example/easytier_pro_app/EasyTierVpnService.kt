@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -200,36 +199,12 @@ class EasyTierVpnService : VpnService() {
         startForeground(notificationId, notification("Connected to ${config.instanceName}"))
 
         val builder = Builder()
-            .setSession("EasyTier Pro")
-
-        for (application in config.disallowedApplications) {
-            try {
-                builder.addDisallowedApplication(application)
-            } catch (error: PackageManager.NameNotFoundException) {
-                Log.w(logTag, "Ignoring unknown disallowed application=$application", error)
-            }
-        }
-
-        if (config.mtu > 0) {
-            builder.setMtu(config.mtu)
-        }
-
-        for (address in config.addresses) {
-            val cidr = EasyTierVpnStartConfigParser.parseCidr(address)
-            builder.addAddress(cidr.address, cidr.prefixLength)
-        }
-
-        for (route in config.routes) {
-            val cidr = EasyTierVpnStartConfigParser.parseCidr(route)
-            builder.addRoute(cidr.address, cidr.prefixLength)
-        }
-
-        for (server in config.dnsServers) {
-            builder.addDnsServer(server)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setMetered(false)
+        EasyTierVpnBuilderConfigurator.configure(
+            EasyTierVpnServiceBuilderOperations(builder),
+            config,
+            sdkInt = Build.VERSION.SDK_INT,
+        ) { application, error ->
+            Log.w(logTag, "Ignoring unknown disallowed application=$application", error)
         }
 
         val descriptor = builder.establish() ?: throw IllegalStateException("VpnService establish returned null")

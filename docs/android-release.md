@@ -62,7 +62,7 @@ cd android
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、config server callback JSON 关键字段解析、JNI 反射 native exception 解包、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
+当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、config server callback JSON 关键字段解析、JNI 反射 native exception 解包、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、VPN Builder non-blocking TUN 配置、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
 
 ## VPN 权限与后台运行说明
 
@@ -75,6 +75,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android Dart runtime 在本轮进程尚未确认 `VpnService.prepare()` 已授权前，不会仅凭 config server client 在线就报告 running；这会强制重新进入 VPN 授权/恢复路径，避免控制面在线但系统 VPN route 未恢复时出现假阳性。
 - Android runtime 主动停止时会清空 Dart 侧本轮 VPN 授权确认状态，避免退出登录、工作区失效或登录态失效后的 stop 过程中继续凭旧状态报告 running。
 - Android VPN 会从 `my_node_info.virtual_ipv4` 派生虚拟网自身路由，并从 `routes[].proxy_cidrs`、`peer_route_pairs`、按 peer/route id 分组的 map 形路由、runtime config 的 `routes`/`proxy_networks` 和常见子网路由别名下发虚拟网/子网路由；如果子网路由使用 `real_cidr->mapped_cidr` 映射，Android 系统 VPN route 使用右侧 mapped CIDR。如果 native 运行态同时返回嵌套 `vpn_config` 和外层 route 信息，Android runtime 会合并两侧配置，避免只拿到虚拟 IP 而丢失外层路由。
+- Android VPN interface 会以 non-blocking TUN fd 建立后再交给 EasyTier core，保持与上游 mobile launcher 对 raw fd 的使用方式一致，降低 Rust/tokio 数据面读写被阻塞 fd 卡住的风险。
 - Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
 - Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
 - Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS 和已归一化的 disallowed applications 上报错误，并只清理本次 VPN 启动状态；即使配置解析失败，失败 payload 也会补上 EasyTier Pro 自身包名，便于排查路由回环防护是否生效。如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
