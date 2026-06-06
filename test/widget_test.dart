@@ -324,6 +324,8 @@ void main() {
     expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
     _expectTrafficTimeLabelsFitInside(tester);
     _expectTrafficXAxisLabelsOutsideGraph(tester);
+    expect(find.text('15min'), findsNothing);
+    _expectDetailedTrafficChartMaxX(tester, 60);
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartYScalesFixed(tester);
     _expectTrafficChartAnimations(tester);
@@ -354,12 +356,28 @@ void main() {
     );
     expect(find.text('实时流量'), findsOneWidget);
     expect(find.text('实时流量详情'), findsNothing);
+    expect(find.text('1min'), findsOneWidget);
+    expect(find.text('15min'), findsOneWidget);
+    expect(find.text('60min'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
       findsNothing,
     );
     expect(find.byType(LineChart), findsNWidgets(2));
+    _expectDetailedTrafficChartMaxX(tester, 60);
     _expectTrafficChartAnimations(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-window-15min')),
+    );
+    await tester.pumpAndSettle();
+    _expectDetailedTrafficChartMaxX(tester, 900);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-window-60min')),
+    );
+    await tester.pumpAndSettle();
+    _expectDetailedTrafficChartMaxX(tester, 3600);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('traffic-fullscreen-close')),
@@ -1940,6 +1958,16 @@ void _expectTrafficChartYScalesFixed(WidgetTester tester) {
   for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
     expect(fixedScales, contains(chart.data.maxY));
   }
+}
+
+void _expectDetailedTrafficChartMaxX(WidgetTester tester, double expectedMaxX) {
+  final detailedCharts = tester
+      .widgetList<LineChart>(find.byType(LineChart))
+      .where((chart) => chart.data.titlesData.show)
+      .toList(growable: false);
+
+  expect(detailedCharts, hasLength(1));
+  expect(detailedCharts.single.data.maxX, expectedMaxX);
 }
 
 Finder _trafficTimeLabels() {

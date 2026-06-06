@@ -96,10 +96,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Set<String> _trafficPollNetworkIds = const <String>{};
   String? _peerPollNetworkId;
   final List<_TrafficHistoryPoint> _trafficHistory = <_TrafficHistoryPoint>[];
-  static const int _maxTrafficHistoryPoints = 60;
+  static const int _maxTrafficHistoryPoints = 1800;
   final Map<String, List<_TrafficHistoryPoint>> _networkTrafficHistories =
       <String, List<_TrafficHistoryPoint>>{};
-  static const int _maxNetworkTrafficHistoryPoints = 30;
+  static const int _maxNetworkTrafficHistoryPoints = 1800;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, bool> _networkInstanceReady = const <String, bool>{};

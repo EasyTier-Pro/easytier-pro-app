@@ -531,6 +531,7 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
   late final Animation<double> _overlayAnimation;
   late final AnimationController _fullscreenAnimationController;
   late final Animation<double> _fullscreenAnimation;
+  _TrafficTimeWindow _fullscreenTimeWindow = _TrafficTimeWindow.oneMinute;
 
   @override
   void initState() {
@@ -655,6 +656,8 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
       builder: (context) => _NetworkTrafficFullscreenOverlay(
         history: widget.history,
         animation: _fullscreenAnimation,
+        timeWindow: _fullscreenTimeWindow,
+        onTimeWindowChanged: _setFullscreenTimeWindow,
         onClose: _hideFullscreen,
       ),
     );
@@ -682,6 +685,15 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline>
     _fullscreenOverlay?.remove();
     _fullscreenOverlay = null;
     _fullscreenAnimationController.reset();
+  }
+
+  void _setFullscreenTimeWindow(_TrafficTimeWindow timeWindow) {
+    if (_fullscreenTimeWindow == timeWindow) {
+      return;
+    }
+
+    _fullscreenTimeWindow = timeWindow;
+    _fullscreenOverlay?.markNeedsBuild();
   }
 
   void _scheduleDetailOverlayUpdate() {
@@ -717,11 +729,15 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
   const _NetworkTrafficFullscreenOverlay({
     required this.history,
     required this.animation,
+    required this.timeWindow,
+    required this.onTimeWindowChanged,
     required this.onClose,
   });
 
   final List<_TrafficHistoryPoint> history;
   final Animation<double> animation;
+  final _TrafficTimeWindow timeWindow;
+  final ValueChanged<_TrafficTimeWindow> onTimeWindowChanged;
   final VoidCallback onClose;
 
   static const double _screenPadding = 24;
@@ -788,6 +804,11 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                                         ),
                                   ),
                                   const Spacer(),
+                                  _TrafficTimeWindowSelector(
+                                    selected: timeWindow,
+                                    onChanged: onTimeWindowChanged,
+                                  ),
+                                  const SizedBox(width: 10),
                                   FButton(
                                     key: const ValueKey<String>(
                                       'traffic-fullscreen-close',
@@ -805,6 +826,7 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                                 child: _NetworkTrafficDetailChart(
                                   history: history,
                                   showTitle: false,
+                                  timeWindow: timeWindow,
                                 ),
                               ),
                             ],
@@ -815,6 +837,90 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _TrafficTimeWindow {
+  oneMinute('1min', Duration(minutes: 1)),
+  fifteenMinutes('15min', Duration(minutes: 15)),
+  sixtyMinutes('60min', Duration(minutes: 60));
+
+  const _TrafficTimeWindow(this.label, this.duration);
+
+  final String label;
+  final Duration duration;
+}
+
+class _TrafficTimeWindowSelector extends StatelessWidget {
+  const _TrafficTimeWindowSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _TrafficTimeWindow selected;
+  final ValueChanged<_TrafficTimeWindow> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final window in _TrafficTimeWindow.values)
+              _TrafficTimeWindowButton(
+                window: window,
+                selected: window == selected,
+                onTap: () => onChanged(window),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrafficTimeWindowButton extends StatelessWidget {
+  const _TrafficTimeWindowButton({
+    required this.window,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _TrafficTimeWindow window;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      key: ValueKey<String>('traffic-window-${window.label}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF0F172A) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Text(
+            window.label,
+            style: TextStyle(
+              color: selected ? Colors.white : const Color(0xFF64748B),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -908,16 +1014,18 @@ class _NetworkTrafficDetailChart extends StatelessWidget {
   const _NetworkTrafficDetailChart({
     required this.history,
     this.showTitle = true,
+    this.timeWindow = _TrafficTimeWindow.oneMinute,
   });
 
   final List<_TrafficHistoryPoint> history;
   final bool showTitle;
+  final _TrafficTimeWindow timeWindow;
 
   @override
   Widget build(BuildContext context) {
     final downloadColor = const Color(0xFF16A34A);
     final uploadColor = const Color(0xFF2563EB);
-    final chart = _trafficSparklineData(history);
+    final chart = _trafficDetailChartData(history, timeWindow);
     final latest = chart.visibleHistory.last;
 
     return Column(
@@ -1008,6 +1116,8 @@ class _TrafficSparklineData {
     required this.maxX,
     required this.yMax,
     required this.hasTraffic,
+    required this.xAxisStartTime,
+    required this.xAxisEndTime,
   });
 
   final List<_TrafficHistoryPoint> visibleHistory;
@@ -1017,13 +1127,14 @@ class _TrafficSparklineData {
   final double maxX;
   final double yMax;
   final bool hasTraffic;
+  final DateTime xAxisStartTime;
+  final DateTime xAxisEndTime;
 }
 
 _TrafficSparklineData _trafficSparklineData(
   List<_TrafficHistoryPoint> history,
 ) {
-  const maxHistoryPoints =
-      _WorkspaceHomeViewState._maxNetworkTrafficHistoryPoints;
+  const maxHistoryPoints = 30;
   final visibleHistory = history.length > maxHistoryPoints
       ? history.sublist(history.length - maxHistoryPoints)
       : history;
@@ -1055,6 +1166,56 @@ _TrafficSparklineData _trafficSparklineData(
     maxX: maxX,
     yMax: yMax,
     hasTraffic: hasTraffic,
+    xAxisStartTime: visibleHistory.first.timestamp,
+    xAxisEndTime: visibleHistory.last.timestamp,
+  );
+}
+
+_TrafficSparklineData _trafficDetailChartData(
+  List<_TrafficHistoryPoint> history,
+  _TrafficTimeWindow timeWindow,
+) {
+  final latestTimestamp = history.last.timestamp;
+  final windowStart = latestTimestamp.subtract(timeWindow.duration);
+  final visibleHistory = history
+      .where((point) => !point.timestamp.isBefore(windowStart))
+      .toList(growable: false);
+  final chartHistory = visibleHistory.isEmpty
+      ? <_TrafficHistoryPoint>[history.last]
+      : visibleHistory;
+
+  final maxRate = chartHistory
+      .map((h) => math.max(h.downloadRate, h.uploadRate))
+      .fold(0.0, math.max);
+  final hasTraffic = maxRate > 0;
+  final yMax = _trafficSparklineYMax(maxRate);
+
+  const minX = 0.0;
+  final maxX = timeWindow.duration.inSeconds.toDouble();
+
+  double xFor(_TrafficHistoryPoint point) {
+    final seconds =
+        point.timestamp.difference(windowStart).inMilliseconds / 1000;
+    return seconds.clamp(minX, maxX).toDouble();
+  }
+
+  final downloadSpots = <FlSpot>[
+    for (final point in chartHistory) FlSpot(xFor(point), point.downloadRate),
+  ];
+  final uploadSpots = <FlSpot>[
+    for (final point in chartHistory) FlSpot(xFor(point), point.uploadRate),
+  ];
+
+  return _TrafficSparklineData(
+    visibleHistory: chartHistory,
+    downloadSpots: downloadSpots,
+    uploadSpots: uploadSpots,
+    minX: minX,
+    maxX: maxX,
+    yMax: yMax,
+    hasTraffic: hasTraffic,
+    xAxisStartTime: windowStart,
+    xAxisEndTime: latestTimestamp,
   );
 }
 
@@ -1109,7 +1270,8 @@ LineChartData _trafficSparklineChartData({
                   meta: meta,
                   minX: chart.minX,
                   maxX: chart.maxX,
-                  visibleHistory: chart.visibleHistory,
+                  startTime: chart.xAxisStartTime,
+                  endTime: chart.xAxisEndTime,
                 ),
               ),
             ),
@@ -1175,15 +1337,12 @@ Widget _trafficXAxisTitle({
   required TitleMeta meta,
   required double minX,
   required double maxX,
-  required List<_TrafficHistoryPoint> visibleHistory,
+  required DateTime startTime,
+  required DateTime endTime,
 }) {
-  if (visibleHistory.isEmpty) {
-    return const SizedBox.shrink();
-  }
-
   final isMin = (value - minX).abs() < 0.001;
   final isMax = (value - maxX).abs() < 0.001;
-  if (!isMax && (!isMin || visibleHistory.length == 1)) {
+  if (!isMin && !isMax) {
     return const SizedBox.shrink();
   }
 
@@ -1192,9 +1351,7 @@ Widget _trafficXAxisTitle({
     space: 6,
     fitInside: SideTitleFitInsideData.fromTitleMeta(meta, distanceFromEdge: 4),
     child: Text(
-      _formatTrafficTime(
-        isMin ? visibleHistory.first.timestamp : visibleHistory.last.timestamp,
-      ),
+      _formatTrafficTime(isMin ? startTime : endTime),
       maxLines: 1,
       overflow: TextOverflow.visible,
       softWrap: false,
