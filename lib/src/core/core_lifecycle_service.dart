@@ -33,6 +33,11 @@ class CoreLifecycleService {
   Future<void> _serial = Future<void>.value();
   String? _cliPath;
 
+  Duration get networkTrafficPollInterval =>
+      _runtime.networkTrafficPollInterval;
+
+  Duration get peerStatusPollInterval => _runtime.peerStatusPollInterval;
+
   Future<void> bindSession(AuthSession session) {
     return _enqueue(() async {
       final previousWorkspace = _session?.user.currentWorkspace?.id;

@@ -273,6 +273,27 @@ void main() {
       });
     });
 
+    test('uses low-frequency Android runtime polling intervals', () {
+      expect(runtime.networkTrafficPollInterval, const Duration(seconds: 15));
+      expect(runtime.peerStatusPollInterval, const Duration(seconds: 15));
+    });
+
+    test('caches network info reads to reduce JNI polling', () async {
+      final cachedRuntime = AndroidCoreRuntime(
+        methodChannel: methodChannel,
+        eventChannel: _FakeEventChannel(nativeEvents.stream),
+      );
+      addTearDown(cachedRuntime.dispose);
+
+      await cachedRuntime.readNetworkPeerStatuses('network-a');
+      await cachedRuntime.isNetworkInstanceRunning('network-a');
+
+      final collectCalls = calls.where(
+        (call) => call.method == 'collectNetworkInfos',
+      );
+      expect(collectCalls, hasLength(1));
+    });
+
     test('resolves instance id events before starting VPN', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       nativeEvents.add({

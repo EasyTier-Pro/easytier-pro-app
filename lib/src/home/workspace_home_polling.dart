@@ -39,7 +39,7 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
 
     if (_trafficPollTimer == null) {
       _trafficPollTimer = Timer.periodic(
-        _WorkspaceHomeViewState._trafficPollInterval,
+        widget.coreLifecycleService.networkTrafficPollInterval,
         (_) => unawaited(_pollNetworkTraffic()),
       );
       unawaited(_pollNetworkTraffic());
@@ -360,7 +360,7 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
     _peerPollNetworkId = network.id;
     if (_peerPollTimer == null) {
       _peerPollTimer = Timer.periodic(
-        _WorkspaceHomeViewState._peerPollInterval,
+        widget.coreLifecycleService.peerStatusPollInterval,
         (_) => unawaited(_pollSelectedNetworkPeers()),
       );
       unawaited(_pollSelectedNetworkPeers());

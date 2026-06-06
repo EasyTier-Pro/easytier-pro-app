@@ -4,7 +4,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   AndroidCoreRuntime({
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
-    this._networkInfoCacheDuration = const Duration(seconds: 5),
+    this._networkInfoCacheDuration = _androidNetworkInfoCacheDuration,
   }) : _methodChannel = methodChannel ?? const MethodChannel(_methodName),
        _eventChannel = eventChannel ?? const EventChannel(_eventName) {
     _nativeEvents = _eventChannel.receiveBroadcastStream().listen(
@@ -23,6 +23,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   static const String _methodName = 'net.easytier.pro/core_runtime';
   static const String _eventName = 'net.easytier.pro/core_runtime_events';
   static const int _networkInfoMaxLength = 2 * 1024 * 1024;
+  static const Duration _androidNetworkInfoCacheDuration = Duration(
+    seconds: 15,
+  );
+  static const Duration _androidRuntimePollInterval = Duration(seconds: 15);
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
@@ -43,6 +47,12 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   @override
   Stream<CoreRuntimeEvent> get events => _events.stream;
+
+  @override
+  Duration get networkTrafficPollInterval => _androidRuntimePollInterval;
+
+  @override
+  Duration get peerStatusPollInterval => _androidRuntimePollInterval;
 
   @override
   Future<CoreRuntimeStartResult?> readStatus(

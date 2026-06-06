@@ -12,6 +12,10 @@ abstract class CorePlatformRuntime {
 
   bool get supportsElevationRepair => false;
 
+  Duration get networkTrafficPollInterval => const Duration(seconds: 2);
+
+  Duration get peerStatusPollInterval => const Duration(seconds: 5);
+
   Stream<CoreRuntimeEvent> get events => const Stream<CoreRuntimeEvent>.empty();
 
   Future<CoreRuntimeStartResult?> readStatus(CoreBootstrapConfig bootstrap);

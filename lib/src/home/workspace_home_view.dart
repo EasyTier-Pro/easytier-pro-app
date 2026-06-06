@@ -57,8 +57,6 @@ class WorkspaceHomeView extends StatefulWidget {
 class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   static const Duration _devicePollDelay = Duration(seconds: 1);
   static const int _devicePollAttempts = 60;
-  static const Duration _trafficPollInterval = Duration(seconds: 2);
-  static const Duration _peerPollInterval = Duration(seconds: 5);
 
   List<ConsoleNetwork> _networks = const <ConsoleNetwork>[];
   List<ConsoleRegion> _regions = const <ConsoleRegion>[];
