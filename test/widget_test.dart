@@ -2260,6 +2260,141 @@ void main() {
     },
   );
 
+  test('console service prefers platform scoped enrollment keys', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    final requests = <http.Request>[];
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/v1/releases/latest') {
+          return _jsonResponse({
+            'stable': {'version': 'v2.6.4'},
+            'web_config_server_url': 'tcp://config.test:22020',
+          });
+        }
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/device-enrollment-keys') {
+          return _jsonResponse([
+            {
+              'id': 'desktop-key',
+              'display_name': 'Desktop Auto Key',
+              'reusable': true,
+            },
+            {
+              'id': 'android-key',
+              'display_name': 'Android Auto Key',
+              'reusable': true,
+            },
+          ]);
+        }
+        if (request.url.path.endsWith('/android-key/secret')) {
+          return _jsonResponse({'bootstrap_token': 'android-token'});
+        }
+        if (request.url.path.endsWith('/desktop-key/secret')) {
+          return _jsonResponse({'bootstrap_token': 'desktop-token'});
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+
+    final bootstrap = await service.prepareCoreBootstrap(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+    );
+
+    expect(bootstrap.bootstrapToken, 'android-token');
+    expect(requests.where((request) => request.method == 'POST'), isEmpty);
+    expect(
+      requests.any(
+        (request) => request.url.path.endsWith('/desktop-key/secret'),
+      ),
+      isFalse,
+    );
+  });
+
+  test(
+    'console service creates Android key instead of reusing other platform keys',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      final requests = <http.Request>[];
+      final service = ConsoleAuthService(
+        tokenStore: OAuthTokenStore(preferences),
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) async {
+          requests.add(request);
+          if (request.url.path == '/api/v1/releases/latest') {
+            return _jsonResponse({
+              'stable': {'version': 'v2.6.4'},
+              'web_config_server_url': 'tcp://config.test:22020',
+            });
+          }
+          if (request.url.path ==
+              '/api/v1/tenants/tenant-1/device-enrollment-keys') {
+            if (request.method == 'GET') {
+              return _jsonResponse([
+                {
+                  'id': 'desktop-key',
+                  'display_name': 'Desktop Auto Key',
+                  'reusable': true,
+                },
+                {
+                  'id': 'android-one-time-key',
+                  'display_name': 'Android Auto Key',
+                  'reusable': false,
+                },
+              ]);
+            }
+            return _jsonResponse({'bootstrap_token': 'android-token'}, 201);
+          }
+          if (request.url.path.endsWith('/android-one-time-key/secret')) {
+            return _jsonResponse({'bootstrap_token': 'one-time-token'});
+          }
+          if (request.url.path.endsWith('/desktop-key/secret')) {
+            return _jsonResponse({'bootstrap_token': 'desktop-token'});
+          }
+          return http.Response('{}', 404);
+        }),
+      );
+
+      final bootstrap = await service.prepareCoreBootstrap(
+        accessToken: 'token',
+        workspaceId: 'tenant-1',
+      );
+
+      final createRequest = requests.singleWhere(
+        (request) => request.method == 'POST',
+      );
+      expect(bootstrap.bootstrapToken, 'android-token');
+      expect(
+        (jsonDecode(createRequest.body)
+            as Map<String, dynamic>)['display_name'],
+        'Android Auto Key',
+      );
+      expect(
+        requests.any(
+          (request) =>
+              request.url.path.endsWith('/desktop-key/secret') ||
+              request.url.path.endsWith('/android-one-time-key/secret'),
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test(
     'console service derives local config server fallback from console host',
     () async {

@@ -519,13 +519,10 @@ class ConsoleAuthService implements AuthService {
       throw _authAwareException(keysResponse, '读取注册密钥失败');
     }
     final keyItems = _decodeObjectOrList(keysResponse.body);
-
-    final key = keyItems.firstWhere(
-      (item) =>
-          item['id']?.toString().isNotEmpty == true &&
-          item['revoked'] != true &&
-          item['lifecycle_state']?.toString() != 'expired',
-      orElse: () => const <String, dynamic>{},
+    final enrollmentKeyDisplayName = _enrollmentKeyDisplayName();
+    final key = _platformEnrollmentKey(
+      keyItems,
+      displayName: enrollmentKeyDisplayName,
     );
 
     String bootstrapToken;
@@ -551,7 +548,8 @@ class ConsoleAuthService implements AuthService {
     if (bootstrapToken.isEmpty) {
       _logger.info(
         'auth.bootstrap',
-        'No reusable key available, creating a new enrollment key',
+        'No platform enrollment key available, creating a new one',
+        context: {'display_name': enrollmentKeyDisplayName},
       );
       final createResponse = await _post(
         Uri.parse(
@@ -563,7 +561,7 @@ class ConsoleAuthService implements AuthService {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'display_name': _enrollmentKeyDisplayName(),
+          'display_name': enrollmentKeyDisplayName,
           'reusable': true,
           'pre_approved': true,
         }),
@@ -803,6 +801,33 @@ class ConsoleAuthService implements AuthService {
   static String _stripCancelToken(String url) {
     final parts = url.split('?cancelToken=');
     return parts.first;
+  }
+
+  static Map<String, dynamic> _platformEnrollmentKey(
+    List<Map<String, dynamic>> items, {
+    required String displayName,
+  }) {
+    for (final item in items) {
+      if (!_isReusableEnrollmentKey(item)) {
+        continue;
+      }
+      final itemName = (item['display_name'] ?? item['name'])
+          ?.toString()
+          .trim();
+      if (itemName == displayName) {
+        return item;
+      }
+    }
+    return const <String, dynamic>{};
+  }
+
+  static bool _isReusableEnrollmentKey(Map<String, dynamic> item) {
+    final lifecycleState = item['lifecycle_state']?.toString().toLowerCase();
+    return item['id']?.toString().isNotEmpty == true &&
+        item['reusable'] != false &&
+        item['revoked'] != true &&
+        lifecycleState != 'expired' &&
+        lifecycleState != 'revoked';
   }
 
   String _fallbackConfigServerUrl() {
