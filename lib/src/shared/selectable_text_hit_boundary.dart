@@ -1,16 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import 'app_text_selection.dart';
+
 const Object _selectableTextHitBoundaryMarker = Object();
 
-class SelectableTextHitBoundary extends StatelessWidget {
+class SelectableTextHitBoundary extends StatefulWidget {
   const SelectableTextHitBoundary({super.key, required this.child});
 
   final Widget child;
 
   @override
+  State<SelectableTextHitBoundary> createState() =>
+      _SelectableTextHitBoundaryState();
+}
+
+class _SelectableTextHitBoundaryState extends State<SelectableTextHitBoundary> {
+  final GlobalKey<SelectionAreaState> _selectionAreaKey =
+      GlobalKey<SelectionAreaState>();
+
+  @override
+  void initState() {
+    super.initState();
+    appTextSelectionController.registerLocalSelectionArea(_selectionAreaKey);
+  }
+
+  @override
+  void dispose() {
+    appTextSelectionController.unregisterLocalSelectionArea(_selectionAreaKey);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MetaData(metaData: _selectableTextHitBoundaryMarker, child: child);
+    return SelectionArea(
+      key: _selectionAreaKey,
+      onSelectionChanged: appTextSelectionController.handleSelectionChanged,
+      child: MetaData(
+        metaData: _selectableTextHitBoundaryMarker,
+        child: widget.child,
+      ),
+    );
   }
 }
 

@@ -10,18 +10,38 @@ class AppTextSelectionController {
   final GlobalKey<SelectionAreaState> selectionAreaKey =
       GlobalKey<SelectionAreaState>();
   final ValueNotifier<bool> hasSelection = ValueNotifier<bool>(false);
+  final Set<GlobalKey<SelectionAreaState>> _localSelectionAreaKeys =
+      <GlobalKey<SelectionAreaState>>{};
 
   void handleSelectionChanged(SelectedContent? content) {
     hasSelection.value = content?.plainText.isNotEmpty == true;
   }
 
+  void registerLocalSelectionArea(GlobalKey<SelectionAreaState> key) {
+    _localSelectionAreaKeys.add(key);
+  }
+
+  void unregisterLocalSelectionArea(GlobalKey<SelectionAreaState> key) {
+    _localSelectionAreaKeys.remove(key);
+  }
+
   void clearSelection() {
-    final state = selectionAreaKey.currentState;
-    if (state == null || !state.mounted) {
-      hasSelection.value = false;
-      return;
+    final keys = <GlobalKey<SelectionAreaState>>[
+      selectionAreaKey,
+      ..._localSelectionAreaKeys,
+    ];
+    for (final key in keys) {
+      final state = key.currentState;
+      if (state == null || !state.mounted) {
+        continue;
+      }
+      try {
+        state.selectableRegion.clearSelection();
+      } on ConcurrentModificationError {
+        scheduleMicrotask(clearSelection);
+        return;
+      }
     }
-    state.selectableRegion.clearSelection();
     hasSelection.value = false;
   }
 
@@ -60,16 +80,12 @@ class _AppTextSelectionTapCleanerState
 
   @override
   Widget build(BuildContext context) {
-    return SelectionArea(
-      key: appTextSelectionController.selectionAreaKey,
-      onSelectionChanged: appTextSelectionController.handleSelectionChanged,
-      child: Listener(
-        onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
-        onPointerUp: _handlePointerUp,
-        onPointerCancel: (_) => _resetTapTracking(),
-        child: widget.child,
-      ),
+    return Listener(
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: (_) => _resetTapTracking(),
+      child: widget.child,
     );
   }
 
