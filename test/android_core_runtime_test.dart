@@ -427,6 +427,7 @@ void main() {
               case 'retainNetworkInstance':
               case 'stopNetworkInstances':
               case 'startVpn':
+              case 'stopRuntime':
               case 'stopVpn':
               case 'stopConfigServerClient':
                 return null;
@@ -1242,7 +1243,7 @@ void main() {
     });
 
     test(
-      'stop clears pending VPN and stops config server plus VPN service',
+      'stop clears pending VPN and requests ordered native runtime stop',
       () async {
         vpnPrepared = false;
         await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
@@ -1258,13 +1259,18 @@ void main() {
         expect(calls.where((call) => call.method == 'startVpn'), isEmpty);
 
         await runtime.stop();
+        expect(calls.map((call) => call.method), contains('stopRuntime'));
         expect(
-          calls.map((call) => call.method),
-          containsAllInOrder([
-            'stopConfigServerClient',
-            'stopNetworkInstances',
-            'stopVpn',
-          ]),
+          calls.where((call) => call.method == 'stopRuntime'),
+          hasLength(1),
+        );
+        expect(
+          calls.where((call) => call.method == 'stopConfigServerClient'),
+          isEmpty,
+        );
+        expect(
+          calls.where((call) => call.method == 'stopNetworkInstances'),
+          isEmpty,
         );
 
         nativeEvents.add({

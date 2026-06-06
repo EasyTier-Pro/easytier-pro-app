@@ -44,6 +44,10 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                     stopConfigServerClient()
                     result.success(null)
                 }
+                "stopRuntime" -> {
+                    stopRuntime()
+                    result.success(null)
+                }
                 "isConfigServerClientConnected" -> {
                     result.success(EasyTierNative.isConfigServerClientConnected())
                 }
@@ -204,6 +208,14 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         Log.i(logTag, "Stopping config server client service")
         val intent = Intent(activity, EasyTierVpnService::class.java).apply {
             action = EasyTierVpnService.actionStopConfigServer
+        }
+        activity.startService(intent)
+    }
+
+    private fun stopRuntime() {
+        Log.i(logTag, "Stopping EasyTier runtime service")
+        val intent = Intent(activity, EasyTierVpnService::class.java).apply {
+            action = EasyTierVpnService.actionStopRuntime
         }
         activity.startService(intent)
     }

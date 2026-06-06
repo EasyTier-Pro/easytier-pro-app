@@ -170,13 +170,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     _activeVpnInstanceName = null;
     _activeVpnInstanceId = null;
     _activeVpnConfigSignature = null;
-    await _ignoreMissingJni(
-      _methodChannel.invokeMethod<void>('stopConfigServerClient'),
-    );
-    await _ignoreMissingJni(
-      _methodChannel.invokeMethod<void>('stopNetworkInstances'),
-    );
-    await _methodChannel.invokeMethod<void>('stopVpn');
+    await _methodChannel.invokeMethod<void>('stopRuntime');
     _cachedNetworkInfos = null;
     _cachedNetworkInfosAt = null;
   }

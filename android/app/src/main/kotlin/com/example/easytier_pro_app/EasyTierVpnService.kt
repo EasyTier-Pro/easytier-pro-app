@@ -31,7 +31,12 @@ class EasyTierVpnService : VpnService() {
                     START_NOT_STICKY
                 }
                 actionStopRuntime -> {
-                    stopRuntime(runtimeStopReason = "user_disconnect")
+                    stopRuntime(
+                        runtimeStopReason = intent
+                            .getStringExtra(extraStopReason)
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() },
+                    )
                     START_NOT_STICKY
                 }
                 actionStop -> {
@@ -356,6 +361,7 @@ class EasyTierVpnService : VpnService() {
     private fun stopRuntimePendingIntent(): PendingIntent {
         val intent = Intent(this, EasyTierVpnService::class.java).apply {
             action = actionStopRuntime
+            putExtra(extraStopReason, "user_disconnect")
         }
         return PendingIntent.getService(
             this,
@@ -397,6 +403,7 @@ class EasyTierVpnService : VpnService() {
         const val extraDnsServers = "dnsServers"
         const val extraDisallowedApplications = "disallowedApplications"
         const val extraMtu = "mtu"
+        const val extraStopReason = "stopReason"
 
         private const val logTag = "EasyTierVpnService"
         private const val notificationId = 22020
