@@ -307,7 +307,7 @@ void main() {
 
     expect(find.text('实时流量'), findsNothing);
     expect(find.byType(LineChart), findsOneWidget);
-    _expectTrafficChartsStatic(tester);
+    _expectTrafficChartAnimations(tester);
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(
@@ -326,14 +326,14 @@ void main() {
     _expectTrafficXAxisLabelsOutsideGraph(tester);
     expect(find.byType(LineChart), findsNWidgets(2));
     _expectTrafficChartYScalesFixed(tester);
-    _expectTrafficChartsStatic(tester);
+    _expectTrafficChartAnimations(tester);
 
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
     expect(find.text('实时流量'), findsOneWidget);
     expect(find.byType(LineChart), findsNWidgets(2));
-    _expectTrafficChartsStatic(tester);
+    _expectTrafficChartAnimations(tester);
 
     await gesture.moveTo(const Offset(1, 1));
     await tester.pumpAndSettle();
@@ -359,7 +359,7 @@ void main() {
       findsNothing,
     );
     expect(find.byType(LineChart), findsNWidgets(2));
-    _expectTrafficChartsStatic(tester);
+    _expectTrafficChartAnimations(tester);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('traffic-fullscreen-close')),
@@ -1913,9 +1913,13 @@ void _expectTrafficSparklineWindow(
   }
 }
 
-void _expectTrafficChartsStatic(WidgetTester tester) {
+void _expectTrafficChartAnimations(WidgetTester tester) {
   for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
-    expect(chart.duration, Duration.zero);
+    if (chart.data.titlesData.show) {
+      expect(chart.duration, greaterThan(Duration.zero));
+    } else {
+      expect(chart.duration, Duration.zero);
+    }
   }
 }
 
