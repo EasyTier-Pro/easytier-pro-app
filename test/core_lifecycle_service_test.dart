@@ -138,6 +138,46 @@ void main() {
       expect(runtime.stopCount, 1);
       expect(service.status.value.phase, CoreRunPhase.signedOut);
     });
+
+    test('restores running status when Android VPN recovers', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      runtime.emit(
+        const CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.error,
+          data: {'error': 'Android VPN route setup failed'},
+        ),
+      );
+      await _waitUntil(
+        () => service.status.value.phase == CoreRunPhase.error,
+      );
+
+      runtime.emit(
+        const CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.vpnStarted,
+          data: {
+            'payload': {
+              'instanceName': 'network-a',
+              'routes': ['10.10.0.0/24'],
+            },
+          },
+        ),
+      );
+      await _waitUntil(
+        () => service.status.value.phase == CoreRunPhase.running,
+      );
+
+      expect(service.status.value.message, 'Android 连接引擎运行中');
+      expect(service.status.value.machineId, 'machine-1');
+      expect(service.status.value.details, 'EasyTier 2.6.4');
+    });
   });
 }
 

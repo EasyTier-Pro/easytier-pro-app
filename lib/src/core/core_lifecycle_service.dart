@@ -976,6 +976,7 @@ cd /d "$installerDir"
               const <String>[],
         },
       );
+      _restoreRunningStatusAfterVpnRecovery();
     }
     if (event.type == CoreRuntimeEventTypes.vpnStopped) {
       final payload = _runtimeEventPayload(event);
@@ -1042,6 +1043,23 @@ cd /d "$installerDir"
         );
       }
     }
+  }
+
+  void _restoreRunningStatusAfterVpnRecovery() {
+    if (_session == null) {
+      return;
+    }
+    final current = status.value;
+    if (current.phase != CoreRunPhase.error &&
+        current.phase != CoreRunPhase.needsVpnPermission) {
+      return;
+    }
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: 'Android 连接引擎运行中',
+      machineId: current.machineId,
+      details: current.details,
+    );
   }
 
   bool _shouldReconnectAfterRuntimeStop() {
