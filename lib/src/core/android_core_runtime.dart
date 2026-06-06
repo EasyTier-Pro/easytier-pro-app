@@ -162,6 +162,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   @override
   Future<void> stop() async {
+    _vpnPrepared = false;
     _cancelActiveVpnRefresh();
     _pendingVpnPayloads.clear();
     _instanceIdsByRuntimeName.clear();

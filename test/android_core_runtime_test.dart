@@ -527,6 +527,22 @@ void main() {
       );
     });
 
+    test(
+      'does not report running after runtime stop resets VPN preparation',
+      () async {
+        configServerConnected = true;
+
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        await runtime.stop();
+        calls.clear();
+
+        final status = await runtime.readStatus(_androidBootstrap());
+
+        expect(status, isNull);
+        expect(calls, isEmpty);
+      },
+    );
+
     test('continues when notification permission is denied', () async {
       notificationResult = false;
 
