@@ -1,8 +1,33 @@
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val releaseKeystoreProperties = Properties()
+val releaseKeystorePropertiesFile = rootProject.file("key.properties")
+if (releaseKeystorePropertiesFile.exists()) {
+    releaseKeystorePropertiesFile.inputStream().use(releaseKeystoreProperties::load)
+}
+val releaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("Release", ignoreCase = true)
+}
+if (releaseBuildRequested) {
+    val missingReleaseKeys = listOf(
+        "storeFile",
+        "storePassword",
+        "keyAlias",
+        "keyPassword",
+    ).filter { key -> releaseKeystoreProperties[key]?.toString().isNullOrBlank() }
+    if (missingReleaseKeys.isNotEmpty()) {
+        throw GradleException(
+            "Release signing requires android/key.properties with: ${missingReleaseKeys.joinToString()}",
+        )
+    }
 }
 
 android {
@@ -30,11 +55,24 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseKeystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = releaseKeystoreProperties["storeFile"]
+                    ?.toString()
+                    ?.let { rootProject.file(it) }
+                storePassword = releaseKeystoreProperties["storePassword"]?.toString()
+                keyAlias = releaseKeystoreProperties["keyAlias"]?.toString()
+                keyPassword = releaseKeystoreProperties["keyPassword"]?.toString()
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseKeystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
