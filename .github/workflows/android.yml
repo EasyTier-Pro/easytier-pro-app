@@ -52,3 +52,8 @@ jobs:
 
       - name: Build Android debug APK
         run: flutter build apk --debug
+
+      - name: Build Android instrumented test APK
+        shell: pwsh
+        working-directory: android
+        run: ./gradlew.bat :app:assembleDebugAndroidTest
