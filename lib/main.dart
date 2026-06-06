@@ -86,9 +86,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    widget.traySupport.setRepairAction(
-      () => widget.coreLifecycleService.repair(),
-    );
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
     unawaited(
       widget.traySupport.updateCoreStatus(
@@ -146,6 +143,7 @@ class _MyAppState extends State<MyApp> {
       home: AuthGate(
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
+        traySupport: widget.traySupport,
       ),
     );
   }

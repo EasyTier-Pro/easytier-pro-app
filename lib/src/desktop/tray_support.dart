@@ -3,6 +3,18 @@ import 'tray_support_stub.dart'
 
 import '../core/core_lifecycle_service.dart';
 
+class TrayConnectionAction {
+  const TrayConnectionAction({
+    required this.label,
+    required this.enabled,
+    this.onSelected,
+  });
+
+  final String label;
+  final bool enabled;
+  final Future<void> Function()? onSelected;
+}
+
 abstract class TraySupport {
   Future<void> initialize();
 
@@ -14,7 +26,7 @@ abstract class TraySupport {
 
   Future<void> updateCoreStatus(CoreRunStatus status);
 
-  void setRepairAction(Future<void> Function()? onRepair);
+  void setConnectionAction(TrayConnectionAction? action);
 }
 
 TraySupport createTraySupport() => createPlatformTraySupport();

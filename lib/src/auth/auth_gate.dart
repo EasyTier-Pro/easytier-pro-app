@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/core_lifecycle_service.dart';
+import '../desktop/tray_support.dart';
 import '../logging/app_logger.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
@@ -23,10 +24,12 @@ class AuthGate extends StatefulWidget {
     super.key,
     required this.authService,
     required this.coreLifecycleService,
+    required this.traySupport,
   });
 
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
+  final TraySupport traySupport;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -232,6 +235,7 @@ class _AuthGateState extends State<AuthGate> {
         session: _session!,
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
+        traySupport: widget.traySupport,
         onLogout: _logout,
       );
     }

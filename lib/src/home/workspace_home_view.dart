@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import '../desktop/tray_support.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
@@ -38,12 +39,14 @@ class WorkspaceHomeView extends StatefulWidget {
     super.key,
     required this.authService,
     required this.coreLifecycleService,
+    required this.traySupport,
     required this.session,
     required this.onLogout,
   });
 
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
+  final TraySupport traySupport;
   final AuthSession session;
   final Future<void> Function() onLogout;
 
@@ -105,6 +108,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Map<String, Map<String, CorePeerStatus>> _networkPeerStatuses =
       const <String, Map<String, CorePeerStatus>>{};
   Map<String, String> _peerStatusErrors = const <String, String>{};
+  String? _trayConnectionNetworkId;
+  String? _trayConnectionLabel;
+  bool? _trayConnectionEnabled;
+  bool? _trayConnectionDisconnecting;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -135,6 +142,75 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   void _updateState(VoidCallback fn) {
     setState(fn);
+    _syncTrayConnectionAction();
+  }
+
+  void _syncTrayConnectionAction() {
+    final network =
+        _selectedNetwork ?? (_networks.isEmpty ? null : _networks.first);
+    final state = network == null ? null : _joinStateFor(network);
+    final disconnecting =
+        state?.phase == _JoinPhase.joined || state?.phase == _JoinPhase.leaving;
+    final enabled =
+        network != null &&
+        state?.phase != _JoinPhase.joining &&
+        state?.phase != _JoinPhase.leaving;
+    final label = disconnecting ? '断开' : '连接';
+    final networkId = network?.id;
+
+    if (_trayConnectionNetworkId == networkId &&
+        _trayConnectionLabel == label &&
+        _trayConnectionEnabled == enabled &&
+        _trayConnectionDisconnecting == disconnecting) {
+      return;
+    }
+
+    _trayConnectionNetworkId = networkId;
+    _trayConnectionLabel = label;
+    _trayConnectionEnabled = enabled;
+    _trayConnectionDisconnecting = disconnecting;
+
+    widget.traySupport.setConnectionAction(
+      TrayConnectionAction(
+        label: label,
+        enabled: enabled,
+        onSelected: networkId == null
+            ? null
+            : () => _runTrayConnectionAction(networkId, disconnecting),
+      ),
+    );
+  }
+
+  Future<void> _runTrayConnectionAction(
+    String networkId,
+    bool disconnect,
+  ) async {
+    await widget.traySupport.showWindow();
+    if (!mounted) {
+      return;
+    }
+
+    final network = _networkById(networkId);
+    if (network == null) {
+      _syncTrayConnectionAction();
+      return;
+    }
+
+    if (disconnect) {
+      await _leaveNetwork(network);
+    } else {
+      await _joinNetwork(network);
+    }
+    _syncTrayConnectionAction();
+  }
+
+  ConsoleNetwork? _networkById(String networkId) {
+    for (final network in _networks) {
+      if (network.id == networkId) {
+        return network;
+      }
+    }
+    return null;
   }
 
   void _setNewNetworkName(String value) {
@@ -161,6 +237,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void initState() {
     super.initState();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
+    _syncTrayConnectionAction();
     unawaited(_loadInitialData());
   }
 
@@ -171,6 +248,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _newNetworkNameController.dispose();
     _newNetworkIPv4CidrController.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
+    widget.traySupport.setConnectionAction(null);
     super.dispose();
   }
 
@@ -179,6 +257,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return;
     }
     setState(() {});
+    _syncTrayConnectionAction();
     _refreshTrafficPolling();
     _refreshPeerPolling();
   }
