@@ -434,6 +434,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('desktop-1'), findsOneWidget);
+
+    final summaryBottom = tester
+        .getBottomLeft(find.textContaining('1 / 1 在线'))
+        .dy;
+    final nodeTop = tester.getTopLeft(find.text('desktop-1').last).dy;
+    expect(nodeTop - summaryBottom, lessThan(56));
   });
 
   testWidgets('network detail device list scrolls when content overflows', (
