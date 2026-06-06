@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $jniOutputRoot = Join-Path $repoRoot "android\app\src\main\jniLibs"
+$localPatchRoot = Join-Path $repoRoot "scripts\patches"
+$appliedLocalPatches = New-Object System.Collections.Generic.List[string]
 
 function Resolve-FirstPath([string[]] $Candidates) {
     foreach ($candidate in $Candidates) {
@@ -67,6 +69,44 @@ if (-not $SkipCommitCheck) {
     }
 }
 
+function Apply-LocalEasyTierPatch([string] $PatchFile) {
+    if (-not (Test-Path $PatchFile)) {
+        throw "Local EasyTier patch was not found: $PatchFile"
+    }
+
+    $patchName = Split-Path $PatchFile -Leaf
+    & git -C $EasyTierRoot apply --check $PatchFile
+    if ($LASTEXITCODE -eq 0) {
+        & git -C $EasyTierRoot apply $PatchFile
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to apply local EasyTier patch: $patchName"
+        }
+        $appliedLocalPatches.Add($PatchFile) | Out-Null
+        Write-Host "Applied local EasyTier patch: $patchName"
+        return
+    }
+
+    & git -C $EasyTierRoot apply --reverse --check $PatchFile
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Local EasyTier patch already present: $patchName"
+        return
+    }
+
+    throw "Local EasyTier patch does not apply cleanly: $patchName"
+}
+
+function Restore-LocalEasyTierPatches() {
+    for ($i = $appliedLocalPatches.Count - 1; $i -ge 0; $i--) {
+        $patchFile = $appliedLocalPatches[$i]
+        $patchName = Split-Path $patchFile -Leaf
+        & git -C $EasyTierRoot apply --reverse $patchFile
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to restore local EasyTier patch: $patchName"
+        }
+        Write-Host "Restored local EasyTier patch: $patchName"
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($AndroidSdk)) {
     $AndroidSdk = Resolve-FirstPath @(
         $env:ANDROID_SDK_ROOT,
@@ -110,62 +150,70 @@ $env:ANDROID_NDK_HOME = $ndkRoot
 $env:ANDROID_NDK_ROOT = $ndkRoot
 $env:CLANG_PATH = $clang
 
-foreach ($abiName in $Abi) {
-    if (-not $targetMap.ContainsKey($abiName)) {
-        throw "Unsupported ABI '$abiName'. Supported values: $($targetMap.Keys -join ', ')"
-    }
+Apply-LocalEasyTierPatch (
+    Join-Path $localPatchRoot "easytier-android-jni-release-collect-network-infos.patch"
+)
 
-    $target = $targetMap[$abiName]
-    $rustTarget = $target.RustTarget
-    $clangPrefix = $target.ClangPrefix
-    $includeTarget = $target.IncludeTarget
-    $envSuffix = $rustTarget -replace "-", "_"
-    $cargoTargetEnv = "CARGO_TARGET_$($envSuffix.ToUpperInvariant())_LINKER"
-    $clangCmd = Join-Path $toolchainBin "$clangPrefix-clang.cmd"
-    $sysrootArg = $sysroot -replace "\\", "/"
-    $includeBase = "$sysrootArg/usr/include"
-    $includeTargetPath = "$includeBase/$includeTarget"
-    $bindgenArgs = "--sysroot=$sysrootArg -I$includeBase -I$includeTargetPath"
-
-    Write-Host "Building EasyTier JNI for $abiName ($rustTarget)"
-    & rustup target add $rustTarget
-    if ($LASTEXITCODE -ne 0) {
-        throw "rustup target add failed for $rustTarget"
-    }
-
-    Set-Item -Path "Env:CC_$envSuffix" -Value $clangCmd
-    Set-Item -Path "Env:AR_$envSuffix" -Value $llvmAr
-    Set-Item -Path "Env:$cargoTargetEnv" -Value $clangCmd
-    Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS" -Value $bindgenArgs
-    Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS_$rustTarget" -Value $bindgenArgs
-    Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS_$envSuffix" -Value $bindgenArgs
-
-    Push-Location $jniCrate
-    try {
-        & cargo build --target $rustTarget --release
-        if ($LASTEXITCODE -ne 0) {
-            throw "cargo build failed for $rustTarget"
+try {
+    foreach ($abiName in $Abi) {
+        if (-not $targetMap.ContainsKey($abiName)) {
+            throw "Unsupported ABI '$abiName'. Supported values: $($targetMap.Keys -join ', ')"
         }
-    } finally {
-        Pop-Location
-    }
 
-    $builtLibrary = Join-Path $EasyTierRoot "target\$rustTarget\release\libeasytier_android_jni.so"
-    if (-not (Test-Path $builtLibrary)) {
-        throw "Expected JNI library was not produced: $builtLibrary"
-    }
+        $target = $targetMap[$abiName]
+        $rustTarget = $target.RustTarget
+        $clangPrefix = $target.ClangPrefix
+        $includeTarget = $target.IncludeTarget
+        $envSuffix = $rustTarget -replace "-", "_"
+        $cargoTargetEnv = "CARGO_TARGET_$($envSuffix.ToUpperInvariant())_LINKER"
+        $clangCmd = Join-Path $toolchainBin "$clangPrefix-clang.cmd"
+        $sysrootArg = $sysroot -replace "\\", "/"
+        $includeBase = "$sysrootArg/usr/include"
+        $includeTargetPath = "$includeBase/$includeTarget"
+        $bindgenArgs = "--sysroot=$sysrootArg -I$includeBase -I$includeTargetPath"
 
-    if (Test-Path $readElf) {
-        Write-Host "Dynamic dependencies for ${abiName}:"
-        & $readElf -d $builtLibrary | Select-String -Pattern "NEEDED|SONAME"
-    }
+        Write-Host "Building EasyTier JNI for $abiName ($rustTarget)"
+        & rustup target add $rustTarget
+        if ($LASTEXITCODE -ne 0) {
+            throw "rustup target add failed for $rustTarget"
+        }
 
-    if (-not $SkipCopy) {
-        $abiOutput = Join-Path $jniOutputRoot $abiName
-        New-Item -ItemType Directory -Force $abiOutput | Out-Null
-        Copy-Item -LiteralPath $builtLibrary -Destination (Join-Path $abiOutput "libeasytier_android_jni.so") -Force
-    }
+        Set-Item -Path "Env:CC_$envSuffix" -Value $clangCmd
+        Set-Item -Path "Env:AR_$envSuffix" -Value $llvmAr
+        Set-Item -Path "Env:$cargoTargetEnv" -Value $clangCmd
+        Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS" -Value $bindgenArgs
+        Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS_$rustTarget" -Value $bindgenArgs
+        Set-Item -Path "Env:BINDGEN_EXTRA_CLANG_ARGS_$envSuffix" -Value $bindgenArgs
 
-    $hash = Get-FileHash $builtLibrary -Algorithm SHA256
-    Write-Host "$abiName SHA256 $($hash.Hash)"
+        Push-Location $jniCrate
+        try {
+            & cargo build --target $rustTarget --release
+            if ($LASTEXITCODE -ne 0) {
+                throw "cargo build failed for $rustTarget"
+            }
+        } finally {
+            Pop-Location
+        }
+
+        $builtLibrary = Join-Path $EasyTierRoot "target\$rustTarget\release\libeasytier_android_jni.so"
+        if (-not (Test-Path $builtLibrary)) {
+            throw "Expected JNI library was not produced: $builtLibrary"
+        }
+
+        if (Test-Path $readElf) {
+            Write-Host "Dynamic dependencies for ${abiName}:"
+            & $readElf -d $builtLibrary | Select-String -Pattern "NEEDED|SONAME"
+        }
+
+        if (-not $SkipCopy) {
+            $abiOutput = Join-Path $jniOutputRoot $abiName
+            New-Item -ItemType Directory -Force $abiOutput | Out-Null
+            Copy-Item -LiteralPath $builtLibrary -Destination (Join-Path $abiOutput "libeasytier_android_jni.so") -Force
+        }
+
+        $hash = Get-FileHash $builtLibrary -Algorithm SHA256
+        Write-Host "$abiName SHA256 $($hash.Hash)"
+    }
+} finally {
+    Restore-LocalEasyTierPatches
 }

@@ -70,6 +70,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   String? _activeVpnConfigSignature;
   int _activeVpnRefreshCount = 0;
   bool _vpnPrepared = false;
+  bool _disposed = false;
 
   @override
   Stream<CoreRuntimeEvent> get events => _events.stream;
@@ -214,7 +215,14 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   @override
   Future<void> dispose() async {
+    _disposed = true;
     _cancelActiveVpnRefresh();
+    try {
+      await _vpnSerial;
+    } catch (_) {
+      // Errors from the serial queue are surfaced through runtime events while
+      // the runtime is alive. During disposal there may be no listener left.
+    }
     await _nativeEvents.cancel();
     await _events.close();
   }
@@ -294,6 +302,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   void _handleNativeEvent(Object? event) {
+    if (_disposed) {
+      return;
+    }
     final runtimeEvent = _runtimeEventFromNative(event);
     _events.add(runtimeEvent);
     if (runtimeEvent.type == CoreRuntimeEventTypes.vpnPermissionGranted) {
@@ -495,6 +506,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   Future<void> _queueActiveVpnRefresh() {
+    if (_disposed) {
+      return Future<void>.value();
+    }
     _vpnSerial = _vpnSerial
         .then(
           (_) => _refreshActiveVpnConfig(),
@@ -506,6 +520,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   Future<void> _refreshActiveVpnConfig() async {
+    if (_disposed) {
+      return;
+    }
     final activeName = _activeVpnInstanceName;
     if (activeName == null || activeName.isEmpty || !_vpnPrepared) {
       return;
@@ -539,19 +556,21 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       _activeVpnInstanceName = instance.name;
       _activeVpnInstanceId = instance.id ?? _activeVpnInstanceId;
       _activeVpnConfigSignature = signature;
-      _events.add(
-        CoreRuntimeEvent(
-          type: CoreRuntimeEventTypes.vpnConfigRefreshed,
-          data: {
-            'instance_name': instance.name,
-            'addresses': config['addresses'],
-            'routes': config['routes'],
-            'dns': config['dns'],
-          },
-        ),
-      );
+      if (!_disposed) {
+        _events.add(
+          CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnConfigRefreshed,
+            data: {
+              'instance_name': instance.name,
+              'addresses': config['addresses'],
+              'routes': config['routes'],
+              'dns': config['dns'],
+            },
+          ),
+        );
+      }
     } finally {
-      if (_activeVpnInstanceName != null) {
+      if (!_disposed && _activeVpnInstanceName != null) {
         _scheduleActiveVpnRefresh();
       }
     }
@@ -559,7 +578,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
 
   void _scheduleActiveVpnRefresh() {
     _activeVpnRefreshTimer?.cancel();
-    if (_activeVpnInstanceName == null) {
+    if (_disposed || _activeVpnInstanceName == null) {
       return;
     }
     final delay = _activeVpnRefreshCount < _vpnRouteRefreshFastLimit
@@ -674,6 +693,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   void _emitVpnError(Object error, StackTrace stackTrace) {
+    if (_disposed) {
+      return;
+    }
     _events.add(
       CoreRuntimeEvent(
         type: CoreRuntimeEventTypes.error,

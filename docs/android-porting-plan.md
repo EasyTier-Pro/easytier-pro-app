@@ -160,7 +160,7 @@ EasyTierJNI.setTunFd(instanceName, fd)
 - peer-route pair
 - 错误信息
 
-需要注意的是，当前 JNI 包装层对 `collectNetworkInfos` 的 FFI 返回字符串释放逻辑需要进一步确认。若确实未释放，频繁轮询可能带来内存泄漏风险，建议上游修复或本地补丁。
+当前应用构建脚本会在构建固定 EasyTier Android JNI commit 前临时应用本地补丁，确保 `collectNetworkInfos` 读取 FFI 返回的 key/value 后调用 `free_string` 释放字符串，再构建随包 `.so`。该事实来源属于 EasyTier Android JNI 源侧；上游合并等价修复后可移除本地补丁。
 
 ## 推荐架构
 
@@ -335,7 +335,7 @@ JNI config server client 能力非常新，应固定到明确 commit，并准备
 
 ### collectNetworkInfos 轮询
 
-如果 JNI 层未释放 FFI 返回字符串，频繁轮询会有内存泄漏风险。Android 首页不应高频轮询该接口，建议先做节流，并同时修复释放逻辑。
+JNI 层释放 FFI 返回字符串的问题已通过本仓库 JNI 构建脚本的本地补丁处理；Android 首页仍不应高频轮询该接口，当前实现采用 15 秒运行态轮询和 15 秒 `collectNetworkInfos` 缓存，VPN 路由刷新仅在启动后短时加速。
 
 ### 单 VPN 接口限制
 
