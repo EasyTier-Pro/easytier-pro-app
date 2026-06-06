@@ -1048,6 +1048,15 @@ void main() {
       find.byKey(const ValueKey<String>('network-create-button')),
     );
     await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+
     await tester.tap(find.text('172.16.0.0/16'));
     await tester.pumpAndSettle();
     await tester.tap(

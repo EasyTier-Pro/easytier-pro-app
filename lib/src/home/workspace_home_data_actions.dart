@@ -419,94 +419,90 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
                 return Padding(
                   padding: const EdgeInsets.all(24),
-                  child: AppSmoothScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.language_outlined,
-                                size: 22,
-                                color: Color(0xFF334155),
-                              ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '创建网络',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleLarge,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '创建一个新的虚拟网络，用于连接不同区域的设备。',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFF94A3B8),
-                                        ),
-                                  ),
-                                ],
-                              ),
+                            child: const Icon(
+                              Icons.language_outlined,
+                              size: 22,
+                              color: Color(0xFF334155),
                             ),
-                            FButton(
-                              variant: .ghost,
-                              size: .sm,
-                              onPress: () => Navigator.of(dialogContext).pop(),
-                              child: const Icon(Icons.close, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '创建网络',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '创建一个新的虚拟网络，用于连接不同区域的设备。',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        _CreateNetworkForm(
-                          nameController: _newNetworkNameController,
-                          ipv4CidrController: _newNetworkIPv4CidrController,
-                          selectedRegionCode: _selectedRegionCode,
-                          regions: _activeRegions,
-                          loadingRegions: _isLoadingRegions,
-                          creating: _isCreatingNetwork,
-                          error: _createError ?? _regionError,
-                          onNameChanged: (value) {
-                            _updateState(() => _setNewNetworkName(value));
-                            rebuildDialog();
-                          },
-                          onIPv4CidrChanged: (value) {
-                            _updateState(() => _setNewNetworkIPv4Cidr(value));
-                            rebuildDialog();
-                          },
-                          onRegionChanged: (value) {
-                            _updateState(() => _selectedRegionCode = value);
-                            rebuildDialog();
-                          },
-                          onCreate: () async {
-                            await _createNetwork(
-                              onStateChanged: rebuildDialog,
-                              onSuccess: () {
-                                if (Navigator.of(dialogContext).canPop()) {
-                                  Navigator.of(dialogContext).pop();
-                                }
-                              },
-                            );
-                          },
-                          onRetryRegions: () async {
-                            await _loadRegions();
-                            rebuildDialog();
-                          },
-                        ),
-                      ],
-                    ),
+                          ),
+                          FButton(
+                            variant: .ghost,
+                            size: .sm,
+                            onPress: () => Navigator.of(dialogContext).pop(),
+                            child: const Icon(Icons.close, size: 18),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _CreateNetworkForm(
+                        nameController: _newNetworkNameController,
+                        ipv4CidrController: _newNetworkIPv4CidrController,
+                        selectedRegionCode: _selectedRegionCode,
+                        regions: _activeRegions,
+                        loadingRegions: _isLoadingRegions,
+                        creating: _isCreatingNetwork,
+                        error: _createError ?? _regionError,
+                        onNameChanged: (value) {
+                          _updateState(() => _setNewNetworkName(value));
+                          rebuildDialog();
+                        },
+                        onIPv4CidrChanged: (value) {
+                          _updateState(() => _setNewNetworkIPv4Cidr(value));
+                          rebuildDialog();
+                        },
+                        onRegionChanged: (value) {
+                          _updateState(() => _selectedRegionCode = value);
+                          rebuildDialog();
+                        },
+                        onCreate: () async {
+                          await _createNetwork(
+                            onStateChanged: rebuildDialog,
+                            onSuccess: () {
+                              if (Navigator.of(dialogContext).canPop()) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                            },
+                          );
+                        },
+                        onRetryRegions: () async {
+                          await _loadRegions();
+                          rebuildDialog();
+                        },
+                      ),
+                    ],
                   ),
                 );
               },
