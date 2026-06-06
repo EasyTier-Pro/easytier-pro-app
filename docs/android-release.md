@@ -49,6 +49,8 @@ flutter build apk --debug
 
 Release APK 构建会启用 ABI split，只产出 `arm64-v8a` 和 `x86_64` 包；debug 构建保持单包，方便 `flutter run` 和本地模拟器调试。不要把未包含 JNI 的 ABI 发布给用户。
 
+Debug/profile Android 构建会启用 cleartext HTTP，用于访问本地 E2E 控制台，例如 `http://10.147.223.128:14173/`。主 manifest 不启用该策略，release 分发仍应使用 HTTPS 控制台入口或由渠道侧明确配置网络安全策略。
+
 ## CI
 
 `.github/workflows/android.yml` 会在 Windows runner 上检出 EasyTier 固定 commit，安装 Android NDK `28.2.13676358`，执行 `dart analyze`、`flutter test`、`scripts/build_android_jni.ps1 -SkipCopy` 验证 Dart/Flutter 与 JNI 均可构建，构建 Android debug APK，并打包 `:app:assembleDebugAndroidTest` 以确保 JNI 基础集成测试可编译。CI 当前不改写仓库内已提交的 `.so` 文件；更新随包 JNI 产物仍需在本地运行构建脚本并提交结果。CI 打包 androidTest APK 不等同于真机执行，设备侧仍需运行 `connectedDebugAndroidTest` 或手动真机验证。
@@ -60,7 +62,7 @@ cd android
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
+当前 instrumented tests 会覆盖 JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、自身 `applicationId` 自动进入 disallowed applications，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
 
 ## VPN 权限与后台运行说明
 

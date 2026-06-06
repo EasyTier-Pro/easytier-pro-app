@@ -3,6 +3,7 @@ package com.example.easytier_pro_app
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.VpnService
@@ -23,6 +24,15 @@ class EasyTierAndroidManifestInstrumentedTest {
     @Test
     fun packageIdentityMatchesReleaseApplicationId() {
         assertEquals("net.easytier.pro", context.packageName)
+    }
+
+    @Test
+    fun debugBuildAllowsLocalE2eCleartextHttp() {
+        val applicationInfo = packageManager.getApplicationInfo(context.packageName, 0)
+
+        assertTrue(
+            applicationInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC != 0,
+        )
     }
 
     @Test
