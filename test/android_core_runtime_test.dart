@@ -1035,6 +1035,33 @@ void main() {
       },
     );
 
+    test(
+      'stops active VPN when config server deletes by network name alias',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_id': 'instance-a',
+            'instance_name': 'network-a',
+            'network_name': 'console-network-a',
+          },
+        });
+        await _waitForCall(calls, 'startVpn');
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'delete_network_instance',
+            'network_name': 'console-network-a',
+          },
+        });
+
+        await _waitForCallCount(calls, 'stopVpn', 1);
+      },
+    );
+
     test('refreshes active VPN when same instance routes change', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       nativeEvents.add({

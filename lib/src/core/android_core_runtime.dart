@@ -435,7 +435,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       payloadMap['instance_id'] ?? payloadMap['instanceId'] ?? payloadMap['id'],
     );
     final runtimeNetworkName = _runtimeNetworkNameFromPayload(payloadMap);
-    final instanceKey = instanceName.isNotEmpty ? instanceName : instanceId;
+    final instanceKey = _instanceKeyFromPayloadParts(
+      instanceName: instanceName,
+      instanceId: instanceId,
+      runtimeNetworkName: runtimeNetworkName,
+    );
     if (instanceKey.isEmpty) {
       return;
     }
@@ -752,6 +756,28 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           payloadMap['runtime_network_name'] ??
           payloadMap['runtimeNetworkName'],
     );
+  }
+
+  String _instanceKeyFromPayloadParts({
+    required String instanceName,
+    required String instanceId,
+    required String runtimeNetworkName,
+  }) {
+    final name = instanceName.trim();
+    if (name.isNotEmpty) {
+      return name;
+    }
+    final id = instanceId.trim();
+    if (id.isNotEmpty) {
+      return id;
+    }
+    final runtimeName = runtimeNetworkName.trim();
+    if (runtimeName.isEmpty) {
+      return '';
+    }
+    return _instanceNamesByRuntimeName[runtimeName] ??
+        _instanceIdsByRuntimeName[runtimeName] ??
+        '';
   }
 
   void _rememberInstanceAliases({
