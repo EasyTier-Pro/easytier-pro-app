@@ -25,11 +25,11 @@ object EasyTierNative {
         val function = ConfigServerEventCallback { payload ->
             callback(payload)
         }
-        invoke("startConfigServerClient", url, hostname, machineId, secureMode, function)
+        invokeStatus("startConfigServerClient", url, hostname, machineId, secureMode, function)
     }
 
     fun stopConfigServerClient() {
-        invoke("stopConfigServerClient")
+        invokeStatus("stopConfigServerClient")
     }
 
     fun isConfigServerClientConnected(): Boolean {
@@ -39,7 +39,8 @@ object EasyTierNative {
     fun collectNetworkInfos(maxLength: Int): String {
         val method = findMethod("collectNetworkInfos", 1)
         val arg = when (method.parameterTypes.firstOrNull()) {
-            java.lang.Long.TYPE, java.lang.Long::class.java -> maxLength.toLong()
+            Long::class.javaPrimitiveType,
+            Long::class.javaObjectType -> maxLength.toLong()
             else -> maxLength
         }
         return invoke(method, arg)?.toString() ?: "{}"
@@ -53,11 +54,11 @@ object EasyTierNative {
         } else {
             instanceNames
         }
-        invoke(method, arg)
+        invokeStatus(method, arg)
     }
 
     fun setTunFd(instanceName: String, fd: Int) {
-        invoke("setTunFd", instanceName, fd)
+        invokeStatus("setTunFd", instanceName, fd)
     }
 
     fun getLastError(): String {
@@ -70,6 +71,25 @@ object EasyTierNative {
 
     private fun invoke(name: String, vararg args: Any?): Any? {
         return invoke(findMethod(name, args.size), *args)
+    }
+
+    private fun invokeStatus(name: String, vararg args: Any?) {
+        invokeStatus(findMethod(name, args.size), *args)
+    }
+
+    private fun invokeStatus(method: Method, vararg args: Any?) {
+        val result = invoke(method, *args)
+        val code = when (result) {
+            null -> 0
+            is Number -> result.toInt()
+            else -> throw IllegalStateException(
+                "EasyTier JNI ${method.name} returned unsupported status type: ${result::class.java.name}",
+            )
+        }
+        if (code != 0) {
+            val lastError = getLastError().ifBlank { "native status $code" }
+            throw IllegalStateException("EasyTier JNI ${method.name} failed: $lastError")
+        }
     }
 
     private fun invoke(method: Method, vararg args: Any?): Any? {
