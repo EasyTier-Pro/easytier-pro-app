@@ -6,6 +6,7 @@ param(
     [string[]] $ExpectedRoute = @(),
     [string[]] $ExpectedAddress = @(),
     [string[]] $PingTarget = @(),
+    [switch] $RequireSystemRoute,
     [switch] $RequirePingSuccess,
     [switch] $SkipVerify,
     [switch] $AllowMissingAppLogs
@@ -146,6 +147,33 @@ function Save-AdbCommandOutput {
     return $result
 }
 
+function Test-RouteTextContainsCidr {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RouteText,
+        [Parameter(Mandatory = $true)]
+        [string] $Cidr
+    )
+
+    $trimmed = $Cidr.Trim()
+    if ($trimmed.Length -eq 0) {
+        return $true
+    }
+    if ($RouteText.Contains($trimmed)) {
+        return $true
+    }
+
+    $parts = $trimmed.Split("/", 2)
+    if ($parts.Count -eq 2 -and $parts[1] -eq "32") {
+        return [regex]::IsMatch(
+            $RouteText,
+            "(^|\s)$([regex]::Escape($parts[0]))(\s|$)"
+        )
+    }
+
+    return $false
+}
+
 Resolve-DeviceSerial
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -205,10 +233,23 @@ if ($remoteLogs.Count -eq 0) {
     Write-TextFile -Path $diagnosticsPath -Text $diagnostics.ToString()
 }
 
-Save-AdbCommandOutput -FileName "route_tables.txt" -Arguments @("shell", "ip", "route", "show", "table", "all") | Out-Null
+$routeTables = Save-AdbCommandOutput -FileName "route_tables.txt" -Arguments @("shell", "ip", "route", "show", "table", "all")
 Save-AdbCommandOutput -FileName "ip_rules.txt" -Arguments @("shell", "ip", "rule") | Out-Null
 Save-AdbCommandOutput -FileName "connectivity.txt" -Arguments @("shell", "dumpsys", "connectivity") | Out-Null
 Save-AdbCommandOutput -FileName "package.txt" -Arguments @("shell", "dumpsys", "package", $PackageName) | Out-Null
+
+$missingSystemRoutes = @(
+    $ExpectedRoute |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_.Length -gt 0 -and -not (Test-RouteTextContainsCidr $routeTables.Output $_) }
+)
+if ($missingSystemRoutes.Count -gt 0) {
+    $message = "Expected routes were not found in Android system route tables: $($missingSystemRoutes -join ', ')"
+    if ($RequireSystemRoute) {
+        throw "$message. Evidence directory: $runOutputDirectory"
+    }
+    Write-Warning $message
+}
 
 $failedPings = New-Object System.Collections.Generic.List[string]
 foreach ($target in $PingTarget) {
@@ -242,6 +283,9 @@ Write-Host "Directory: $runOutputDirectory"
 Write-Host "Diagnostics: $diagnosticsPath"
 Write-Host "Routes: $(Join-Path $runOutputDirectory "route_tables.txt")"
 Write-Host "Connectivity: $(Join-Path $runOutputDirectory "connectivity.txt")"
+if ($missingSystemRoutes.Count -gt 0) {
+    Write-Host "Missing system routes: $($missingSystemRoutes -join ', ')"
+}
 if ($PingTarget.Count -gt 0) {
     Write-Host "Ping targets: $($PingTarget -join ', ')"
 }
