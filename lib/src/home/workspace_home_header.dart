@@ -118,6 +118,7 @@ class _DashboardHeader extends StatelessWidget {
                           0xFFF59E0B,
                         ),
                         CoreRunPhase.error => const Color(0xFFDC2626),
+                        CoreRunPhase.stopped => Colors.grey,
                         CoreRunPhase.signedOut => Colors.grey,
                       };
                       return Row(
@@ -357,6 +358,7 @@ class _StatusBadge extends StatelessWidget {
         final running = status.phase == CoreRunPhase.running;
         final error = status.phase == CoreRunPhase.error;
         final checking = status.phase == CoreRunPhase.checking;
+        final stopped = status.phase == CoreRunPhase.stopped;
         final signedOut = status.phase == CoreRunPhase.signedOut;
         final needsElevation = status.phase == CoreRunPhase.needsElevation;
         final needsVpnPermission =
@@ -366,7 +368,7 @@ class _StatusBadge extends StatelessWidget {
             ? const Color(0xFFDC2626)
             : needsElevation || needsVpnPermission
             ? const Color(0xFFF59E0B)
-            : checking || signedOut
+            : checking || stopped || signedOut
             ? const Color(0xFF9CA3AF)
             : running
             ? const Color(0xFF16A34A)
@@ -376,7 +378,7 @@ class _StatusBadge extends StatelessWidget {
             ? const Color(0xFFFEE2E2)
             : needsElevation || needsVpnPermission
             ? const Color(0xFFFEF3C7)
-            : checking || signedOut
+            : checking || stopped || signedOut
             ? const Color(0xFFF3F4F6)
             : running
             ? const Color(0xFFF0FDF4)
@@ -386,7 +388,7 @@ class _StatusBadge extends StatelessWidget {
             ? const Color(0xFFFECACA)
             : needsElevation || needsVpnPermission
             ? const Color(0xFFFDE68A)
-            : checking || signedOut
+            : checking || stopped || signedOut
             ? const Color(0xFFE5E7EB)
             : running
             ? const Color(0xFFBBF7D0)
@@ -414,6 +416,8 @@ class _StatusBadge extends StatelessWidget {
             ? '正在检查'
             : running
             ? '已在线'
+            : stopped
+            ? '已断开'
             : '准备中';
 
         final machineId = status.machineId;
@@ -430,6 +434,8 @@ class _StatusBadge extends StatelessWidget {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!
               : 'Android 需要授权后才能建立虚拟网卡';
+        } else if (stopped) {
+          subtitle = status.message;
         } else if (joinedCount > 0) {
           subtitle = '$joinedCount 个网络';
         } else {

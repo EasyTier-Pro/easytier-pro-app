@@ -31,7 +31,7 @@ class EasyTierVpnService : VpnService() {
                     START_NOT_STICKY
                 }
                 actionStopRuntime -> {
-                    stopRuntime()
+                    stopRuntime(runtimeStopReason = "user_disconnect")
                     START_NOT_STICKY
                 }
                 actionStop -> {
@@ -94,7 +94,7 @@ class EasyTierVpnService : VpnService() {
 
     override fun onRevoke() {
         Log.i(logTag, "VPN revoked by system")
-        stopRuntime(vpnStopReason = "revoked")
+        stopRuntime(runtimeStopReason = "revoked")
         super.onRevoke()
     }
 
@@ -140,6 +140,7 @@ class EasyTierVpnService : VpnService() {
     private fun stopConfigServerClient(
         stopServiceIfIdle: Boolean = true,
         emitEvent: Boolean = true,
+        stopReason: String? = null,
     ) {
         if (!configServerClientStarted) {
             return
@@ -153,7 +154,12 @@ class EasyTierVpnService : VpnService() {
             Log.w(logTag, "Failed to stop config server client", error)
         }
         if (emitEvent) {
-            EasyTierFlutterBridge.emitFromService("config_server_stopped", emptyMap())
+            val payload = if (stopReason == null) {
+                emptyMap()
+            } else {
+                mapOf("reason" to stopReason)
+            }
+            EasyTierFlutterBridge.emitFromService("config_server_stopped", payload)
         }
         if (stopServiceIfIdle && activeInstanceName == null) {
             stopForegroundCompat()
@@ -161,10 +167,13 @@ class EasyTierVpnService : VpnService() {
         }
     }
 
-    private fun stopRuntime(vpnStopReason: String? = null) {
-        stopConfigServerClient(stopServiceIfIdle = false)
+    private fun stopRuntime(runtimeStopReason: String? = null) {
+        stopConfigServerClient(
+            stopServiceIfIdle = false,
+            stopReason = runtimeStopReason,
+        )
         stopNetworkInstances()
-        stopVpn(reason = vpnStopReason)
+        stopVpn(reason = runtimeStopReason)
     }
 
     private fun stopNetworkInstances() {

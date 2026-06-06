@@ -139,6 +139,36 @@ void main() {
       expect(service.status.value.phase, CoreRunPhase.signedOut);
     });
 
+    test('does not reconnect after Android runtime is intentionally stopped', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      runtime.connected = false;
+      runtime.emit(
+        const CoreRuntimeEvent(
+          type: CoreRuntimeEventTypes.configServerStopped,
+          data: {
+            'payload': {'reason': 'user_disconnect'},
+          },
+        ),
+      );
+
+      await _waitUntil(
+        () => service.status.value.phase == CoreRunPhase.stopped,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(runtime.ensureRunningCount, 1);
+      expect(service.status.value.message, '连接已断开');
+      expect(service.status.value.machineId, 'machine-1');
+    });
+
     test('restores running status when Android VPN recovers', () async {
       final authService = _LifecycleAuthService();
       final runtime = _LifecycleRuntime();

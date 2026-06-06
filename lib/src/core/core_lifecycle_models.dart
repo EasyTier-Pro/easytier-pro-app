@@ -2,6 +2,7 @@ part of 'core_lifecycle_service.dart';
 
 enum CoreRunPhase {
   signedOut,
+  stopped,
   checking,
   repairing,
   running,

@@ -1000,7 +1000,12 @@ cd /d "$installerDir"
       );
     }
     if (event.type == CoreRuntimeEventTypes.configServerStopped) {
-      _logger.info('core.runtime', 'Android config server client stopped');
+      final payload = _runtimeEventPayload(event);
+      _logger.info(
+        'core.runtime',
+        'Android config server client stopped',
+        context: {'reason': payload['reason'] ?? ''},
+      );
     }
     if (event.type == CoreRuntimeEventTypes.vpnPermissionGranted &&
         _session != null &&
@@ -1013,6 +1018,17 @@ cd /d "$installerDir"
       return;
     }
     if (event.type == CoreRuntimeEventTypes.configServerStopped) {
+      final payload = _runtimeEventPayload(event);
+      final stopReason = payload['reason']?.toString().trim() ?? '';
+      if (_isIntentionalAndroidRuntimeStop(stopReason)) {
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.stopped,
+          message: stopReason == 'revoked' ? 'VPN 已由系统断开' : '连接已断开',
+          machineId: status.value.machineId,
+          details: status.value.details,
+        );
+        return;
+      }
       if (_shouldReconnectAfterRuntimeStop()) {
         _logger.warn(
           'core.runtime',
@@ -1046,6 +1062,10 @@ cd /d "$installerDir"
     }
   }
 
+  bool _isIntentionalAndroidRuntimeStop(String reason) {
+    return reason == 'user_disconnect' || reason == 'revoked';
+  }
+
   void _restoreRunningStatusAfterVpnRecovery() {
     if (_session == null) {
       return;
@@ -1070,6 +1090,7 @@ cd /d "$installerDir"
     return switch (status.value.phase) {
       CoreRunPhase.running || CoreRunPhase.needsVpnPermission => true,
       CoreRunPhase.signedOut ||
+      CoreRunPhase.stopped ||
       CoreRunPhase.checking ||
       CoreRunPhase.repairing ||
       CoreRunPhase.error ||
