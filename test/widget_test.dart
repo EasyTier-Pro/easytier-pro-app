@@ -236,6 +236,91 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('shows detailed traffic graph on sparkline hover', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: 'office-network',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 3072,
+            uploadBytes: 6144,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('实时流量'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+    _expectTrafficChartsStatic(tester);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(
+      location: tester.getCenter(find.byType(LineChart)),
+    );
+    await tester.pump();
+
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartsStatic(tester);
+
+    await gesture.moveTo(const Offset(1, 1));
+    await tester.pump();
+
+    expect(find.text('实时流量'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+
+    await gesture.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('shows startup state when network instance is missing', (
     WidgetTester tester,
   ) async {
@@ -1745,6 +1830,12 @@ void _expectTrafficSparklineWindow(
     final xs = line.spots.map((spot) => spot.x).toList(growable: false);
     expect(xs, expectedXs);
     expect(xs.last, 29);
+  }
+}
+
+void _expectTrafficChartsStatic(WidgetTester tester) {
+  for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
+    expect(chart.duration, Duration.zero);
   }
 }
 

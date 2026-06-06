@@ -511,8 +511,156 @@ class _LoadingSwitchState extends State<_LoadingSwitch>
   }
 }
 
-class _NetworkTrafficSparkline extends StatelessWidget {
+class _NetworkTrafficSparkline extends StatefulWidget {
   const _NetworkTrafficSparkline({required this.history});
+
+  final List<_TrafficHistoryPoint> history;
+
+  @override
+  State<_NetworkTrafficSparkline> createState() =>
+      _NetworkTrafficSparklineState();
+}
+
+class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
+  OverlayEntry? _detailOverlay;
+  Rect? _anchorRect;
+
+  @override
+  void didUpdateWidget(covariant _NetworkTrafficSparkline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_detailOverlay != null) {
+      _updateAnchorRect();
+      _detailOverlay?.markNeedsBuild();
+    }
+  }
+
+  @override
+  void dispose() {
+    _hideDetails();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final downloadColor = const Color(0xFF16A34A);
+    final uploadColor = const Color(0xFF2563EB);
+    final chart = _trafficSparklineData(widget.history);
+
+    return MouseRegion(
+      onEnter: (_) => _showDetails(),
+      onExit: (_) => _hideDetails(),
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: 100,
+          height: 40,
+          child: LineChart(
+            _trafficSparklineChartData(
+              chart: chart,
+              downloadColor: downloadColor,
+              uploadColor: uploadColor,
+            ),
+            duration: Duration.zero,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetails() {
+    if (_detailOverlay != null) {
+      return;
+    }
+    _updateAnchorRect();
+    _detailOverlay = OverlayEntry(
+      builder: (context) => _NetworkTrafficDetailOverlay(
+        anchorRect: _anchorRect,
+        history: widget.history,
+      ),
+    );
+    Overlay.of(context).insert(_detailOverlay!);
+  }
+
+  void _hideDetails() {
+    _detailOverlay?.remove();
+    _detailOverlay = null;
+  }
+
+  void _updateAnchorRect() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached) {
+      return;
+    }
+
+    final topLeft = box.localToGlobal(Offset.zero);
+    _anchorRect = topLeft & box.size;
+  }
+}
+
+class _NetworkTrafficDetailOverlay extends StatelessWidget {
+  const _NetworkTrafficDetailOverlay({
+    required this.anchorRect,
+    required this.history,
+  });
+
+  final Rect? anchorRect;
+  final List<_TrafficHistoryPoint> history;
+
+  static const Size _panelSize = Size(320, 220);
+  static const double _screenPadding = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    final anchor = anchorRect;
+    if (anchor == null || history.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final screenSize = MediaQuery.sizeOf(context);
+    final topCandidate = anchor.top - _panelSize.height - 10;
+    final top = topCandidate >= _screenPadding
+        ? topCandidate
+        : math.min(anchor.bottom + 10, screenSize.height - _panelSize.height);
+    final left = (anchor.center.dx - (_panelSize.width / 2)).clamp(
+      _screenPadding,
+      math.max(
+        _screenPadding,
+        screenSize.width - _panelSize.width - _screenPadding,
+      ),
+    );
+
+    return Positioned(
+      left: left.toDouble(),
+      top: top.toDouble(),
+      width: _panelSize.width,
+      height: _panelSize.height,
+      child: ExcludeSemantics(
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withAlpha(22),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: _NetworkTrafficDetailChart(history: history),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NetworkTrafficDetailChart extends StatelessWidget {
+  const _NetworkTrafficDetailChart({required this.history});
 
   final List<_TrafficHistoryPoint> history;
 
@@ -520,110 +668,220 @@ class _NetworkTrafficSparkline extends StatelessWidget {
   Widget build(BuildContext context) {
     final downloadColor = const Color(0xFF16A34A);
     final uploadColor = const Color(0xFF2563EB);
-    const maxHistoryPoints =
-        _WorkspaceHomeViewState._maxNetworkTrafficHistoryPoints;
-    final visibleHistory = history.length > maxHistoryPoints
-        ? history.sublist(history.length - maxHistoryPoints)
-        : history;
+    final chart = _trafficSparklineData(history);
+    final latest = chart.visibleHistory.last;
 
-    final maxRate = visibleHistory
-        .map((h) => math.max(h.downloadRate, h.uploadRate))
-        .reduce(math.max);
-    final hasTraffic = maxRate > 0;
-    final yMax = _trafficSparklineYMax(maxRate);
-
-    const minX = 0.0;
-    final maxX = (maxHistoryPoints - 1).toDouble();
-    final firstX = maxX - (visibleHistory.length - 1);
-
-    final downloadSpots = <FlSpot>[
-      for (var i = 0; i < visibleHistory.length; i++)
-        FlSpot(firstX + i, visibleHistory[i].downloadRate),
-    ];
-    final uploadSpots = <FlSpot>[
-      for (var i = 0; i < visibleHistory.length; i++)
-        FlSpot(firstX + i, visibleHistory[i].uploadRate),
-    ];
-
-    return ExcludeSemantics(
-      child: SizedBox(
-        width: 100,
-        height: 40,
-        child: LineChart(
-          LineChartData(
-            minX: minX,
-            maxX: maxX,
-            minY: 0,
-            maxY: yMax,
-            gridData: const FlGridData(show: false),
-            titlesData: const FlTitlesData(show: false),
-            borderData: FlBorderData(show: false),
-            lineTouchData: const LineTouchData(enabled: false),
-            lineBarsData: [
-              _buildLine(downloadSpots, downloadColor),
-              _buildLine(uploadSpots, uploadColor),
-              if (!hasTraffic)
-                LineChartBarData(
-                  spots: [const FlSpot(minX, 0), FlSpot(maxX, 0)],
-                  barWidth: 1,
-                  dotData: FlDotData(show: false),
-                  color: const Color(0xFFCBD5E1),
-                  belowBarData: BarAreaData(show: false),
-                ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '实时流量',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
           ),
-          duration: Duration.zero,
         ),
-      ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 10,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _TrafficLegendValue(
+              icon: Icons.arrow_downward,
+              color: downloadColor,
+              text: _formatTrafficRate(latest.downloadRate),
+            ),
+            _TrafficLegendValue(
+              icon: Icons.arrow_upward,
+              color: uploadColor,
+              text: _formatTrafficRate(latest.uploadRate),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: LineChart(
+            _trafficSparklineChartData(
+              chart: chart,
+              downloadColor: downloadColor,
+              uploadColor: uploadColor,
+              detailed: true,
+            ),
+            duration: Duration.zero,
+          ),
+        ),
+      ],
     );
   }
+}
 
-  LineChartBarData _buildLine(
-    List<FlSpot> spots,
-    Color color, {
-    bool showDot = false,
-  }) {
-    return LineChartBarData(
-      spots: spots,
-      isCurved: spots.length >= 4,
-      curveSmoothness: 0.3,
-      barWidth: 1.8,
-      isStrokeCapRound: true,
-      dotData: FlDotData(
-        show: showDot,
-        getDotPainter: (spot, percent, bar, index) {
-          return FlDotCirclePainter(radius: 2.5, color: color, strokeWidth: 0);
-        },
-      ),
-      color: color,
-      belowBarData: BarAreaData(
-        show: spots.length > 1,
-        color: color.withAlpha(35),
-      ),
+class _TrafficLegendValue extends StatelessWidget {
+  const _TrafficLegendValue({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 3),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
+      ],
     );
   }
+}
 
-  double _trafficSparklineYMax(double maxRate) {
-    const minScale = 1024.0;
-    if (maxRate <= 0) {
-      return minScale;
-    }
+class _TrafficSparklineData {
+  const _TrafficSparklineData({
+    required this.visibleHistory,
+    required this.downloadSpots,
+    required this.uploadSpots,
+    required this.minX,
+    required this.maxX,
+    required this.yMax,
+    required this.hasTraffic,
+  });
 
-    final target = math.max(maxRate * 1.15, minScale);
-    final exponent = (math.log(target) / math.ln10).floor();
-    final magnitude = math.pow(10, exponent).toDouble();
-    final normalized = target / magnitude;
+  final List<_TrafficHistoryPoint> visibleHistory;
+  final List<FlSpot> downloadSpots;
+  final List<FlSpot> uploadSpots;
+  final double minX;
+  final double maxX;
+  final double yMax;
+  final bool hasTraffic;
+}
 
-    final multiplier = normalized <= 1
-        ? 1.0
-        : normalized <= 2
-        ? 2.0
-        : normalized <= 5
-        ? 5.0
-        : 10.0;
+_TrafficSparklineData _trafficSparklineData(
+  List<_TrafficHistoryPoint> history,
+) {
+  const maxHistoryPoints =
+      _WorkspaceHomeViewState._maxNetworkTrafficHistoryPoints;
+  final visibleHistory = history.length > maxHistoryPoints
+      ? history.sublist(history.length - maxHistoryPoints)
+      : history;
 
-    return multiplier * magnitude;
+  final maxRate = visibleHistory
+      .map((h) => math.max(h.downloadRate, h.uploadRate))
+      .fold(0.0, math.max);
+  final hasTraffic = maxRate > 0;
+  final yMax = _trafficSparklineYMax(maxRate);
+
+  const minX = 0.0;
+  final maxX = (maxHistoryPoints - 1).toDouble();
+  final firstX = maxX - (visibleHistory.length - 1);
+
+  final downloadSpots = <FlSpot>[
+    for (var i = 0; i < visibleHistory.length; i++)
+      FlSpot(firstX + i, visibleHistory[i].downloadRate),
+  ];
+  final uploadSpots = <FlSpot>[
+    for (var i = 0; i < visibleHistory.length; i++)
+      FlSpot(firstX + i, visibleHistory[i].uploadRate),
+  ];
+
+  return _TrafficSparklineData(
+    visibleHistory: visibleHistory,
+    downloadSpots: downloadSpots,
+    uploadSpots: uploadSpots,
+    minX: minX,
+    maxX: maxX,
+    yMax: yMax,
+    hasTraffic: hasTraffic,
+  );
+}
+
+LineChartData _trafficSparklineChartData({
+  required _TrafficSparklineData chart,
+  required Color downloadColor,
+  required Color uploadColor,
+  bool detailed = false,
+}) {
+  return LineChartData(
+    minX: chart.minX,
+    maxX: chart.maxX,
+    minY: 0,
+    maxY: chart.yMax,
+    gridData: FlGridData(
+      show: detailed,
+      drawVerticalLine: false,
+      horizontalInterval: chart.yMax / 2,
+      getDrawingHorizontalLine: (_) =>
+          FlLine(color: const Color(0xFFE2E8F0).withAlpha(180), strokeWidth: 1),
+    ),
+    titlesData: const FlTitlesData(show: false),
+    borderData: FlBorderData(show: false),
+    lineTouchData: const LineTouchData(enabled: false),
+    lineBarsData: [
+      _buildTrafficLine(chart.downloadSpots, downloadColor, detailed: detailed),
+      _buildTrafficLine(chart.uploadSpots, uploadColor, detailed: detailed),
+      if (!chart.hasTraffic)
+        LineChartBarData(
+          spots: [FlSpot(chart.minX, 0), FlSpot(chart.maxX, 0)],
+          barWidth: 1,
+          dotData: FlDotData(show: false),
+          color: const Color(0xFFCBD5E1),
+          belowBarData: BarAreaData(show: false),
+        ),
+    ],
+  );
+}
+
+LineChartBarData _buildTrafficLine(
+  List<FlSpot> spots,
+  Color color, {
+  bool detailed = false,
+}) {
+  return LineChartBarData(
+    spots: spots,
+    isCurved: spots.length >= 4,
+    curveSmoothness: 0.3,
+    barWidth: detailed ? 2.2 : 1.8,
+    isStrokeCapRound: true,
+    dotData: FlDotData(show: false),
+    color: color,
+    belowBarData: BarAreaData(
+      show: spots.length > 1,
+      color: color.withAlpha(detailed ? 28 : 35),
+    ),
+  );
+}
+
+double _trafficSparklineYMax(double maxRate) {
+  const minScale = 1024.0;
+  if (maxRate <= 0) {
+    return minScale;
   }
+
+  final target = math.max(maxRate * 1.15, minScale);
+  final exponent = (math.log(target) / math.ln10).floor();
+  final magnitude = math.pow(10, exponent).toDouble();
+  final normalized = target / magnitude;
+
+  final multiplier = normalized <= 1
+      ? 1.0
+      : normalized <= 2
+      ? 2.0
+      : normalized <= 5
+      ? 5.0
+      : 10.0;
+
+  return multiplier * magnitude;
 }
 
 class _IpBadge extends StatelessWidget {
