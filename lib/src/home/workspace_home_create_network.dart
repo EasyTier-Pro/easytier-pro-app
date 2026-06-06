@@ -76,18 +76,21 @@ class _CreateNetworkForm extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _CidrPresetChip(
+                    key: const ValueKey<String>('cidr-preset-10.144.0.0/16'),
                     label: '10.144.0.0/16',
                     value: '10.144.0.0/16',
                     active: ipv4Cidr == '10.144.0.0/16',
                     onTap: onIPv4CidrChanged,
                   ),
                   _CidrPresetChip(
+                    key: const ValueKey<String>('cidr-preset-192.168.0.0/24'),
                     label: '192.168.0.0/24',
                     value: '192.168.0.0/24',
                     active: ipv4Cidr == '192.168.0.0/24',
                     onTap: onIPv4CidrChanged,
                   ),
                   _CidrPresetChip(
+                    key: const ValueKey<String>('cidr-preset-172.16.0.0/16'),
                     label: '172.16.0.0/16',
                     value: '172.16.0.0/16',
                     active: ipv4Cidr == '172.16.0.0/16',
@@ -107,30 +110,34 @@ class _CreateNetworkForm extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: ExcludeSemantics(
-                  child: FSelect<String>(
-                    key: ValueKey<String?>(selectedRegionCode),
-                    control: FSelectControl.lifted(
-                      value: selectedRegionCode,
-                      onChange: onRegionChanged,
+                child: _ControlSelectionBoundary(
+                  child: ExcludeSemantics(
+                    child: FSelect<String>(
+                      key: ValueKey<String?>(selectedRegionCode),
+                      control: FSelectControl.lifted(
+                        value: selectedRegionCode,
+                        onChange: onRegionChanged,
+                      ),
+                      size: .sm,
+                      items: {
+                        for (final region in regions)
+                          region.displayName: region.code,
+                      },
+                      enabled: !loadingRegions && regions.isNotEmpty,
                     ),
-                    size: .sm,
-                    items: {
-                      for (final region in regions)
-                        region.displayName: region.code,
-                    },
-                    enabled: !loadingRegions && regions.isNotEmpty,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              FButton(
-                variant: .ghost,
-                size: .sm,
-                onPress: loadingRegions
-                    ? null
-                    : () => unawaited(onRetryRegions()),
-                child: const Icon(Icons.refresh, size: 16),
+              _ControlSelectionBoundary(
+                child: FButton(
+                  variant: .ghost,
+                  size: .sm,
+                  onPress: loadingRegions
+                      ? null
+                      : () => unawaited(onRetryRegions()),
+                  child: const Icon(Icons.refresh, size: 16),
+                ),
               ),
             ],
           ),
@@ -152,18 +159,20 @@ class _CreateNetworkForm extends StatelessWidget {
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
-          child: FButton(
-            onPress: canCreate ? () => unawaited(onCreate()) : null,
-            child: creating
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FCircularProgress(size: .xs),
-                      SizedBox(width: 8),
-                      Text('正在创建...'),
-                    ],
-                  )
-                : const Text('创建网络'),
+          child: _ControlSelectionBoundary(
+            child: FButton(
+              onPress: canCreate ? () => unawaited(onCreate()) : null,
+              child: creating
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FCircularProgress(size: .xs),
+                        SizedBox(width: 8),
+                        Text('正在创建...'),
+                      ],
+                    )
+                  : const Text('创建网络'),
+            ),
           ),
         ),
       ],
@@ -222,6 +231,7 @@ class _FormFieldBlock extends StatelessWidget {
 
 class _CidrPresetChip extends StatelessWidget {
   const _CidrPresetChip({
+    super.key,
     required this.label,
     required this.value,
     required this.active,
@@ -235,25 +245,31 @@ class _CidrPresetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => onTap(value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: active ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0),
+    return _ControlSelectionBoundary(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => onTap(value),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: active ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFFCBD5E1)
+                    : const Color(0xFFE2E8F0),
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: active ? const Color(0xFF1E293B) : const Color(0xFF475569),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: active
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFF475569),
+              ),
             ),
           ),
         ),

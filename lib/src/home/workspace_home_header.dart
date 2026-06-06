@@ -522,11 +522,13 @@ class _StatusBadge extends StatelessWidget {
               }
 
               final elevationButton = needsElevation && onElevate != null
-                  ? FButton(
-                      variant: .primary,
-                      size: .sm,
-                      onPress: () => unawaited(onElevate!()),
-                      child: const Text('以管理员身份运行'),
+                  ? _ControlSelectionBoundary(
+                      child: FButton(
+                        variant: .primary,
+                        size: .sm,
+                        onPress: () => unawaited(onElevate!()),
+                        child: const Text('以管理员身份运行'),
+                      ),
                     )
                   : null;
 

@@ -109,29 +109,31 @@ class _NetworkActionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FButton(
-          key: const ValueKey<String>('network-create-button'),
-          variant: .ghost,
-          size: .sm,
-          onPress: onCreate,
-          mainAxisSize: MainAxisSize.min,
-          child: const Row(
+    return _ControlSelectionBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FButton(
+            key: const ValueKey<String>('network-create-button'),
+            variant: .ghost,
+            size: .sm,
+            onPress: onCreate,
             mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add, size: 15),
-              SizedBox(width: 3),
-              Text('新建网络'),
-            ],
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add, size: 15),
+                SizedBox(width: 3),
+                Text('新建网络'),
+              ],
+            ),
           ),
-        ),
-        if (onRefresh != null || refreshing) ...[
-          const SizedBox(width: 4),
-          _NetworkRefreshButton(refreshing: refreshing, onRefresh: onRefresh),
+          if (onRefresh != null || refreshing) ...[
+            const SizedBox(width: 4),
+            _NetworkRefreshButton(refreshing: refreshing, onRefresh: onRefresh),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

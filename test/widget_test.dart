@@ -902,6 +902,21 @@ void main() {
     expect(find.text('网络地址范围'), findsOneWidget);
     expect(find.text('区域'), findsOneWidget);
 
+    expect(
+      _hasSelectionAreaAncestor(
+        tester,
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('cidr-preset-10.144.0.0/16')),
+          matching: find.byType(Text),
+        ),
+      ),
+      isFalse,
+    );
+    expect(
+      _hasSelectionAreaAncestor(tester, find.widgetWithText(FButton, '创建网络')),
+      isFalse,
+    );
+
     await tester.enterText(find.byType(FTextField).at(1), '10.200.0.0/16');
     await tester.pumpAndSettle();
 
@@ -1136,6 +1151,13 @@ void main() {
     );
     expect(
       _hasSelectionAreaAncestor(tester, find.byType(FButton).first),
+      isFalse,
+    );
+    expect(
+      _hasSelectionAreaAncestor(
+        tester,
+        find.byKey(const ValueKey<String>('network-create-button')),
+      ),
       isFalse,
     );
 

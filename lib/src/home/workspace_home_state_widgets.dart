@@ -15,7 +15,10 @@ class _StateMessage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(message, textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 12), action!],
+            if (action != null) ...[
+              const SizedBox(height: 12),
+              _ControlSelectionBoundary(child: action!),
+            ],
           ],
         ),
       ),

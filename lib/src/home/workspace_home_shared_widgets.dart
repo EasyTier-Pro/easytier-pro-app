@@ -1,11 +1,18 @@
 part of 'workspace_home_view.dart';
 
+class _ControlSelectionBoundary extends StatelessWidget {
+  const _ControlSelectionBoundary({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectionContainer.disabled(child: child);
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    this.subtitle,
-    this.trailing,
-  });
+  const _SectionTitle({required this.title, this.subtitle, this.trailing});
 
   final String title;
   final String? subtitle;
@@ -33,7 +40,10 @@ class _SectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        if (trailing != null) ...[const SizedBox(width: 16), trailing!],
+        if (trailing != null) ...[
+          const SizedBox(width: 16),
+          _ControlSelectionBoundary(child: trailing!),
+        ],
       ],
     );
   }
