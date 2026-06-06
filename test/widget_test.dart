@@ -1394,7 +1394,7 @@ void main() {
     expect(find.text('laptop-2'), findsOneWidget);
     expect(find.text('old-desktop'), findsNothing);
     expect(find.text('node-alias'), findsNothing);
-    expect(find.text('1 / 2 台在线'), findsOneWidget);
+    expect(find.text('2 台设备 · 1 在线 · 1 待批准'), findsOneWidget);
   });
 
   test('parses installer machine_id from finished event', () {

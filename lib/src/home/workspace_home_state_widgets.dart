@@ -53,18 +53,6 @@ String _approvalLabel(ManagedDevice device) {
   };
 }
 
-String _connectivityLabel(ManagedDevice device) {
-  return switch (device.connectivityState.toLowerCase()) {
-    'online' => '在线',
-    'connected' => '在线',
-    'offline' => '离线',
-    'disconnected' => '离线',
-    'removed' => '已移除',
-    '' => '未知',
-    _ => device.connectivityState,
-  };
-}
-
 String _shortId(String value) {
   if (value.length <= 8) {
     return value;
