@@ -18,7 +18,7 @@ class _NoopTraySupport implements TraySupport {
   Future<void> updateCoreStatus(CoreRunStatus status) async {}
 
   @override
-  void setRepairAction(Future<void> Function()? onRepair) {}
+  void setConnectionAction(TrayConnectionAction? action) {}
 }
 
 TraySupport createPlatformTraySupport() => _NoopTraySupport();

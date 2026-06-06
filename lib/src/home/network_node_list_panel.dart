@@ -74,6 +74,7 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
         duration: appMotionMedium,
         reverseDuration: appMotionShort,
         transitionBuilder: appFadeSlideTransition,
+        layoutBuilder: appSwitcherStackLayout,
         child: content,
       ),
     );
@@ -147,6 +148,7 @@ class NetworkNodeListPanel extends StatelessWidget {
       duration: appMotionMedium,
       reverseDuration: appMotionShort,
       transitionBuilder: appFadeSlideTransition,
+      layoutBuilder: appSwitcherStackLayout,
       child: content,
     );
   }

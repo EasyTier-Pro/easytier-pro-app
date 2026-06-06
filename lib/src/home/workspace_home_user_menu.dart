@@ -95,7 +95,7 @@ class _BrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/easytier.png',
+      'assets/images/easytier_header.png',
       width: 30,
       height: 30,
       fit: BoxFit.contain,

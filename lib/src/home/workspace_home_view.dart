@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import '../desktop/tray_support.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
@@ -38,12 +39,14 @@ class WorkspaceHomeView extends StatefulWidget {
     super.key,
     required this.authService,
     required this.coreLifecycleService,
+    required this.traySupport,
     required this.session,
     required this.onLogout,
   });
 
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
+  final TraySupport traySupport;
   final AuthSession session;
   final Future<void> Function() onLogout;
 
@@ -93,10 +96,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Set<String> _trafficPollNetworkIds = const <String>{};
   String? _peerPollNetworkId;
   final List<_TrafficHistoryPoint> _trafficHistory = <_TrafficHistoryPoint>[];
-  static const int _maxTrafficHistoryPoints = 60;
+  static const int _maxTrafficHistoryPoints = 1800;
   final Map<String, List<_TrafficHistoryPoint>> _networkTrafficHistories =
       <String, List<_TrafficHistoryPoint>>{};
-  static const int _maxNetworkTrafficHistoryPoints = 30;
+  static const int _maxNetworkTrafficHistoryPoints = 1800;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, bool> _networkInstanceReady = const <String, bool>{};
@@ -105,6 +108,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Map<String, Map<String, CorePeerStatus>> _networkPeerStatuses =
       const <String, Map<String, CorePeerStatus>>{};
   Map<String, String> _peerStatusErrors = const <String, String>{};
+  String? _trayConnectionNetworkId;
+  String? _trayConnectionLabel;
+  String? _trayWorkspaceName;
+  bool? _trayConnectionEnabled;
+  bool? _trayConnectionDisconnecting;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -135,6 +143,100 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   void _updateState(VoidCallback fn) {
     setState(fn);
+    _syncTrayConnectionAction();
+  }
+
+  void _syncTrayConnectionAction() {
+    final network =
+        _selectedNetwork ?? (_networks.isEmpty ? null : _networks.first);
+    final state = network == null ? null : _joinStateFor(network);
+    final disconnecting =
+        state?.phase == _JoinPhase.joined || state?.phase == _JoinPhase.leaving;
+    final enabled =
+        network != null &&
+        state?.phase != _JoinPhase.joining &&
+        state?.phase != _JoinPhase.leaving;
+    final label = _trayConnectionLabelFor(network, state);
+    final networkId = network?.id;
+    final workspaceName = _trayWorkspaceNameForSession();
+
+    if (_trayConnectionNetworkId == networkId &&
+        _trayConnectionLabel == label &&
+        _trayWorkspaceName == workspaceName &&
+        _trayConnectionEnabled == enabled &&
+        _trayConnectionDisconnecting == disconnecting) {
+      return;
+    }
+
+    _trayConnectionNetworkId = networkId;
+    _trayConnectionLabel = label;
+    _trayWorkspaceName = workspaceName;
+    _trayConnectionEnabled = enabled;
+    _trayConnectionDisconnecting = disconnecting;
+
+    widget.traySupport.setConnectionAction(
+      TrayConnectionAction(
+        label: label,
+        enabled: enabled,
+        workspaceName: workspaceName,
+        onSelected: networkId == null
+            ? null
+            : () => _runTrayConnectionAction(networkId, disconnecting),
+      ),
+    );
+  }
+
+  String _trayConnectionLabelFor(
+    ConsoleNetwork? network,
+    _JoinNetworkState? state,
+  ) {
+    if (network == null) {
+      return '连接';
+    }
+
+    return switch (state?.phase) {
+      _JoinPhase.joined => '断开 ${network.name}',
+      _JoinPhase.leaving => '正在断开 ${network.name}...',
+      _JoinPhase.joining => '正在连接 ${network.name}...',
+      _ => '连接到 ${network.name}',
+    };
+  }
+
+  String _trayWorkspaceNameForSession() {
+    final name = _workspace?.name.trim();
+    return name == null || name.isEmpty ? '未关联工作区' : name;
+  }
+
+  Future<void> _runTrayConnectionAction(
+    String networkId,
+    bool disconnect,
+  ) async {
+    await widget.traySupport.showWindow();
+    if (!mounted) {
+      return;
+    }
+
+    final network = _networkById(networkId);
+    if (network == null) {
+      _syncTrayConnectionAction();
+      return;
+    }
+
+    if (disconnect) {
+      await _leaveNetwork(network);
+    } else {
+      await _joinNetwork(network);
+    }
+    _syncTrayConnectionAction();
+  }
+
+  ConsoleNetwork? _networkById(String networkId) {
+    for (final network in _networks) {
+      if (network.id == networkId) {
+        return network;
+      }
+    }
+    return null;
   }
 
   void _setNewNetworkName(String value) {
@@ -161,6 +263,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void initState() {
     super.initState();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
+    _syncTrayConnectionAction();
     unawaited(_loadInitialData());
   }
 
@@ -171,6 +274,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _newNetworkNameController.dispose();
     _newNetworkIPv4CidrController.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
+    widget.traySupport.setConnectionAction(null);
     super.dispose();
   }
 
@@ -179,6 +283,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return;
     }
     setState(() {});
+    _syncTrayConnectionAction();
     _refreshTrafficPolling();
     _refreshPeerPolling();
   }

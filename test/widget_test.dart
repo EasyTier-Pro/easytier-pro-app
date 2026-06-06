@@ -236,6 +236,166 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('shows detailed traffic graph on sparkline hover', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: 'office-network',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 3072,
+            uploadBytes: 6144,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 8192,
+            uploadBytes: 12288,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 4),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('实时流量'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+    _expectTrafficChartAnimations(tester);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(
+      location: tester.getCenter(find.byType(LineChart)),
+    );
+    await tester.pump();
+
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.text('速率'), findsNothing);
+    expect(find.text('采样点'), findsNothing);
+    expect(find.text('0 B/s'), findsNothing);
+    expect(find.text('10.0 KiB/s'), findsOneWidget);
+    _expectTextSingleLine(tester, find.text('10.0 KiB/s'));
+    expect(_trafficTimeLabels(), findsAtLeastNWidgets(1));
+    _expectTrafficTimeLabelsFitInside(tester);
+    _expectTrafficXAxisLabelsOutsideGraph(tester);
+    expect(find.text('15min'), findsNothing);
+    _expectDetailedTrafficChartMaxX(tester, 60);
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartYScalesFixed(tester);
+    _expectTrafficChartAnimations(tester);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartAnimations(tester);
+
+    await gesture.moveTo(const Offset(1, 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('实时流量'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+
+    await tester.tap(find.byType(LineChart));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-overlay')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-animation')),
+      findsOneWidget,
+    );
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.text('实时流量详情'), findsNothing);
+    expect(find.text('1min'), findsOneWidget);
+    expect(find.text('15min'), findsOneWidget);
+    expect(find.text('60min'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+      findsNothing,
+    );
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectDetailedTrafficChartMaxX(tester, 60);
+    _expectTrafficChartAnimations(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-window-15min')),
+    );
+    await tester.pumpAndSettle();
+    _expectDetailedTrafficChartMaxX(tester, 900);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-window-60min')),
+    );
+    await tester.pumpAndSettle();
+    _expectDetailedTrafficChartMaxX(tester, 3600);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-close')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-overlay')),
+      findsNothing,
+    );
+    expect(find.text('实时流量详情'), findsNothing);
+    expect(find.text('实时流量'), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+
+    await gesture.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('shows startup state when network instance is missing', (
     WidgetTester tester,
   ) async {
@@ -412,6 +572,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('desktop-1'), findsOneWidget);
+
+    final summaryBottom = tester
+        .getBottomLeft(find.textContaining('1 / 1 在线'))
+        .dy;
+    final nodeTop = tester.getTopLeft(find.text('desktop-1').last).dy;
+    expect(nodeTop - summaryBottom, lessThan(56));
   });
 
   testWidgets('network detail device list scrolls when content overflows', (
@@ -1012,7 +1178,7 @@ void main() {
   testWidgets('create network dialog submits selected CIDR preset', (
     WidgetTester tester,
   ) async {
-    _useDesktopViewport(tester);
+    _useDesktopViewport(tester, size: const Size(900, 560));
 
     final authService = _FakeAuthService(
       networks: const <ConsoleNetwork>[
@@ -1035,6 +1201,23 @@ void main() {
       find.byKey(const ValueKey<String>('network-create-button')),
     );
     await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FDialog),
+        matching: find.byType(Scrollbar),
+      ),
+      findsNothing,
+    );
+
     await tester.tap(find.text('172.16.0.0/16'));
     await tester.pumpAndSettle();
     await tester.tap(
@@ -1494,7 +1677,7 @@ void main() {
     expect(find.text('laptop-2'), findsOneWidget);
     expect(find.text('old-desktop'), findsNothing);
     expect(find.text('node-alias'), findsNothing);
-    expect(find.text('1 / 2 台在线'), findsOneWidget);
+    expect(find.text('2 台设备 · 1 在线 · 1 待批准'), findsOneWidget);
   });
 
   test('parses installer machine_id from finished event', () {
@@ -1933,6 +2116,89 @@ void _expectTrafficSparklineWindow(
     final xs = line.spots.map((spot) => spot.x).toList(growable: false);
     expect(xs, expectedXs);
     expect(xs.last, 29);
+  }
+}
+
+void _expectTrafficChartAnimations(WidgetTester tester) {
+  for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
+    if (chart.data.titlesData.show) {
+      expect(chart.duration, greaterThan(Duration.zero));
+    } else {
+      expect(chart.duration, Duration.zero);
+    }
+  }
+}
+
+void _expectTrafficChartYScalesFixed(WidgetTester tester) {
+  const fixedScales = <double>[
+    1024,
+    10 * 1024,
+    100 * 1024,
+    1024 * 1024,
+    10 * 1024 * 1024,
+    100 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    10 * 1024 * 1024 * 1024,
+    100 * 1024 * 1024 * 1024,
+    1024 * 1024 * 1024 * 1024,
+  ];
+
+  for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
+    expect(fixedScales, contains(chart.data.maxY));
+  }
+}
+
+void _expectDetailedTrafficChartMaxX(WidgetTester tester, double expectedMaxX) {
+  final detailedCharts = tester
+      .widgetList<LineChart>(find.byType(LineChart))
+      .where((chart) => chart.data.titlesData.show)
+      .toList(growable: false);
+
+  expect(detailedCharts, hasLength(1));
+  expect(detailedCharts.single.data.maxX, expectedMaxX);
+}
+
+Finder _trafficTimeLabels() {
+  final timePattern = RegExp(r'^\d{2}:\d{2}:\d{2}$');
+  return find.byWidgetPredicate(
+    (widget) => widget is Text && timePattern.hasMatch(widget.data ?? ''),
+  );
+}
+
+void _expectTextSingleLine(WidgetTester tester, Finder finder) {
+  final text = tester.widget<Text>(finder);
+  expect(text.maxLines, 1);
+  expect(text.softWrap, isFalse);
+  expect(text.overflow, TextOverflow.visible);
+}
+
+void _expectTrafficTimeLabelsFitInside(WidgetTester tester) {
+  final timePattern = RegExp(r'^\d{2}:\d{2}:\d{2}$');
+  final timeTitleWidgets = tester
+      .widgetList<SideTitleWidget>(find.byType(SideTitleWidget))
+      .where((widget) {
+        final child = widget.child;
+        return child is Text && timePattern.hasMatch(child.data ?? '');
+      })
+      .toList(growable: false);
+
+  expect(timeTitleWidgets, isNotEmpty);
+  for (final widget in timeTitleWidgets) {
+    expect(widget.fitInside.enabled, isTrue);
+  }
+}
+
+void _expectTrafficXAxisLabelsOutsideGraph(WidgetTester tester) {
+  final detailedCharts = tester
+      .widgetList<LineChart>(find.byType(LineChart))
+      .where((chart) => chart.data.titlesData.show)
+      .toList(growable: false);
+
+  expect(detailedCharts, isNotEmpty);
+  for (final chart in detailedCharts) {
+    final bottomTitles = chart.data.titlesData.bottomTitles;
+    expect(bottomTitles.sideTitleAlignment, SideTitleAlignment.outside);
+    expect(bottomTitles.sideTitles.reservedSize, greaterThanOrEqualTo(24));
   }
 }
 

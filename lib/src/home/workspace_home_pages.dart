@@ -277,24 +277,29 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
       return a.hostname.compareTo(b.hostname);
     });
 
-    final onlineCount = devices.where((device) => device.online).length;
+    final summaryText = _deviceSummaryText(devices);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
           title: '设备',
-          subtitle: '工作区中的所有设备与在线状态。',
+          subtitle: summaryText,
           trailing: FButton(
             variant: .outline,
             size: .sm,
             onPress: _isLoadingDevices
                 ? null
                 : () => unawaited(_loadManagedDevices()),
-            child: Text(_isLoadingDevices ? '刷新中' : '刷新设备'),
+            child: SizedBox.square(
+              dimension: 16,
+              child: _isLoadingDevices
+                  ? const FCircularProgress(size: .sm)
+                  : const Icon(Icons.refresh, size: 16),
+            ),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         if (_deviceError != null) ...[
           SizedBox(
             height: 120,
@@ -310,19 +315,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
-        Row(
-          children: [
-            Text('设备列表', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FBadge(
-              variant: .secondary,
-              child: Text('$onlineCount / ${devices.length} 台在线'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
         if (devices.isEmpty)
           SizedBox(
             height: 200,
@@ -332,34 +326,148 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           )
         else
           FCard.raw(
-            child: _ConstrainedFItemGroup(
-              divider: .full,
-              physics: const NeverScrollableScrollPhysics(),
+            child: Column(
               children: [
-                for (final device in devices)
-                  FItem(
-                    key: ValueKey<String>('managed-device-${device.id}'),
-                    prefix: _StatusDot(online: device.online),
-                    title: Text(device.hostname),
-                    subtitle: Text(
-                      [
-                        '审批: ${_approvalLabel(device)}',
-                        '连接: ${_connectivityLabel(device)}',
-                        '机器: ${_shortId(device.machineId)}',
-                        'ID: ${device.id}',
-                      ].join('  |  '),
-                    ),
-                    suffix: FBadge(
-                      variant: device.online ? .secondary : .outline,
-                      child: Text(_connectivityLabel(device)),
-                    ),
+                for (var i = 0; i < devices.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, color: Color(0xFFE5E7EB)),
+                  _ManagedDeviceRow(
+                    key: ValueKey<String>('managed-device-${devices[i].id}'),
+                    device: devices[i],
                   ),
+                ],
               ],
             ),
           ),
       ],
     );
   }
+
+  String _deviceSummaryText(List<ManagedDevice> devices) {
+    final onlineCount = devices.where((device) => device.online).length;
+    final pendingCount = devices
+        .where((device) => device.approvalState.toLowerCase() == 'pending')
+        .length;
+    final rejectedCount = devices
+        .where((device) => device.approvalState.toLowerCase() == 'rejected')
+        .length;
+
+    final parts = <String>[
+      '${devices.length} 台设备',
+      '$onlineCount 在线',
+      if (pendingCount > 0) '$pendingCount 待批准',
+      if (rejectedCount > 0) '$rejectedCount 已拒绝',
+    ];
+    return parts.join(' · ');
+  }
+}
+
+class _ManagedDeviceRow extends StatelessWidget {
+  const _ManagedDeviceRow({super.key, required this.device});
+
+  final ManagedDevice device;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _managedDeviceStatus(device);
+    final meta = _managedDeviceMeta(device);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  device.hostname,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    meta,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _ManagedDeviceStatusChip(status: status),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManagedDeviceStatus {
+  const _ManagedDeviceStatus({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+}
+
+class _ManagedDeviceStatusChip extends StatelessWidget {
+  const _ManagedDeviceStatusChip({required this.status});
+
+  final _ManagedDeviceStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: status.color.withAlpha(12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: status.color.withAlpha(35)),
+      ),
+      child: Text(
+        status.label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: status.color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+
+_ManagedDeviceStatus _managedDeviceStatus(ManagedDevice device) {
+  if (!device.approved) {
+    return _ManagedDeviceStatus(
+      label: _approvalLabel(device),
+      color: const Color(0xFFD97706),
+    );
+  }
+
+  if (device.online) {
+    return const _ManagedDeviceStatus(label: '在线', color: Color(0xFF16A34A));
+  }
+
+  return const _ManagedDeviceStatus(label: '离线', color: Color(0xFF64748B));
+}
+
+String _managedDeviceMeta(ManagedDevice device) {
+  final osParts = <String>[
+    device.osDistribution.trim(),
+    device.osVersion.trim(),
+  ].where((part) => part.isNotEmpty).toList(growable: false);
+  final os = osParts.isNotEmpty ? osParts.join(' ') : device.os.trim();
+  final parts = <String>[if (os.isNotEmpty) os, _shortId(device.machineId)];
+  return parts.join(' · ');
 }
 
 class _NetworkMoreMenu extends StatelessWidget {

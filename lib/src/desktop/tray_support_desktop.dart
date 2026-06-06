@@ -19,8 +19,7 @@ class _DesktopTraySupport extends TraySupport
   bool _initialized = false;
   bool _quitRequested = false;
   bool _trayMenuVisible = false;
-  String _coreStatusText = '未登录';
-  Future<void> Function()? _onRepairRequested;
+  TrayConnectionAction? _connectionAction;
   final AppLogger _logger = AppLogger.instance;
 
   bool get _isDesktopPlatform {
@@ -86,28 +85,16 @@ class _DesktopTraySupport extends TraySupport
 
   @override
   Future<void> updateCoreStatus(CoreRunStatus status) async {
-    _coreStatusText = switch (status.phase) {
-      CoreRunPhase.running => '运行中',
-      CoreRunPhase.checking => '检查中',
-      CoreRunPhase.repairing => '修复中',
-      CoreRunPhase.error => '异常',
-      CoreRunPhase.needsElevation => '需提权',
-      CoreRunPhase.signedOut => '未登录',
-    };
     _logger.info(
       'tray',
       'Core status updated on tray',
       context: {'phase': status.phase.name, 'message': status.message},
     );
-
-    if (_initialized && _isDesktopPlatform) {
-      await _refreshContextMenu();
-    }
   }
 
   @override
-  void setRepairAction(Future<void> Function()? onRepair) {
-    _onRepairRequested = onRepair;
+  void setConnectionAction(TrayConnectionAction? action) {
+    _connectionAction = action;
     if (_initialized && _isDesktopPlatform) {
       unawaited(_refreshContextMenu());
     }
@@ -149,30 +136,45 @@ class _DesktopTraySupport extends TraySupport
   }
 
   Future<void> _refreshContextMenu() async {
+    final connectionAction =
+        _connectionAction ??
+        const TrayConnectionAction(
+          label: '连接',
+          enabled: false,
+          workspaceName: '未登录',
+        );
+    final workspaceName = connectionAction.workspaceName?.trim();
+
     await trayManager.setContextMenu(
       Menu(
         items: [
-          MenuItem(label: '连接引擎: $_coreStatusText', onClick: (_) {}),
           MenuItem(
-            label: '修复连接引擎',
+            label: connectionAction.label,
+            disabled: !connectionAction.enabled,
             onClick: (_) {
-              _logger.info('tray', 'Repair action clicked from tray');
-              final repair = _onRepairRequested;
-              if (repair != null) {
-                unawaited(repair());
+              _logger.info(
+                'tray',
+                'Connection action clicked from tray',
+                context: {'label': connectionAction.label},
+              );
+              final onSelected = connectionAction.onSelected;
+              if (connectionAction.enabled && onSelected != null) {
+                unawaited(onSelected());
               }
             },
           ),
+          if (workspaceName != null && workspaceName.isNotEmpty)
+            MenuItem(label: '工作区：$workspaceName', disabled: true),
           MenuItem.separator(),
           MenuItem(
-            label: '打开主窗口',
+            label: '显示主窗口',
             onClick: (_) {
               unawaited(showWindow());
             },
           ),
           MenuItem.separator(),
           MenuItem(
-            label: '退出 EasyTier Pro',
+            label: '退出',
             onClick: (_) {
               unawaited(quitApp());
             },
