@@ -13,7 +13,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.ArrayDeque
 
 class EasyTierFlutterBridge(private val activity: MainActivity) :
     MethodChannel.MethodCallHandler,
@@ -303,7 +302,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
 
         @Volatile
         private var activeBridge: EasyTierFlutterBridge? = null
-        private val bufferedServiceEvents = ArrayDeque<Map<String, Any?>>()
+        private val serviceEventBuffer = EasyTierServiceEventBuffer(maxBufferedServiceEvents)
 
         fun emitFromService(type: String, payload: Map<String, Any?>) {
             val event = eventOf(type, payload)
@@ -320,24 +319,13 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         }
 
         private fun bufferServiceEvent(event: Map<String, Any?>) {
-            synchronized(bufferedServiceEvents) {
-                if (bufferedServiceEvents.size >= maxBufferedServiceEvents) {
-                    bufferedServiceEvents.removeFirst()
-                    Log.w(logTag, "Dropping oldest buffered native event")
-                }
-                bufferedServiceEvents.addLast(event)
+            if (serviceEventBuffer.add(event)) {
+                Log.w(logTag, "Dropping oldest buffered native event")
             }
         }
 
         private fun drainBufferedServiceEvents(): List<Map<String, Any?>> {
-            synchronized(bufferedServiceEvents) {
-                if (bufferedServiceEvents.isEmpty()) {
-                    return emptyList()
-                }
-                val events = bufferedServiceEvents.toList()
-                bufferedServiceEvents.clear()
-                return events
-            }
+            return serviceEventBuffer.drain()
         }
     }
 }
