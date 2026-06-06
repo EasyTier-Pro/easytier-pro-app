@@ -524,13 +524,13 @@ class _NetworkTrafficSparkline extends StatefulWidget {
 class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
   OverlayEntry? _detailOverlay;
   Rect? _anchorRect;
+  bool _overlayUpdateScheduled = false;
 
   @override
   void didUpdateWidget(covariant _NetworkTrafficSparkline oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_detailOverlay != null) {
-      _updateAnchorRect();
-      _detailOverlay?.markNeedsBuild();
+      _scheduleDetailOverlayUpdate();
     }
   }
 
@@ -583,6 +583,23 @@ class _NetworkTrafficSparklineState extends State<_NetworkTrafficSparkline> {
   void _hideDetails() {
     _detailOverlay?.remove();
     _detailOverlay = null;
+  }
+
+  void _scheduleDetailOverlayUpdate() {
+    if (_overlayUpdateScheduled) {
+      return;
+    }
+
+    _overlayUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _overlayUpdateScheduled = false;
+      if (!mounted || _detailOverlay == null) {
+        return;
+      }
+
+      _updateAnchorRect();
+      _detailOverlay?.markNeedsBuild();
+    });
   }
 
   void _updateAnchorRect() {

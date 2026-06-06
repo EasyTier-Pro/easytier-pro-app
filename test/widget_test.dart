@@ -280,6 +280,14 @@ void main() {
             sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
           ),
         },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 8192,
+            uploadBytes: 12288,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 4),
+          ),
+        },
       ],
     );
 
@@ -305,6 +313,13 @@ void main() {
     await gesture.addPointer(
       location: tester.getCenter(find.byType(LineChart)),
     );
+    await tester.pump();
+
+    expect(find.text('实时流量'), findsOneWidget);
+    expect(find.byType(LineChart), findsNWidgets(2));
+    _expectTrafficChartsStatic(tester);
+
+    await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
     expect(find.text('实时流量'), findsOneWidget);
