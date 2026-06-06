@@ -69,6 +69,14 @@ class EasyTierAndroidManifestInstrumentedTest {
         )
     }
 
+    @Test
+    fun vpnPermissionFlowCanBePrepared() {
+        val consentIntent = VpnService.prepare(context)
+        if (consentIntent != null) {
+            assertTrue(packageManager.queryIntentActivities(consentIntent, 0).isNotEmpty())
+        }
+    }
+
     private fun vpnServiceInfo(): ServiceInfo {
         val packageInfo = packageManager.getPackageInfo(
             context.packageName,
