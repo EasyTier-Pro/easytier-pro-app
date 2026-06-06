@@ -86,6 +86,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
 - Android 运行态信息轮询采用 15 秒间隔和 15 秒 `collectNetworkInfos` 缓存，降低 JNI 轮询压力；随包 JNI 通过本仓库构建脚本的本地补丁释放 `collectNetworkInfos` 返回的 FFI 字符串。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
+- Android 导出诊断日志会写入应用缓存日志目录，并通过 `FileProvider` 拉起系统分享面板；导出聚合时会跳过旧的 `diagnostics-*.log` 文件，避免重复导出导致日志自我嵌套膨胀。
 - 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`；Dart 使用 `instance_id` 匹配 `collectNetworkInfos` 中以 UUID 为 key 的 running info，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，并使用 `network_name` 关联首页 readiness、peer status、流量统计和后续删除事件，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入、路由刷新或停止失败。
 - 已登录且运行中的 Android runtime 收到 `config_server_stopped` 事件时会自动重新连接；退出登录和工作区重建期间不会被该事件反向拉起。
 - workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
@@ -122,7 +123,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 完成 VPN 授权。
 - 控制台下发 `run_network_instance` 后，日志出现 `vpn_started` 或 native `Injected TUN fd`。
 - 应用内“设置 -> 诊断日志”出现 `Android VPN established`，且 `routes` 包含虚拟网 CIDR 与已授权子网 CIDR，`disallowed_applications` 至少包含 `net.easytier.pro`。
-- 导出诊断日志，并运行 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>`。
+- 在 Android 上导出诊断日志时通过系统分享面板发送文件；拿到文件后运行 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>`。
 - 使用未被排除的应用访问虚拟 IP 和子网地址，确认系统 VPN route 能承载数据面流量。
 - 退出登录后，应用内诊断日志出现 `Android VPN stopped` 和 `Android config server client stopped`，确认 config server client 与 VPN 均停止。
 

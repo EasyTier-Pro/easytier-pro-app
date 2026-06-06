@@ -2,15 +2,19 @@ package com.example.easytier_pro_app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.util.Log
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -71,6 +75,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                     stopVpn()
                     result.success(null)
                 }
+                "shareFile" -> shareFile(call, result)
                 "getLastError" -> result.success(EasyTierNative.getLastError())
                 else -> result.notImplemented()
             }
@@ -202,6 +207,40 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         val intent = EasyTierVpnIntentFactory.startIntent(activity, instanceName, vpnConfig)
         startRuntimeService(intent)
         result.success(null)
+    }
+
+    private fun shareFile(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")?.trim().orEmpty()
+        val mimeType = call.argument<String>("mimeType")?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: "text/plain"
+        val title = call.argument<String>("title")?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: "Share EasyTier Pro diagnostics"
+        require(path.isNotEmpty()) { "share file path is required" }
+
+        val file = File(path)
+        require(file.isFile && file.canRead()) { "share file is not readable: $path" }
+
+        val uri = FileProvider.getUriForFile(
+            activity,
+            "${activity.packageName}.fileprovider",
+            file,
+        )
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TITLE, title)
+            clipData = ClipData.newUri(activity.contentResolver, file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(sendIntent, title).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            activity.startActivity(chooser)
+            result.success(true)
+        } catch (error: ActivityNotFoundException) {
+            result.error("SHARE_UNAVAILABLE", "No app can share diagnostics file", null)
+        }
     }
 
     private fun stopConfigServerClient() {

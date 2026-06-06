@@ -137,7 +137,7 @@ class AppLogger {
         logDir
             .listSync()
             .whereType<File>()
-            .where((file) => file.path.endsWith('.log'))
+            .where(_isSourceLogFile)
             .toList(growable: false)
           ..sort((a, b) => a.path.compareTo(b.path));
 
@@ -227,6 +227,12 @@ class AppLogger {
       }
     }
 
+    if (Platform.isAndroid || Platform.isIOS) {
+      return Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}easytier-pro-app${Platform.pathSeparator}logs',
+      );
+    }
+
     final home = Platform.environment['HOME'];
     if (home != null && home.isNotEmpty) {
       return Directory(
@@ -237,6 +243,12 @@ class AppLogger {
     return Directory(
       '${Directory.systemTemp.path}${Platform.pathSeparator}easytier-pro-app${Platform.pathSeparator}logs',
     );
+  }
+
+  bool _isSourceLogFile(File file) {
+    final segments = Uri.file(file.path).pathSegments;
+    final name = segments.isEmpty ? file.path : segments.last;
+    return name.endsWith('.log') && !name.startsWith('diagnostics-');
   }
 
   Future<void> _cleanupOldLogs() async {

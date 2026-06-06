@@ -10,6 +10,7 @@ $buildGradle = Join-Path $androidRoot "app\build.gradle.kts"
 $mainManifest = Join-Path $androidRoot "app\src\main\AndroidManifest.xml"
 $debugManifest = Join-Path $androidRoot "app\src\debug\AndroidManifest.xml"
 $profileManifest = Join-Path $androidRoot "app\src\profile\AndroidManifest.xml"
+$fileProviderPaths = Join-Path $androidRoot "app\src\main\res\xml\easytier_file_paths.xml"
 $androidGitIgnore = Join-Path $androidRoot ".gitignore"
 $keyProperties = Join-Path $androidRoot "key.properties"
 
@@ -46,6 +47,7 @@ Assert-FileExists $buildGradle "Android app Gradle file"
 Assert-FileExists $mainManifest "Android main manifest"
 Assert-FileExists $debugManifest "Android debug manifest"
 Assert-FileExists $profileManifest "Android profile manifest"
+Assert-FileExists $fileProviderPaths "Android diagnostics FileProvider paths"
 Assert-FileExists $androidGitIgnore "Android gitignore"
 
 $gradleText = Get-Content -Path $buildGradle -Raw
@@ -75,9 +77,27 @@ Assert-Matches `
     $mainManifestText `
     'android:foregroundServiceType="specialUse"' `
     "Android main manifest must declare the specialUse foreground service type."
+Assert-Matches `
+    $mainManifestText `
+    'androidx\.core\.content\.FileProvider' `
+    "Android main manifest must declare a FileProvider for diagnostics export."
+Assert-Matches `
+    $mainManifestText `
+    'android:authorities="\$\{applicationId\}\.fileprovider"' `
+    "Android diagnostics FileProvider authority must follow the release applicationId."
+Assert-Matches `
+    $mainManifestText `
+    '@xml/easytier_file_paths' `
+    "Android diagnostics FileProvider must reference easytier_file_paths."
 if ([regex]::IsMatch($mainManifestText, 'usesCleartextTraffic\s*=\s*"true"')) {
     throw "Android main manifest must not enable cleartext traffic for release builds."
 }
+
+$fileProviderPathsText = Get-Content -Path $fileProviderPaths -Raw
+Assert-Matches `
+    $fileProviderPathsText `
+    '<cache-path\b' `
+    "Android diagnostics FileProvider paths must expose app cache logs."
 
 $debugManifestText = Get-Content -Path $debugManifest -Raw
 $profileManifestText = Get-Content -Path $profileManifest -Raw

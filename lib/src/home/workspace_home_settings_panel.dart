@@ -13,6 +13,10 @@ class _SettingsPanel extends StatelessWidget {
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
 
+  static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
+    'net.easytier.pro/core_runtime',
+  );
+
   bool get _canOpenLogDirectory =>
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS ||
@@ -38,13 +42,17 @@ class _SettingsPanel extends StatelessWidget {
   Future<void> _exportLogs(BuildContext context) async {
     try {
       final file = await AppLogger.instance.exportDiagnostics();
+      final shared = await _shareDiagnosticsFile(file);
       AppLogger.instance.info(
         'settings',
         'Diagnostics exported',
-        context: {'file': file.path},
+        context: {'file': file.path, 'shared': shared},
       );
       if (context.mounted) {
-        _showToast(context, '诊断日志已导出: ${file.path}');
+        _showToast(
+          context,
+          shared ? '诊断日志已生成，请在分享面板中发送文件' : '诊断日志已导出: ${file.path}',
+        );
       }
     } catch (error) {
       AppLogger.instance.error(
@@ -56,6 +64,18 @@ class _SettingsPanel extends StatelessWidget {
         _showToast(context, '导出诊断日志失败', destructive: true);
       }
     }
+  }
+
+  Future<bool> _shareDiagnosticsFile(File file) async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    await _androidDiagnosticsChannel.invokeMethod<bool>('shareFile', {
+      'path': file.path,
+      'mimeType': 'text/plain',
+      'title': '分享 EasyTier Pro 诊断日志',
+    });
+    return true;
   }
 
   Future<void> _copyText(BuildContext context, String value) async {

@@ -120,6 +120,21 @@ class EasyTierAndroidManifestInstrumentedTest {
     }
 
     @Test
+    fun declaresDiagnosticsFileProvider() {
+        val packageInfo = packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_PROVIDERS,
+        )
+        val provider = packageInfo.providers.orEmpty().first {
+            it.authority == "${context.packageName}.fileprovider"
+        }
+
+        assertEquals("androidx.core.content.FileProvider", provider.name)
+        assertFalse(provider.exported)
+        assertTrue(provider.grantUriPermissions)
+    }
+
+    @Test
     fun vpnServiceOverridesSystemRevokeCleanupHook() {
         val method = EasyTierVpnService::class.java.getDeclaredMethod("onRevoke")
 
