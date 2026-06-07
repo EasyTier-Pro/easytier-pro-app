@@ -1997,6 +1997,10 @@ void main() {
     );
     expect(tester.widget<FBottomNavigationBar>(navigation).index, 0);
 
+    await tester.fling(swipeTarget, const Offset(-220, -440), 1600);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FBottomNavigationBar>(navigation).index, 0);
+
     await tester.fling(swipeTarget, const Offset(-320, 0), 1000);
     await tester.pumpAndSettle();
     expect(tester.widget<FBottomNavigationBar>(navigation).index, 1);

@@ -348,7 +348,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 child: AppTextSelectionTapCleaner(
                   child: _MobilePageSwipeGate(
                     enabled: mobile,
-                    onSwipeEnd: _handleMobilePageSwipeEnd,
+                    onSwipe: _handleMobilePageSwipe,
                     child: DecoratedBox(
                       decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
                       child: AnimatedSwitcher(
@@ -410,28 +410,69 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 }
 
-class _MobilePageSwipeGate extends StatelessWidget {
+class _MobilePageSwipeGate extends StatefulWidget {
   const _MobilePageSwipeGate({
     required this.enabled,
-    required this.onSwipeEnd,
+    required this.onSwipe,
     required this.child,
   });
 
   final bool enabled;
-  final GestureDragEndCallback onSwipeEnd;
+  final ValueChanged<Offset> onSwipe;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    if (!enabled) {
-      return child;
+  State<_MobilePageSwipeGate> createState() => _MobilePageSwipeGateState();
+}
+
+class _MobilePageSwipeGateState extends State<_MobilePageSwipeGate> {
+  int? _trackingPointer;
+  Offset _pointerDelta = Offset.zero;
+
+  void _startTracking(PointerDownEvent event) {
+    if (!widget.enabled || _trackingPointer != null) {
+      return;
     }
 
-    return GestureDetector(
+    _trackingPointer = event.pointer;
+    _pointerDelta = Offset.zero;
+  }
+
+  void _trackMove(PointerMoveEvent event) {
+    if (!widget.enabled || event.pointer != _trackingPointer) {
+      return;
+    }
+
+    _pointerDelta += event.delta;
+  }
+
+  void _finishTracking(PointerEvent event) {
+    if (event.pointer != _trackingPointer) {
+      return;
+    }
+
+    final delta = _pointerDelta;
+    _trackingPointer = null;
+    _pointerDelta = Offset.zero;
+    if (widget.enabled) {
+      widget.onSwipe(delta);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return widget.child;
+    }
+
+    return Listener(
       key: const ValueKey<String>('mobile-dashboard-page-swipe'),
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: onSwipeEnd,
-      child: child,
+      behavior: HitTestBehavior.deferToChild,
+      onPointerDown: _startTracking,
+      onPointerMove: _trackMove,
+      onPointerUp: _finishTracking,
+      onPointerCancel: _finishTracking,
+      child: widget.child,
     );
   }
 }

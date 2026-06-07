@@ -1,7 +1,8 @@
 part of 'workspace_home_view.dart';
 
 extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
-  static const double _mobileSwipeVelocityThreshold = 320;
+  static const double _mobileSwipeDistanceThreshold = 72;
+  static const double _mobileSwipeHorizontalDominance = 1.25;
 
   void _openNetworkDetail(ConsoleNetwork network) {
     _updateState(() {
@@ -60,9 +61,12 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     _refreshPeerPolling();
   }
 
-  void _handleMobilePageSwipeEnd(DragEndDetails details) {
-    final velocityX = details.velocity.pixelsPerSecond.dx;
-    if (velocityX.abs() < _mobileSwipeVelocityThreshold) {
+  void _handleMobilePageSwipe(Offset delta) {
+    final horizontalDistance = delta.dx.abs();
+    final verticalDistance = delta.dy.abs();
+    if (horizontalDistance < _mobileSwipeDistanceThreshold ||
+        horizontalDistance <
+            verticalDistance * _mobileSwipeHorizontalDominance) {
       return;
     }
 
@@ -71,7 +75,7 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
       return;
     }
 
-    final nextIndex = velocityX < 0 ? currentIndex + 1 : currentIndex - 1;
+    final nextIndex = delta.dx < 0 ? currentIndex + 1 : currentIndex - 1;
     if (nextIndex < 0 || nextIndex >= _mobileDashboardViewOrder.length) {
       return;
     }
