@@ -207,10 +207,11 @@ $vpnEstablishedIndexes = Find-EntryIndexesByMessage "Android VPN established"
 $latestVpnIndex = $vpnEstablishedIndexes[$vpnEstablishedIndexes.Count - 1]
 $latestVpn = $vpnEstablished[$vpnEstablished.Count - 1]
 $context = Get-EntryValue $latestVpn "context"
+$vpnStoppedIndexes = Find-EntryIndexesByMessage "Android VPN stopped"
+$configServerStartedIndexes = Find-EntryIndexesByMessage "Android config server client started"
+$configServerStoppedIndexes = Find-EntryIndexesByMessage "Android config server client stopped"
 
 if ($RequireConfigServerStarted) {
-    $configServerStartedIndexes = Find-EntryIndexesByMessage "Android config server client started"
-    $configServerStoppedIndexes = Find-EntryIndexesByMessage "Android config server client stopped"
     $configServerStartsBeforeLatestVpn = @(
         $configServerStartedIndexes |
             Where-Object { $_ -lt $latestVpnIndex }
@@ -229,6 +230,15 @@ if ($RequireConfigServerStarted) {
     )
     if ($configServerStoppedAfterStartBeforeVpn.Count -gt 0) {
         throw "Android config server client was stopped after the latest start and before the latest Android VPN established log entry."
+    }
+    if (-not $RequireConfigServerStop -and $configServerStoppedIndexes.Count -gt 0) {
+        $latestConfigServerStartedIndex =
+            $configServerStartedIndexes[$configServerStartedIndexes.Count - 1]
+        $latestConfigServerStoppedIndex =
+            $configServerStoppedIndexes[$configServerStoppedIndexes.Count - 1]
+        if ($latestConfigServerStoppedIndex -gt $latestConfigServerStartedIndex) {
+            throw "Android config server client stopped after the latest start log entry."
+        }
     }
 }
 
@@ -266,7 +276,6 @@ if (-not (Convert-ToBool (Get-EntryValue $context "self_disallowed"))) {
 }
 
 if ($RequireStop) {
-    $vpnStoppedIndexes = Find-EntryIndexesByMessage "Android VPN stopped"
     $vpnStoppedAfterLatest = @(
         $vpnStoppedIndexes |
             Where-Object { $_ -gt $latestVpnIndex }
@@ -274,16 +283,32 @@ if ($RequireStop) {
     if ($vpnStoppedAfterLatest.Count -eq 0) {
         throw "Missing Android VPN stopped log entry after the latest Android VPN established log entry."
     }
+} elseif (-not $RequireConfigServerStop) {
+    $vpnStoppedAfterLatest = @(
+        $vpnStoppedIndexes |
+            Where-Object { $_ -gt $latestVpnIndex }
+    )
+    if ($vpnStoppedAfterLatest.Count -gt 0) {
+        throw "Android VPN stopped after the latest Android VPN established log entry."
+    }
 }
 
 if ($RequireConfigServerStop) {
-    $configServerStoppedIndexes = Find-EntryIndexesByMessage "Android config server client stopped"
     $configServerStoppedAfterLatest = @(
         $configServerStoppedIndexes |
             Where-Object { $_ -gt $latestVpnIndex }
     )
     if ($configServerStoppedAfterLatest.Count -eq 0) {
         throw "Missing Android config server client stopped log entry after the latest Android VPN established log entry."
+    }
+    $latestConfigServerStoppedAfterLatestIndex =
+        $configServerStoppedAfterLatest[$configServerStoppedAfterLatest.Count - 1]
+    $configServerStartedAfterStop = @(
+        $configServerStartedIndexes |
+            Where-Object { $_ -gt $latestConfigServerStoppedAfterLatestIndex }
+    )
+    if ($configServerStartedAfterStop.Count -gt 0) {
+        throw "Android config server client restarted after the required stop log entry."
     }
 }
 
