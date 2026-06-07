@@ -754,8 +754,9 @@ class _StatusBadge extends StatelessWidget {
                 !error &&
                 !needsElevation &&
                 !needsVpnPermission
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
+            ? Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _TrafficPill(
                     icon: Icons.arrow_downward,
@@ -763,7 +764,6 @@ class _StatusBadge extends StatelessWidget {
                     bgColor: const Color(0xFFF0FDF4),
                     textColor: const Color(0xFF16A34A),
                   ),
-                  const SizedBox(width: 8),
                   _TrafficPill(
                     icon: Icons.arrow_upward,
                     label: _formatTrafficRate(uploadRate),

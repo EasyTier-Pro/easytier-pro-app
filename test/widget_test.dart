@@ -605,6 +605,81 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('traffic fullscreen panel stays no taller than wide on mobile', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: 'office-network',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'phone-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 3072,
+            uploadBytes: 6144,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(LineChart));
+    await tester.pumpAndSettle();
+
+    final panelRect = tester.getRect(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-panel')),
+    );
+    expect(panelRect.height, lessThanOrEqualTo(panelRect.width));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('traffic-fullscreen-close')),
+    );
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('shows startup state when network instance is missing', (
     WidgetTester tester,
   ) async {

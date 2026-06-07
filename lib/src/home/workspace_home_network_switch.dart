@@ -311,17 +311,23 @@ class _NetworkSwitchTile extends StatelessWidget {
                                             : const Color(0xFF94A3B8),
                                       ),
                                       const SizedBox(width: 8),
-                                      SelectableTextHitBoundary(
-                                        child: Text(
-                                          network.name,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w700,
-                                                color: const Color(0xFF0F172A),
-                                                fontSize: 14,
-                                              ),
+                                      Expanded(
+                                        child: SelectableTextHitBoundary(
+                                          child: Text(
+                                            network.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(
+                                                    0xFF0F172A,
+                                                  ),
+                                                  fontSize: 14,
+                                                ),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -749,8 +755,8 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
     final screenSize = MediaQuery.sizeOf(context);
     final panelWidth = math.min(screenSize.width - (_screenPadding * 2), 960.0);
     final panelHeight = math.min(
-      screenSize.height - (_screenPadding * 2),
-      720.0,
+      math.min(screenSize.height - (_screenPadding * 2), 720.0),
+      panelWidth,
     );
 
     return Positioned.fill(
@@ -773,6 +779,7 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                     behavior: HitTestBehavior.opaque,
                     onTap: () {},
                     child: SizedBox(
+                      key: const ValueKey<String>('traffic-fullscreen-panel'),
                       width: panelWidth,
                       height: panelHeight,
                       child: DecoratedBox(
@@ -793,9 +800,9 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Text(
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final title = Text(
                                     '实时流量',
                                     style: Theme.of(context)
                                         .textTheme
@@ -804,14 +811,12 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                                           fontWeight: FontWeight.w800,
                                           color: const Color(0xFF0F172A),
                                         ),
-                                  ),
-                                  const Spacer(),
-                                  _TrafficTimeWindowSelector(
+                                  );
+                                  final selector = _TrafficTimeWindowSelector(
                                     selected: timeWindow,
                                     onChanged: onTimeWindowChanged,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  FButton(
+                                  );
+                                  final closeButton = FButton(
                                     key: const ValueKey<String>(
                                       'traffic-fullscreen-close',
                                     ),
@@ -820,8 +825,35 @@ class _NetworkTrafficFullscreenOverlay extends StatelessWidget {
                                     onPress: onClose,
                                     mainAxisSize: MainAxisSize.min,
                                     child: const Icon(Icons.close, size: 18),
-                                  ),
-                                ],
+                                  );
+
+                                  if (constraints.maxWidth < 340) {
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(child: title),
+                                            closeButton,
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        selector,
+                                      ],
+                                    );
+                                  }
+
+                                  return Row(
+                                    children: [
+                                      title,
+                                      const Spacer(),
+                                      selector,
+                                      const SizedBox(width: 10),
+                                      closeButton,
+                                    ],
+                                  );
+                                },
                               ),
                               const SizedBox(height: 14),
                               Expanded(
