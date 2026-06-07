@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'src/auth/auth_gate.dart';
 import 'src/auth/console_auth_service.dart';
 import 'src/core/core_lifecycle_service.dart';
+import 'src/desktop/app_update_service.dart';
 import 'src/desktop/tray_support.dart';
 import 'src/logging/app_logger.dart';
 import 'src/shared/app_motion.dart';
@@ -52,9 +53,11 @@ Future<void> main() async {
     tokenStore: OAuthTokenStore(preferences),
   );
   final coreLifecycleService = CoreLifecycleService(authService: authService);
+  const appUpdateService = AppUpdateService();
   final traySupport = createTraySupport();
 
   await traySupport.initialize();
+  unawaited(appUpdateService.initialize());
   AppLogger.instance.info('main', 'Application initialized');
 
   runApp(

@@ -1,0 +1,249 @@
+# 桌面端自动更新维护说明
+
+本应用使用 `auto_updater` 接入桌面端自动更新。该插件在 macOS 侧基于 Sparkle，在 Windows 侧基于 WinSparkle，更新源必须是 appcast XML，不是普通的最新版本 JSON。
+
+当前启用 macOS 和 Windows 自动更新。Linux 不在本说明范围内。
+
+## 分发约定
+
+- macOS 首次安装包优先使用 `.dmg`，符合桌面应用安装习惯。
+- macOS 自动更新包优先使用 `.zip`，符合 Sparkle 更新包惯例，也便于签名和 appcast 分发。
+- Windows 自动更新包使用安装器 `.exe`。
+- macOS 与 Windows 可以共用同一个 appcast XML，但不同平台必须使用各自的 `sparkle:os` 和签名字段。
+
+## 运行时配置
+
+发布构建需要通过 dart-define 配置 appcast 地址：
+
+```bash
+flutter build macos --release --dart-define=EASYTIER_APPCAST_URL=https://your-domain/path/appcast.xml
+```
+
+```powershell
+flutter build windows --release --dart-define=EASYTIER_APPCAST_URL=https://your-domain/path/appcast.xml
+```
+
+可选配置自动检查间隔，单位为秒：
+
+```bash
+flutter build macos --release --dart-define=EASYTIER_APPCAST_URL=https://your-domain/path/appcast.xml --dart-define=EASYTIER_UPDATE_CHECK_INTERVAL_SECONDS=3600
+```
+
+```powershell
+flutter build windows --release --dart-define=EASYTIER_APPCAST_URL=https://your-domain/path/appcast.xml --dart-define=EASYTIER_UPDATE_CHECK_INTERVAL_SECONDS=3600
+```
+
+说明：
+
+- `EASYTIER_APPCAST_URL` 为空时，应用会跳过自动更新初始化。
+- `EASYTIER_UPDATE_CHECK_INTERVAL_SECONDS=0` 表示禁用定时检查，但启动时仍会执行一次后台检查。
+- Sparkle/WinSparkle 的检查间隔最小值是 3600 秒；小于 3600 的非 0 值会被应用归一化为 3600。
+
+## macOS EdDSA Key
+
+macOS 更新包必须使用 Sparkle EdDSA key 签名。
+
+本仓库已在 `macos/Runner/Info.plist` 提交：
+
+```xml
+<key>SUPublicEDKey</key>
+<string>gLgi+l+ziKzrIIR/VhL3Mx4fq84vXt7hf9h7rBIN/YQ=</string>
+```
+
+私钥由 Sparkle 存放在当前 macOS Keychain 中，不能提交到仓库。发布机或 CI 需要安全备份和恢复该私钥；如果私钥丢失，已安装客户端将无法验证后续 macOS 更新。
+
+首次生成 key：
+
+```bash
+flutter pub get
+cd macos
+pod install
+cd ..
+dart run auto_updater:generate_keys
+```
+
+## macOS Release Entitlements
+
+本应用按非 Mac App Store 方式分发。Sparkle 自更新需要 release 构建关闭 App Sandbox，并允许客户端网络访问。
+
+`macos/Runner/Release.entitlements` 应包含：
+
+```xml
+<key>com.apple.security.app-sandbox</key>
+<false/>
+<key>com.apple.security.network.client</key>
+<true/>
+```
+
+如果改为 Mac App Store 分发，Sparkle 自动更新方案不适用，需要重新设计分发流程。
+
+## Windows DSA Key
+
+Windows 更新包必须使用 DSA key 签名。
+
+本仓库应提交：
+
+- `dsa_pub.pem`
+
+本仓库绝不能提交：
+
+- `dsa_priv.pem`
+- `dsaparam.pem`
+
+根目录 `.gitignore` 已忽略私钥文件。请将 `dsa_priv.pem` 存放在发布环境的安全密钥库或受控机密存储中，并做好备份。如果私钥丢失，已安装客户端将无法验证后续 Windows 更新。
+
+首次生成 key：
+
+```powershell
+dart run auto_updater:generate_keys
+```
+
+如果本机 `openssl` 不在 `PATH`，先安装 OpenSSL，或临时把 Git for Windows 自带的 OpenSSL 加入 `PATH`：
+
+```powershell
+$env:Path = 'C:\Program Files\Git\usr\bin;' + $env:Path
+dart run auto_updater:generate_keys
+```
+
+生成后确认 `windows/runner/Runner.rc` 包含以下资源配置：
+
+```rc
+DSAPub      DSAPEM      "../../dsa_pub.pem"
+```
+
+## macOS 更新包签名
+
+发布 macOS release 后，生成 zip 更新包：
+
+```bash
+flutter build macos --release --dart-define=EASYTIER_APPCAST_URL=https://your-domain/path/appcast.xml
+mkdir -p dist
+ditto -c -k --keepParent "build/macos/Build/Products/Release/EasyTier Pro.app" "dist/EasyTierPro-1.0.1-macos.zip"
+```
+
+对 zip 更新包签名：
+
+```bash
+dart run auto_updater:sign_update dist/EasyTierPro-1.0.1-macos.zip
+```
+
+命令会输出类似内容：
+
+```text
+sparkle:edSignature="pbdyPt92..." length="13400992"
+```
+
+将 `sparkle:edSignature` 和 `length` 写入 appcast 的 macOS `enclosure` 节点。
+
+## Windows 更新包签名
+
+发布 Windows 安装包后，对安装包签名：
+
+```powershell
+dart run auto_updater:sign_update path\to\EasyTierProSetup.exe
+```
+
+默认会读取仓库根目录的 `dsa_priv.pem`。如果私钥放在其他位置，传入第二个参数：
+
+```powershell
+dart run auto_updater:sign_update path\to\EasyTierProSetup.exe path\to\dsa_priv.pem
+```
+
+命令会输出类似内容：
+
+```text
+sparkle:dsaSignature="MEUCIQD..." length="0"
+```
+
+将 `sparkle:dsaSignature` 写入 appcast 的 Windows `enclosure` 节点。
+
+## Appcast 示例
+
+macOS 的 `sparkle:version` 应对应 `CFBundleVersion`，建议使用 `pubspec.yaml` 中 `version` 的 build number，例如 `1.0.1+2` 对应 `sparkle:version` 为 `2`，`sparkle:shortVersionString` 为 `1.0.1`。
+
+Windows 的 `sparkle:version` 应与 Windows 构建版本可比较，建议使用完整的 `pubspec.yaml` 版本值，例如 `1.0.1+2`。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>EasyTier Pro</title>
+    <description>EasyTier Pro desktop releases</description>
+    <language>zh-CN</language>
+    <item>
+      <title>Version 1.0.1 for macOS</title>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:releaseNotesLink>https://your-domain/path/release-notes.html</sparkle:releaseNotesLink>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 +0800</pubDate>
+      <enclosure
+        url="https://your-domain/path/EasyTierPro-1.0.1-macos.zip"
+        sparkle:edSignature="pbdyPt92..."
+        sparkle:os="macos"
+        length="13400992"
+        type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.1 for Windows</title>
+      <sparkle:releaseNotesLink>https://your-domain/path/release-notes.html</sparkle:releaseNotesLink>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 +0800</pubDate>
+      <enclosure
+        url="https://your-domain/path/EasyTierProSetup-1.0.1.exe"
+        sparkle:dsaSignature="MEUCIQD..."
+        sparkle:version="1.0.1+2"
+        sparkle:os="windows"
+        length="0"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>
+```
+
+注意事项：
+
+- `url` 必须是客户端可访问的更新包地址。
+- macOS 必须使用 `sparkle:edSignature`，Windows 必须使用 `sparkle:dsaSignature`。
+- macOS 必须使用 `sparkle:os="macos"`，Windows 必须使用 `sparkle:os="windows"`。
+- macOS 自动更新包建议使用签名后的 `.zip`；首次安装包可以另行提供 `.dmg`。
+- 如果控制台要托管 appcast，应新增或适配专门的 appcast 输出，不要直接复用 `/api/v1/releases/latest` 的普通 JSON。
+
+## 本地验证
+
+可以先用本地 HTTP 服务托管 appcast 和更新包：
+
+```bash
+flutter build macos --release --dart-define=EASYTIER_APPCAST_URL=http://127.0.0.1:5002/appcast.xml
+```
+
+```powershell
+flutter build windows --release --dart-define=EASYTIER_APPCAST_URL=http://127.0.0.1:5002/appcast.xml
+```
+
+启动静态文件服务：
+
+```bash
+cd dist
+python -m http.server 5002
+```
+
+验证时请确认：
+
+- 当前安装版本低于 appcast 中的平台版本。
+- appcast XML 可以被客户端访问。
+- 更新包 URL 可以被客户端下载。
+- macOS zip 的 `sparkle:edSignature` 与 `SUPublicEDKey` 匹配。
+- Windows 安装包签名与 `dsa_pub.pem` 匹配。
+- `windows/runner/Runner.rc` 中的 `DSAPub` 资源已进入最终 exe。
+
+## 发布检查清单
+
+每次发布前检查：
+
+- `pubspec.yaml` 的 `version` 已更新。
+- 使用正确的 `EASYTIER_APPCAST_URL` 构建 release 包。
+- macOS release 构建已完成签名和 notarization。
+- macOS zip 更新包已用 Sparkle EdDSA 私钥签名。
+- Windows 安装包已用受控的 `dsa_priv.pem` 签名。
+- appcast 中的版本号、`url`、签名字段和 `length` 已更新。
+- appcast 和更新包均已上传到 HTTPS 可访问地址。
+- 不要提交或上传任何私钥到公开位置。
