@@ -288,61 +288,43 @@ class _MobileDashboardNavigation extends StatelessWidget {
     };
 
     return SelectionContainer.disabled(
-      child: Container(
+      child: FBottomNavigationBar(
         key: const ValueKey<String>('mobile-dashboard-navigation'),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFFFFF),
-          border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
-        ),
-        child: SafeArea(
-          top: false,
-          child: NavigationBar(
-            height: 64,
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) {
-              switch (index) {
-                case 0:
-                  onShowOverview();
-                case 1:
-                  onShowNetwork();
-                case 2:
-                  onShowDevices();
-                case 3:
-                  onShowSettings();
-              }
-            },
-            backgroundColor: const Color(0xFFFFFFFF),
-            surfaceTintColor: Colors.transparent,
-            indicatorColor: const Color(0xFFEFF6FF),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: const [
-              NavigationDestination(
-                key: ValueKey<String>('mobile-nav-overview'),
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: '首页',
-              ),
-              NavigationDestination(
-                key: ValueKey<String>('mobile-nav-network'),
-                icon: Icon(Icons.hub_outlined),
-                selectedIcon: Icon(Icons.hub),
-                label: '网络',
-              ),
-              NavigationDestination(
-                key: ValueKey<String>('mobile-nav-devices'),
-                icon: Icon(Icons.devices_other_outlined),
-                selectedIcon: Icon(Icons.devices_other),
-                label: '设备',
-              ),
-              NavigationDestination(
-                key: ValueKey<String>('mobile-nav-settings'),
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: '设置',
-              ),
-            ],
+        index: selectedIndex,
+        onChange: (index) {
+          switch (index) {
+            case 0:
+              onShowOverview();
+            case 1:
+              onShowNetwork();
+            case 2:
+              onShowDevices();
+            case 3:
+              onShowSettings();
+          }
+        },
+        children: const [
+          FBottomNavigationBarItem(
+            key: ValueKey<String>('mobile-nav-overview'),
+            icon: Icon(Icons.home_outlined),
+            label: Text('首页'),
           ),
-        ),
+          FBottomNavigationBarItem(
+            key: ValueKey<String>('mobile-nav-network'),
+            icon: Icon(Icons.hub_outlined),
+            label: Text('网络'),
+          ),
+          FBottomNavigationBarItem(
+            key: ValueKey<String>('mobile-nav-devices'),
+            icon: Icon(Icons.devices_other_outlined),
+            label: Text('设备'),
+          ),
+          FBottomNavigationBarItem(
+            key: ValueKey<String>('mobile-nav-settings'),
+            icon: Icon(Icons.settings_outlined),
+            label: Text('设置'),
+          ),
+        ],
       ),
     );
   }

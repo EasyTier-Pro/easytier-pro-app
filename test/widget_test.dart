@@ -1782,6 +1782,7 @@ void main() {
       find.byKey(const ValueKey<String>('network-tab-current')),
       findsNothing,
     );
+    expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('EasyTier Pro'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-devices')));
