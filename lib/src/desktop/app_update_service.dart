@@ -14,15 +14,16 @@ class AppUpdateService {
   const AppUpdateService();
 
   Future<void> initialize() async {
-    if (!Platform.isWindows) {
+    if (!Platform.isMacOS && !Platform.isWindows) {
       return;
     }
 
+    final platform = Platform.isMacOS ? 'macOS' : 'Windows';
     final feedUrl = _appcastFeedUrl.trim();
     if (feedUrl.isEmpty) {
       AppLogger.instance.info(
         'app.update',
-        'Windows app updater disabled because EASYTIER_APPCAST_URL is empty',
+        '$platform app updater disabled because EASYTIER_APPCAST_URL is empty',
       );
       return;
     }
@@ -31,8 +32,12 @@ class AppUpdateService {
       final interval = _normalizedCheckIntervalSeconds;
       AppLogger.instance.info(
         'app.update',
-        'Initializing Windows app updater',
-        context: {'feed_url': feedUrl, 'interval_seconds': interval},
+        'Initializing $platform app updater',
+        context: {
+          'feed_url': feedUrl,
+          'interval_seconds': interval,
+          'platform': platform,
+        },
       );
       await autoUpdater.setFeedURL(feedUrl);
       await autoUpdater.setScheduledCheckInterval(interval);
