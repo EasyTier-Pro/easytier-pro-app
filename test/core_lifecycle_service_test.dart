@@ -202,6 +202,35 @@ void main() {
       },
     );
 
+    test(
+      'reconnects when Android VPN stop is the only service destroy signal',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        runtime.connected = false;
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnStopped,
+            data: {
+              'payload': {'reason': 'service_destroyed'},
+            },
+          ),
+        );
+
+        await _waitUntil(() => runtime.ensureRunningCount == 2);
+        expect(authService.prepareBootstrapCount, 2);
+        expect(service.status.value.phase, CoreRunPhase.running);
+        expect(service.status.value.machineId, 'machine-1');
+      },
+    );
+
     test('restores running status when Android VPN recovers', () async {
       final authService = _LifecycleAuthService();
       final runtime = _LifecycleRuntime();

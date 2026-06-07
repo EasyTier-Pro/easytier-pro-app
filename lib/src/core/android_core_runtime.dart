@@ -653,15 +653,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   ) async {
     final instanceName = _instanceNameFromPayload(payloadMap);
     final instanceId = _instanceIdFromPayload(payloadMap);
-    final direct = _readMap(
-      payloadMap['vpn_config'] ?? payloadMap['vpnConfig'],
-    );
-    final directConfig = direct == null
-        ? null
-        : buildVpnConfigFromNetworkInfo(direct);
-    if (directConfig != null &&
-        _vpnConfigHasAddress(directConfig) &&
-        instanceName.isNotEmpty) {
+    final directConfig = buildVpnConfigFromNetworkInfo(payloadMap);
+    if (_vpnConfigHasAddress(directConfig) && instanceName.isNotEmpty) {
       return _ResolvedAndroidVpnTarget(
         instanceName: instanceName,
         instanceId: instanceId.isEmpty ? null : instanceId,
@@ -709,10 +702,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           (instanceName.isEmpty ? instanceKey : instanceName),
       instanceId:
           lastMatchedInstance?.id ?? (instanceId.isEmpty ? null : instanceId),
-      vpnConfig:
-          directConfig ??
-          lastMatchedInstance?.vpnConfig ??
-          const <String, Object?>{},
+      vpnConfig: _vpnConfigHasAddress(directConfig)
+          ? directConfig
+          : lastMatchedInstance?.vpnConfig ?? const <String, Object?>{},
       knownInstanceNames: knownInstanceNames,
     );
   }

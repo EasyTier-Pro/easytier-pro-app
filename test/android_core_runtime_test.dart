@@ -503,6 +503,56 @@ void main() {
       });
     });
 
+    test(
+      'merges callback VPN config with outer peer and subnet routes',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+            'vpn_config': {
+              'addresses': ['10.10.0.2/32'],
+              'dns': ['10.10.0.53'],
+            },
+            'routes': [
+              {
+                'proxy_cidrs': ['10.20.0.0/16'],
+              },
+            ],
+            'peer_route_pairs': [
+              {
+                'route': {
+                  'ipv4_addr': {
+                    'address': {'addr': 168427523},
+                    'network_length': 32,
+                  },
+                  'subnet_cidrs': ['192.168.50.0/24'],
+                },
+              },
+            ],
+          },
+        });
+
+        final startVpn = await _waitForCall(calls, 'startVpn');
+        expect(startVpn.arguments, {
+          'instanceName': 'network-a',
+          'vpnConfig': {
+            'addresses': ['10.10.0.2/32'],
+            'routes': [
+              '10.10.0.2/32',
+              '10.20.0.0/16',
+              '10.10.0.3/32',
+              '192.168.50.0/24',
+            ],
+            'dns': ['10.10.0.53'],
+          },
+        });
+      },
+    );
+
     test('does not report running before VPN permission is prepared', () async {
       configServerConnected = true;
 

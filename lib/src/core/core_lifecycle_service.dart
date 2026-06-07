@@ -1005,6 +1005,7 @@ cd /d "$installerDir"
     }
     if (event.type == CoreRuntimeEventTypes.vpnStopped) {
       final payload = _runtimeEventPayload(event);
+      final stopReason = payload['reason']?.toString().trim() ?? '';
       _logger.info(
         'core.vpn',
         'Android VPN stopped',
@@ -1012,9 +1013,13 @@ cd /d "$installerDir"
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
           'fd': payload['fd'] ?? '',
-          'reason': payload['reason'] ?? '',
+          'reason': stopReason,
         },
       );
+      if (stopReason == 'service_destroyed') {
+        _reconnectAfterRuntimeStopIfNeeded();
+        return;
+      }
     }
     if (event.type == CoreRuntimeEventTypes.configServerStarted) {
       final payload = _runtimeEventPayload(event);
@@ -1070,23 +1075,7 @@ cd /d "$installerDir"
         );
         return;
       }
-      if (_shouldReconnectAfterRuntimeStop()) {
-        _logger.warn(
-          'core.runtime',
-          'Config server stopped while session is active; reconnecting',
-        );
-        status.value = CoreRunStatus(
-          phase: CoreRunPhase.repairing,
-          message: '控制面连接已断开，正在重新连接...',
-          machineId: status.value.machineId,
-          details: status.value.details,
-        );
-        unawaited(
-          _enqueue(() async {
-            await _ensureRunning(forceReinstall: false);
-          }),
-        );
-      }
+      _reconnectAfterRuntimeStopIfNeeded();
       return;
     }
     if (event.type == CoreRuntimeEventTypes.error) {
@@ -1132,6 +1121,27 @@ cd /d "$installerDir"
 
   bool _isIntentionalAndroidRuntimeStop(String reason) {
     return reason == 'user_disconnect' || reason == 'revoked';
+  }
+
+  void _reconnectAfterRuntimeStopIfNeeded() {
+    if (!_shouldReconnectAfterRuntimeStop()) {
+      return;
+    }
+    _logger.warn(
+      'core.runtime',
+      'Android runtime stopped while session is active; reconnecting',
+    );
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.repairing,
+      message: '控制面连接已断开，正在重新连接...',
+      machineId: status.value.machineId,
+      details: status.value.details,
+    );
+    unawaited(
+      _enqueue(() async {
+        await _ensureRunning(forceReinstall: false);
+      }),
+    );
   }
 
   int _payloadListLength(Object? value) {
