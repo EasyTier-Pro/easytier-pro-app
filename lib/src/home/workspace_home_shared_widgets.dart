@@ -12,7 +12,12 @@ class _ControlSelectionBoundary extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, this.subtitle, this.trailing});
+  const _SectionTitle({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
 
   final String title;
   final String? subtitle;
@@ -45,48 +50,6 @@ class _SectionTitle extends StatelessWidget {
           _ControlSelectionBoundary(child: trailing!),
         ],
       ],
-    );
-  }
-}
-
-class _ConstrainedFItemGroup extends StatelessWidget {
-  const _ConstrainedFItemGroup({
-    required this.children,
-    this.divider = FItemDivider.none,
-    this.physics = appScrollPhysics,
-  });
-
-  final List<FItemMixin> children;
-  final FItemDivider divider;
-  final ScrollPhysics physics;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (!constraints.hasBoundedWidth ||
-            constraints.maxWidth >= _itemListMinWidth) {
-          return FItemGroup(
-            divider: divider,
-            physics: physics,
-            children: children,
-          );
-        }
-
-        return SingleChildScrollView(
-          primary: false,
-          scrollDirection: Axis.horizontal,
-          physics: appScrollPhysics,
-          child: SizedBox(
-            width: _itemListMinWidth,
-            child: FItemGroup(
-              divider: divider,
-              physics: physics,
-              children: children,
-            ),
-          ),
-        );
-      },
     );
   }
 }

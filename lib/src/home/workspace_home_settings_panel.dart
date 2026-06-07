@@ -212,17 +212,22 @@ class _SettingsPanel extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 720;
+        final compact = constraints.maxWidth < 520;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _SectionTitle(title: '设置'),
-            const SizedBox(height: 20),
+            const _SectionTitle(
+              key: ValueKey<String>('settings-section-title'),
+              title: '设置',
+            ),
+            SizedBox(height: compact ? 10 : 20),
             MasonryGridView.count(
+              padding: EdgeInsets.zero,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: wide ? 2 : 1,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: 20,
+              mainAxisSpacing: compact ? 12 : 20,
+              crossAxisSpacing: compact ? 12 : 20,
               itemCount: 3,
               itemBuilder: (context, index) {
                 return switch (index) {
@@ -232,26 +237,24 @@ class _SettingsPanel extends StatelessWidget {
                     child: Column(
                       children: [
                         const SizedBox(height: 8),
-                        _ConstrainedFItemGroup(
+                        FItemGroup(
                           divider: .full,
                           physics: const NeverScrollableScrollPhysics(),
                           children: [
-                            FItem(
+                            _SettingsAccountItem(
                               prefix: const Icon(Icons.person_outline),
-                              title: const Text('用户'),
-                              subtitle: Text(
-                                user.email.isEmpty ? '未提供邮箱' : user.email,
-                              ),
-                              details: Text(
-                                user.effectiveName.isEmpty
-                                    ? '用户'
-                                    : user.effectiveName,
-                              ),
+                              label: '用户',
+                              primary: user.effectiveName.isEmpty
+                                  ? '用户'
+                                  : user.effectiveName,
+                              secondary: user.email.isEmpty
+                                  ? '未提供邮箱'
+                                  : user.email,
                             ),
-                            FItem(
+                            _SettingsAccountItem(
                               prefix: const Icon(Icons.apartment_outlined),
-                              title: const Text('工作区'),
-                              details: Text(workspaceName),
+                              label: '工作区',
+                              primary: workspaceName,
                             ),
                           ],
                         ),
@@ -439,6 +442,61 @@ class _SettingsPanel extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _SettingsAccountItem extends StatelessWidget with FItemMixin {
+  const _SettingsAccountItem({
+    required this.prefix,
+    required this.label,
+    required this.primary,
+    this.secondary,
+  });
+
+  final Widget prefix;
+  final String label;
+  final String primary;
+  final String? secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return FItem.raw(
+      prefix: prefix,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            overflow: TextOverflow.visible,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF737373),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            primary,
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF0F172A),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (secondary != null && secondary!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              secondary!,
+              softWrap: true,
+              overflow: TextOverflow.visible,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -1730,6 +1730,46 @@ void main() {
     }
   });
 
+  testWidgets(
+    'mobile settings account card stays compact and does not scroll sideways',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester, size: const Size(390, 760));
+
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+
+      final titleRect = tester.getRect(
+        find.byKey(const ValueKey<String>('settings-section-title')),
+      );
+      final accountCardRect = tester.getRect(
+        find.byKey(const ValueKey<String>('settings-account-card')),
+      );
+      expect(accountCardRect.top - titleRect.bottom, lessThanOrEqualTo(14));
+
+      final horizontalScrolls = find.descendant(
+        of: find.byKey(const ValueKey<String>('settings-account-card')),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal,
+        ),
+      );
+      expect(horizontalScrolls, findsNothing);
+    },
+  );
+
   testWidgets('mobile shell uses bottom navigation', (
     WidgetTester tester,
   ) async {

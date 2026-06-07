@@ -6,7 +6,6 @@ enum _JoinPhase { idle, joining, joined, leaving, error }
 
 const double _dashboardHeaderCompactBreakpoint = 560;
 const double _mobileShellBreakpoint = 600;
-const double _itemListMinWidth = 360;
 
 class _JoinNetworkState {
   const _JoinNetworkState({required this.phase, this.message, this.localIpv4});
