@@ -1142,6 +1142,18 @@ void main() {
                   ],
                 },
               },
+              {
+                'route': {
+                  'peer_id': 789,
+                  'ipv4_addr': {
+                    'address': {'addr': 168427524},
+                    'network_length': 24,
+                  },
+                  'hostname': 'relay-peer',
+                  'cost': 2,
+                },
+                'peer': {'peer_id': 789},
+              },
             ],
           },
         },
@@ -1159,14 +1171,18 @@ void main() {
       final remote = statuses['10.10.0.3']!;
       expect(remote.hostname, 'desktop-peer');
       expect(remote.peerId, '456');
-      expect(remote.cost, '1');
+      expect(remote.cost, 'p2p');
       expect(remote.latencyText, '3.452');
       expect(remote.lossText, '0.01');
-      expect(remote.rxBytes, '1024');
-      expect(remote.txBytes, '2048');
+      expect(remote.rxBytes, '1.00 KiB');
+      expect(remote.txBytes, '2.00 KiB');
       expect(remote.tunnelProto, 'udp');
       expect(remote.natType, 'Symmetric');
       expect(remote.version, '2.6.4');
+
+      final relay = statuses['10.10.0.4']!;
+      expect(relay.hostname, 'relay-peer');
+      expect(relay.cost, 'relay(2)');
     });
 
     test('derives Android traffic totals from peer connection stats', () async {

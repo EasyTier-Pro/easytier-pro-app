@@ -1887,10 +1887,18 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     var fallbackIndex = 0;
     for (final peer in peers) {
       final rxBytes = _readTrafficBytes(
-        peer['rx_bytes'] ?? peer['rxBytes'] ?? peer['received_bytes'],
+        peer['rx_bytes_raw'] ??
+            peer['rxBytesRaw'] ??
+            peer['rx_bytes'] ??
+            peer['rxBytes'] ??
+            peer['received_bytes'],
       );
       final txBytes = _readTrafficBytes(
-        peer['tx_bytes'] ?? peer['txBytes'] ?? peer['transmitted_bytes'],
+        peer['tx_bytes_raw'] ??
+            peer['txBytesRaw'] ??
+            peer['tx_bytes'] ??
+            peer['txBytes'] ??
+            peer['transmitted_bytes'],
       );
       if (rxBytes == null && txBytes == null) {
         continue;
@@ -2365,8 +2373,10 @@ class AndroidNetworkInstanceInfo {
         stats?['loss_rate'],
         stats?['lossRate'],
       ]),
-      'rx_bytes': _firstScalarString([stats?['rx_bytes'], stats?['rxBytes']]),
-      'tx_bytes': _firstScalarString([stats?['tx_bytes'], stats?['txBytes']]),
+      'rx_bytes': _byteCountText(stats?['rx_bytes'] ?? stats?['rxBytes']),
+      'tx_bytes': _byteCountText(stats?['tx_bytes'] ?? stats?['txBytes']),
+      'rx_bytes_raw': stats?['rx_bytes'] ?? stats?['rxBytes'],
+      'tx_bytes_raw': stats?['tx_bytes'] ?? stats?['txBytes'],
       'tunnel_proto': _firstScalarString([
         tunnel?['tunnel_type'],
         tunnel?['tunnelType'],
@@ -2523,14 +2533,43 @@ class AndroidNetworkInstanceInfo {
   }
 
   static String _costText(Map<String, Object?> route) {
-    final latencyFirst = _firstScalarString([
-      route['cost_latency_first'],
-      route['costLatencyFirst'],
-    ]);
-    if (latencyFirst != null) {
-      return latencyFirst;
+    final cost = AndroidCoreRuntime._readIntValue(route['cost']);
+    if (cost != null) {
+      return _routeCostText(cost);
     }
-    return _firstScalarString([route['cost']]) ?? '';
+    final latencyFirst = AndroidCoreRuntime._readIntValue(
+      route['cost_latency_first'] ?? route['costLatencyFirst'],
+    );
+    if (latencyFirst != null) {
+      return _routeCostText(latencyFirst);
+    }
+    return '';
+  }
+
+  static String _routeCostText(int cost) {
+    if (cost <= 0) {
+      return '';
+    }
+    return cost == 1 ? 'p2p' : 'relay($cost)';
+  }
+
+  static String _byteCountText(Object? value) {
+    final bytes = AndroidCoreRuntime._readIntValue(value);
+    if (bytes == null) {
+      return _firstScalarString([value]) ?? '';
+    }
+    const units = <String>['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    var amount = bytes.toDouble();
+    var unitIndex = 0;
+    while (amount >= 1024 && unitIndex < units.length - 1) {
+      amount = amount / 1024;
+      unitIndex++;
+    }
+    if (unitIndex == 0) {
+      return '${amount.round()} ${units[unitIndex]}';
+    }
+    final decimals = amount >= 10 ? 1 : 2;
+    return '${amount.toStringAsFixed(decimals)} ${units[unitIndex]}';
   }
 
   static String _natTypeText(Map<String, Object?>? stunInfo) {

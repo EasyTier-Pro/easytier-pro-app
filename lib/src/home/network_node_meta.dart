@@ -119,7 +119,7 @@ String _formatConnectionCost(String costText) {
   if (normalized == 'p2p') {
     return 'P2P';
   }
-  if (normalized == 'relay') {
+  if (normalized == 'relay' || normalized.startsWith('relay(')) {
     return '中继';
   }
   if (num.tryParse(value) != null) {

@@ -1231,6 +1231,14 @@ void main() {
             deviceId: 'device-2',
             machineId: 'machine-2',
           ),
+          NetworkDevice(
+            id: 'node-3',
+            name: 'relay-node',
+            online: true,
+            ipv4: '10.144.0.4',
+            deviceId: 'device-3',
+            machineId: 'machine-3',
+          ),
         ],
       },
     );
@@ -1281,6 +1289,20 @@ void main() {
             peerId: '123',
             version: '2.6.4',
           ),
+          '10.144.0.4': CorePeerStatus(
+            cidr: '10.144.0.4/24',
+            ipv4: '10.144.0.4',
+            hostname: 'relay-node',
+            cost: 'relay(2)',
+            latencyText: '9.00',
+            lossText: '0.0%',
+            rxBytes: '0 B',
+            txBytes: '0 B',
+            tunnelProto: 'tcp',
+            natType: 'Symmetric',
+            peerId: '124',
+            version: '2.6.4',
+          ),
         },
       ],
     );
@@ -1304,12 +1326,17 @@ void main() {
     final numericCostMeta = tester.widget<Text>(
       find.textContaining('10.144.0.3').first,
     );
+    final relayMeta = tester.widget<Text>(
+      find.textContaining('10.144.0.4').first,
+    );
     expect(p2pMeta.data, contains('P2P'));
     expect(p2pMeta.data, contains('UDP'));
     expect(p2pMeta.data, isNot(contains('17.33 kB')));
     expect(p2pMeta.data, isNot(contains('20.42 kB')));
     expect(numericCostMeta.data, contains('TCP'));
     expect(numericCostMeta.data, isNot(contains(' ·  1')));
+    expect(relayMeta.data, contains('中继'));
+    expect(relayMeta.data, isNot(contains('relay(2)')));
     expect(find.textContaining('3.45 ms'), findsWidgets);
     expect(find.textContaining('Peer: 390879727'), findsNothing);
     expect(find.textContaining('Peer: 123'), findsNothing);
