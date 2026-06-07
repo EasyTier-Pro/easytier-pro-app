@@ -323,6 +323,93 @@ function Get-PackageUid {
     return ""
 }
 
+function Get-ObjectValue {
+    param(
+        [object] $Object,
+        [Parameter(Mandatory = $true)]
+        [string] $Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+    if ($Object -is [System.Collections.IDictionary]) {
+        return $Object[$Name]
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
+function Convert-ToStringList {
+    param([object] $Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+    if ($Value -is [string]) {
+        $trimmed = $Value.Trim()
+        if ($trimmed.Length -eq 0) {
+            return @()
+        }
+        return @($trimmed)
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        $items = New-Object System.Collections.Generic.List[string]
+        foreach ($item in $Value) {
+            if ($null -eq $item) {
+                continue
+            }
+            $text = $item.ToString().Trim()
+            if ($text.Length -gt 0) {
+                $items.Add($text) | Out-Null
+            }
+        }
+        return $items.ToArray()
+    }
+    $text = $Value.ToString().Trim()
+    if ($text.Length -eq 0) {
+        return @()
+    }
+    return @($text)
+}
+
+function Convert-ToBool {
+    param([object] $Value)
+
+    if ($Value -is [bool]) {
+        return $Value
+    }
+    $text = if ($null -eq $Value) { "" } else { $Value.ToString().Trim() }
+    return @("true", "1", "yes") -contains $text.ToLowerInvariant()
+}
+
+function Get-LatestAndroidVpnEstablishedContext {
+    param([Parameter(Mandatory = $true)][string] $LogPath)
+
+    if (-not (Test-Path $LogPath)) {
+        return $null
+    }
+    $latestContext = $null
+    foreach ($line in Get-Content -Path $LogPath) {
+        $trimmed = $line.Trim()
+        if ($trimmed.Length -eq 0 -or $trimmed.StartsWith("#") -or -not $trimmed.StartsWith("{")) {
+            continue
+        }
+        try {
+            $entry = $trimmed | ConvertFrom-Json
+            if ((Get-ObjectValue $entry "message") -eq "Android VPN established") {
+                $latestContext = Get-ObjectValue $entry "context"
+            }
+        } catch {
+            continue
+        }
+    }
+    return $latestContext
+}
+
 function Save-RouteProbeOutput {
     param(
         [Parameter(Mandatory = $true)]
@@ -640,6 +727,32 @@ if (-not $SkipVerify -and $diagnosticsAvailable) {
     }
 }
 
+$latestVpnContext = if ($diagnosticsAvailable) {
+    Get-LatestAndroidVpnEstablishedContext $diagnosticsPath
+} else {
+    $null
+}
+$diagnosticsAddresses = Convert-ToStringList (Get-ObjectValue $latestVpnContext "addresses")
+$diagnosticsRoutes = Convert-ToStringList (Get-ObjectValue $latestVpnContext "routes")
+$diagnosticsBuilderAddresses = Convert-ToStringList (
+    Get-ObjectValue $latestVpnContext "builder_addresses"
+)
+$diagnosticsBuilderRoutes = Convert-ToStringList (
+    Get-ObjectValue $latestVpnContext "builder_routes"
+)
+$diagnosticsDisallowedApplications = Convert-ToStringList (
+    Get-ObjectValue $latestVpnContext "disallowed_applications"
+)
+$diagnosticsBuilderDisallowedApplications = Convert-ToStringList (
+    Get-ObjectValue $latestVpnContext "builder_disallowed_applications"
+)
+$diagnosticsSelfDisallowed = Convert-ToBool (
+    Get-ObjectValue $latestVpnContext "self_disallowed"
+)
+$diagnosticsBuilderSelfDisallowed = Convert-ToBool (
+    Get-ObjectValue $latestVpnContext "builder_self_disallowed"
+)
+
 $requiredFailures = New-Object System.Collections.Generic.List[string]
 if ($diagnosticsVerificationFailure.Length -gt 0) {
     $requiredFailures.Add(
@@ -747,6 +860,14 @@ $summary = [ordered] @{
         (-not $SkipVerify) -and $diagnosticsAvailable -and
         $diagnosticsVerificationFailure.Length -eq 0
     diagnostics_verification_failure = $diagnosticsVerificationFailure
+    diagnostics_addresses = @($diagnosticsAddresses)
+    diagnostics_routes = @($diagnosticsRoutes)
+    diagnostics_builder_addresses = @($diagnosticsBuilderAddresses)
+    diagnostics_builder_routes = @($diagnosticsBuilderRoutes)
+    diagnostics_disallowed_applications = @($diagnosticsDisallowedApplications)
+    diagnostics_builder_disallowed_applications = @($diagnosticsBuilderDisallowedApplications)
+    diagnostics_self_disallowed = [bool] $diagnosticsSelfDisallowed
+    diagnostics_builder_self_disallowed = [bool] $diagnosticsBuilderSelfDisallowed
     expected_routes = @($nonEmptyExpectedRoutes)
     expected_addresses = @($ExpectedAddress)
     expected_route_devices = @($expectedRouteDevices)
