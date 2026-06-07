@@ -88,9 +88,7 @@ class EasyTierVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopConfigServerClient(stopServiceIfIdle = false)
-        stopNetworkInstances()
-        stopVpn(stopService = false)
+        stopRuntime(runtimeStopReason = stopReasonServiceDestroyed)
         super.onDestroy()
     }
 
@@ -387,6 +385,7 @@ class EasyTierVpnService : VpnService() {
         const val extraDisallowedApplications = "disallowedApplications"
         const val extraMtu = "mtu"
         const val extraStopReason = "stopReason"
+        const val stopReasonServiceDestroyed = "service_destroyed"
 
         private const val logTag = "EasyTierVpnService"
         private const val notificationId = 22020

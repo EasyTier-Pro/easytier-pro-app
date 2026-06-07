@@ -93,7 +93,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
 - Android bootstrap 会优先复用当前 workspace 中未撤销、未过期且可复用的 `Android Auto Key`；如果只存在 `Desktop Auto Key`、一次性 key 或其他平台 key，会创建新的 Android 平台注册密钥，避免 Android 设备注册审计混用桌面密钥。
-- 退出登录、工作区失效、登录态失效、常驻通知 Disconnect、系统 VPN 设置撤销连接或 Android 销毁原生 service 时，会由原生 `STOP_RUNTIME` 路径按顺序停止 config server client，调用 `retainNetworkInstance(null)` 清理 EasyTier core 网络实例，再停止 Android VPN interface；常驻通知 Disconnect 和系统撤销路径会在 `config_server_stopped`/`vpn_stopped` 事件中带 stop reason，Dart 运行态进入 stopped 且不会自动重连。
+- 退出登录、工作区失效、登录态失效、常驻通知 Disconnect 或系统 VPN 设置撤销连接时，会由原生 `STOP_RUNTIME` 路径按顺序停止 config server client，调用 `retainNetworkInstance(null)` 清理 EasyTier core 网络实例，再停止 Android VPN interface；常驻通知 Disconnect 和系统撤销路径会在 `config_server_stopped`/`vpn_stopped` 事件中带 stop reason，Dart 运行态进入 stopped 且不会自动重连。如果 Android 销毁原生 service，原生清理事件会带 `service_destroyed`，Dart 会按非主动断开处理并在会话仍有效时尝试重连。
 - VPN 会通过 `addDisallowedApplication(packageName)` 排除 EasyTier Pro 自身，避免控制面连接和 EasyTier 底层传输被自己的 VPN 路由回环；因此连通性验证应使用浏览器、Termux、ping 工具等未排除的应用发起，不应用 EasyTier Pro 自己访问虚拟网作为判断依据。
 - VPN 连接会显示常驻通知；用户可以点击通知返回应用，也可以通过通知动作、系统 VPN 设置或应用内退出/断开操作停止连接。
 - 应用不会在客户端硬编码只适用于生产环境的控制面地址；控制台和本地 E2E 环境应继续通过上层配置或控制台接口提供。
