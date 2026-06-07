@@ -260,7 +260,7 @@ class _MobileDashboardHeader extends StatelessWidget {
   }
 }
 
-class _MobileDashboardNavigation extends StatelessWidget {
+class _MobileDashboardNavigation extends StatefulWidget {
   const _MobileDashboardNavigation({
     required this.activeView,
     required this.networks,
@@ -282,8 +282,15 @@ class _MobileDashboardNavigation extends StatelessWidget {
   final VoidCallback onShowSettings;
 
   @override
+  State<_MobileDashboardNavigation> createState() =>
+      _MobileDashboardNavigationState();
+}
+
+class _MobileDashboardNavigationState
+    extends State<_MobileDashboardNavigation> {
+  @override
   Widget build(BuildContext context) {
-    final selectedIndex = switch (activeView) {
+    final selectedIndex = switch (widget.activeView) {
       _DashboardView.overview => 0,
       _DashboardView.network => 1,
       _DashboardView.devices => 2,
@@ -294,22 +301,7 @@ class _MobileDashboardNavigation extends StatelessWidget {
       child: FBottomNavigationBar(
         key: const ValueKey<String>('mobile-dashboard-navigation'),
         index: selectedIndex,
-        onChange: (index) {
-          switch (index) {
-            case 0:
-              onShowOverview();
-            case 1:
-              if (activeView == _DashboardView.network && networks.length > 1) {
-                _showNetworkPicker(context);
-              } else {
-                onShowNetwork();
-              }
-            case 2:
-              onShowDevices();
-            case 3:
-              onShowSettings();
-          }
-        },
+        onChange: _handleNavigationChange,
         children: const [
           FBottomNavigationBarItem(
             key: ValueKey<String>('mobile-nav-overview'),
@@ -336,7 +328,29 @@ class _MobileDashboardNavigation extends StatelessWidget {
     );
   }
 
+  void _handleNavigationChange(int index) {
+    switch (index) {
+      case 0:
+        widget.onShowOverview();
+      case 1:
+        if (widget.activeView == _DashboardView.network &&
+            widget.networks.length > 1) {
+          _showNetworkPicker(context);
+        } else {
+          widget.onShowNetwork();
+        }
+      case 2:
+        widget.onShowDevices();
+      case 3:
+        widget.onShowSettings();
+    }
+  }
+
   void _showNetworkPicker(BuildContext context) {
+    final networks = widget.networks;
+    final selectedNetworkId = widget.selectedNetworkId;
+    final onSelectNetwork = widget.onSelectNetwork;
+
     unawaited(
       showFSheet<void>(
         context: context,

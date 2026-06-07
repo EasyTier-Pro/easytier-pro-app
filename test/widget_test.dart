@@ -2168,6 +2168,24 @@ void main() {
     );
     expect(find.text('lab-phone'), findsOneWidget);
     expect(find.text('office-phone'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mobile-network-option-net-1')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mobile-network-option-net-2')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('settings exposes selectable and copyable runtime errors', (
