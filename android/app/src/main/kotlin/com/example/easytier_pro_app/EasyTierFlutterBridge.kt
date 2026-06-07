@@ -55,9 +55,27 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 "isConfigServerClientConnected" -> {
                     result.success(EasyTierNative.isConfigServerClientConnected())
                 }
-                "collectNetworkInfos" -> {
-                    val maxLength = call.argument<Int>("maxLength") ?: 2 * 1024 * 1024
-                    result.success(EasyTierNative.collectNetworkInfos(maxLength))
+                "listInstances" -> {
+                    val maxLength = call.argument<Int>("maxLength") ?: 64
+                    result.success(EasyTierNative.listInstances(maxLength))
+                }
+                "callJsonRpc" -> {
+                    val serviceName = call.argument<String>("serviceName")?.trim().orEmpty()
+                    val methodName = call.argument<String>("methodName")?.trim().orEmpty()
+                    val domainName = call.argument<String>("domainName")?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                    val payloadJson = call.argument<String>("payloadJson")?.trim()
+                        ?.takeIf { it.isNotEmpty() } ?: "{}"
+                    require(serviceName.isNotEmpty()) { "serviceName is required" }
+                    require(methodName.isNotEmpty()) { "methodName is required" }
+                    result.success(
+                        EasyTierNative.callJsonRpc(
+                            serviceName,
+                            methodName,
+                            domainName,
+                            payloadJson,
+                        ),
+                    )
                 }
                 "retainNetworkInstance" -> {
                     val names = call.argument<List<String>>("instanceNames") ?: emptyList()

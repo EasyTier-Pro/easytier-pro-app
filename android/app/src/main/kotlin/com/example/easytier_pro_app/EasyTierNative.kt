@@ -37,14 +37,29 @@ object EasyTierNative {
         return invoke("isConfigServerClientConnected") as? Boolean ?: false
     }
 
-    fun collectNetworkInfos(maxLength: Int): String {
-        val method = findMethod("collectNetworkInfos", 1)
+    fun listInstances(maxLength: Int): String {
+        val method = findMethod("listInstances", 1)
         val arg = when (method.parameterTypes.firstOrNull()) {
             Long::class.javaPrimitiveType,
             Long::class.javaObjectType -> maxLength.toLong()
             else -> maxLength
         }
         return invoke(method, arg)?.toString() ?: "{}"
+    }
+
+    fun callJsonRpc(
+        serviceName: String,
+        methodName: String,
+        domainName: String?,
+        payloadJson: String,
+    ): String {
+        return invoke(
+            "callJsonRpc",
+            serviceName,
+            methodName,
+            domainName?.trim()?.takeIf { it.isNotEmpty() },
+            payloadJson,
+        )?.toString() ?: "{}"
     }
 
     fun retainNetworkInstance(instanceNames: List<String>) {

@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: EasyTier/EasyTier
-          ref: 13f2ebfe12f9a0a0d8294dbe325503da62381a40
+          ref: 75cd6ab4c6809875b76f18efd00e8cf091dd3f52
           path: EasyTier
           submodules: recursive
 

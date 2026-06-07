@@ -46,11 +46,28 @@ class EasyTierNativeInstrumentedTest {
     }
 
     @Test
-    fun collectNetworkInfosReturnsJsonObject() {
-        val output = EasyTierNative.collectNetworkInfos(2 * 1024 * 1024)
+    fun listInstancesReturnsJsonObject() {
+        val output = EasyTierNative.listInstances(64)
         val parsed = JSONObject(output)
 
-        assertTrue(parsed.has("map") || parsed.length() == 0)
+        assertNotNull(parsed)
+    }
+
+    @Test
+    fun callJsonRpcMethodIsAvailable() {
+        val output = try {
+            EasyTierNative.callJsonRpc(
+                "api.instance.PeerManageRpcService",
+                "show_node_info",
+                null,
+                "{}",
+            )
+        } catch (error: IllegalStateException) {
+            assertTrue(error.message.orEmpty().isNotBlank())
+            return
+        }
+
+        assertNotNull(JSONObject(output))
     }
 
     @Test

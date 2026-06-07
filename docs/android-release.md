@@ -63,7 +63,7 @@ cd android
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-当前 instrumented tests 会覆盖当前设备 ABI 随包 JNI library 存在性、JNI library 加载、`collectNetworkInfos` 返回 JSON、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、config server callback JSON 关键字段解析、JNI 反射 native exception 解包、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、VPN Builder non-blocking TUN 配置、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
+当前 instrumented tests 会覆盖当前设备 ABI 随包 JNI library 存在性、JNI library 加载、`listInstances` 返回 JSON、JSON RPC JNI 入口可用性、Android `machineId` 持久化、hostname 规范化、正式 `applicationId`、debug 本地 E2E cleartext HTTP、VPN manifest 声明、Android 14+ foreground service special-use subtype、原生 service 事件缓冲顺序和容量、config server callback JSON 关键字段解析、JNI 反射 native exception 解包、MethodChannel VPN config 到 service intent 的字段映射、VPN start intent 配置解析、VPN Builder non-blocking TUN 配置、自身 `applicationId` 自动进入 disallowed applications、系统 VPN revoke 清理 hook，以及 `VpnService.prepare(context)` 是否可进入系统 VPN 授权前置流程。该测试不覆盖用户实际点击授权、真实 config server 下发或 TUN 数据面连通性，这些仍需 emulator/真机手动 E2E 验证。
 
 ## VPN 权限与后台运行说明
 
@@ -86,10 +86,10 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android 通知权限或 VPN 授权请求已在系统弹窗中等待时，重复启动不会进入运行时错误；通知权限 pending 会继续后续流程，VPN 授权 pending 会继续展示 `needsVpnPermission` 等待用户处理。
 - 用户拒绝系统 VPN 授权时，Dart 运行态会继续展示 `needsVpnPermission`，并在诊断状态中记录授权被拒绝，避免被误判为 config server 或 JNI 运行时错误。
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
-- Android 运行态信息轮询采用 15 秒间隔和 15 秒 `collectNetworkInfos` 缓存，降低 JNI 轮询压力；随包 JNI 通过本仓库构建脚本的本地补丁释放 `collectNetworkInfos` 返回的 FFI 字符串。
+- Android 运行态信息轮询采用 15 秒间隔，VPN 路由刷新在启动后短时 3 秒、随后 15 秒调用 JSON RPC `list_route`；随包 JNI 固定到 EasyTier/EasyTier#2326 的 `75cd6ab4c6809875b76f18efd00e8cf091dd3f52`，由上游提供 `listInstances` 和 JSON RPC 调用。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
 - Android 导出诊断日志会写入应用缓存日志目录，并通过 `FileProvider` 拉起系统分享面板；导出聚合时会跳过旧的 `diagnostics-*.log` 文件，避免重复导出导致日志自我嵌套膨胀。
-- 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`；Dart 使用 `instance_id` 匹配 `collectNetworkInfos` 中以 UUID 为 key 的 running info，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，并使用 `network_name` 关联首页 readiness、peer status、流量统计和后续删除事件，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入、路由刷新或停止失败。
+- 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`，并暴露 `listInstances` 与 JSON RPC；Dart 使用 `listInstances` / callback 定位 EasyTier instance name，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，通过 JSON RPC `show_node_info` / `list_route` / `get_stats` 获取虚拟 IP、动态路由和流量统计，并使用 `network_name` 关联首页 readiness、peer status、流量统计和后续删除事件，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入、路由刷新或停止失败。
 - 已登录且运行中的 Android runtime 收到 `config_server_stopped` 事件时会自动重新连接；退出登录和工作区重建期间不会被该事件反向拉起。
 - workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
@@ -122,7 +122,7 @@ EasyTier Pro 会把自身应用排除在 Android VPN 路由之外，避免控制
 
 - 先看应用内“设置 -> 诊断日志”的 `Android VPN established`。该日志只会在 `VpnService.Builder.establish()` 成功且 `EasyTierJNI.setTunFd(instanceName, fd)` 返回后出现，`tun_fd` 应为非空；`addresses` 应包含本机 `my_node_info.virtual_ipv4`，`routes` 应至少包含虚拟网 CIDR，并包含控制台授权的子网 CIDR；`builder_routes` 表示原生层实际传给 Android `VpnService.Builder.addRoute()` 的归一化路由，也应包含这些 CIDR。如果控制台配置了映射子网，日志里应出现 mapped CIDR，而不是 `real_cidr->mapped_cidr` 原始字符串。`disallowed_applications` 和 `builder_disallowed_applications` 应包含 `net.easytier.pro`，`self_disallowed` 和 `builder_self_disallowed` 应为 `true`。`Android VPN config refresh requested` 只能说明 Dart 已解析到新路由并请求原生服务刷新，不能单独证明系统 VPN interface 和 TUN fd 已经建立成功。
 - 如果没有 `Android VPN established`，先看同一时间附近的 `Android runtime error`，其中的 `action`、addresses、routes 和 `disallowed_applications` 可以判断是 VPN 配置缺失、route 解析失败、TUN 建立失败，还是 JNI `setTunFd` 失败。
-- 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题在 Dart 对 `collectNetworkInfos` / config server 下发结果的解析或路由刷新链路。
+- 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题优先在 Dart 对 JSON RPC `show_node_info` / `list_route` 的解析、实例名定位或路由刷新链路。
 - 如果日志 routes 正确但未被排除的浏览器、Termux 或 ping 工具仍无法访问虚拟 IP/子网，问题更可能在系统 VPN interface、TUN fd 注入或 EasyTier data-plane 转发链路。
 - 不要用 EasyTier Pro 自己访问虚拟网作为连通性判断，因为应用自身会被 `addDisallowedApplication(packageName)` 排除在 VPN 外，用来避免控制面和 EasyTier 底层传输路由回环。
 - 导出诊断日志后，可以用 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>` 自动检查 config server 在最新 VPN 建立前已启动且未被 stop 覆盖、最新 VPN 建立后未出现 VPN stopped、config server 最终未停在 stopped、TUN fd、routes、存在时的 builder_routes、mapped route 归一化和自身应用排除是否满足。`-ExpectedRoute` 会按 Android 系统 route 语义归一化，例如 `10.10.0.42/24` 会按 `10.10.0.0/24` 校验，`real_cidr->mapped_cidr` 会按右侧 mapped CIDR 校验。该脚本不证明数据面已通，虚拟 IP/子网访问仍需用未被排除的应用实际验证。
@@ -155,4 +155,4 @@ EasyTier Pro 会把自身应用排除在 Android VPN 路由之外，避免控制
 
 - 上传签名证书归属和保管流程。
 - 国内渠道 VPN 权限说明和后台常驻通知文案终审。
-- Android 流量统计是继续弱化展示，还是等待 EasyTier JNI 暴露等价 stats API。
+- Android 流量统计已优先使用 EasyTier JSON RPC stats；仍需产品确认展示口径是否需要标注、弱化或与桌面完全对齐。

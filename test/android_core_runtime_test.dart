@@ -414,6 +414,176 @@ void main() {
         ],
       };
 
+      AndroidNetworkInstanceInfo? jsonRpcInstance(MethodCall call) {
+        final arguments = call.arguments as Map<Object?, Object?>?;
+        final payloadText = arguments?['payloadJson']?.toString() ?? '{}';
+        final payload = jsonDecode(payloadText);
+        final instance = payload is Map ? payload['instance'] : null;
+        final selector = instance is Map
+            ? instance['instance_selector'] ?? instance['instanceSelector']
+            : null;
+        final targetName = selector is Map
+            ? selector['name']?.toString().trim() ?? ''
+            : '';
+        final snapshot = AndroidNetworkInfoSnapshot.parse(
+          jsonEncode(networkInfos),
+        );
+        if (targetName.isNotEmpty) {
+          return snapshot.instanceNamed(targetName) ??
+              (snapshot.instances.length == 1
+                  ? snapshot.instances.values.single
+                  : null);
+        }
+        return snapshot.instances.values.isEmpty
+            ? null
+            : snapshot.instances.values.first;
+      }
+
+      Map<String, Object?>? jsonRpcInstanceMap(MethodCall call) {
+        final arguments = call.arguments as Map<Object?, Object?>?;
+        final payloadText = arguments?['payloadJson']?.toString() ?? '{}';
+        final payload = jsonDecode(payloadText);
+        final instance = payload is Map ? payload['instance'] : null;
+        final selector = instance is Map
+            ? instance['instance_selector'] ?? instance['instanceSelector']
+            : null;
+        final targetName = selector is Map
+            ? selector['name']?.toString().trim() ?? ''
+            : '';
+
+        final maps = <Map<String, Object?>>[];
+        void addInstance(Object? value, {String? nameHint, String? idHint}) {
+          if (value is List) {
+            for (final item in value) {
+              addInstance(item);
+            }
+            return;
+          }
+          if (value is! Map) {
+            return;
+          }
+          final map = <String, Object?>{
+            for (final entry in value.entries)
+              entry.key.toString(): entry.value as Object?,
+          };
+          if (nameHint != null && nameHint.isNotEmpty) {
+            map.putIfAbsent('instance_name', () => nameHint);
+          }
+          if (idHint != null && idHint.isNotEmpty) {
+            map.putIfAbsent('instance_id', () => idHint);
+          }
+          final looksLikeInstance =
+              map.containsKey('running') ||
+              map.containsKey('my_node_info') ||
+              map.containsKey('myNodeInfo') ||
+              map.containsKey('routes') ||
+              map.containsKey('peer_route_pairs') ||
+              map.containsKey('peerRoutePairs') ||
+              map.containsKey('vpn_config') ||
+              map.containsKey('vpnConfig');
+          if (looksLikeInstance) {
+            maps.add(map);
+          }
+          for (final entry in map.entries) {
+            final key = entry.key;
+            final child = entry.value;
+            if (key == 'instances' || key == 'map') {
+              addInstance(child);
+            } else if (child is Map) {
+              addInstance(child, nameHint: key, idHint: key);
+            }
+          }
+        }
+
+        addInstance(networkInfos);
+        if (targetName.isNotEmpty) {
+          return maps.firstWhere(
+            (map) =>
+                map['instance_name'] == targetName ||
+                map['instanceName'] == targetName ||
+                map['dev_name'] == targetName ||
+                map['devName'] == targetName ||
+                map['name'] == targetName,
+            orElse: () =>
+                maps.length == 1 ? maps.single : const <String, Object?>{},
+          );
+        }
+        return maps.isEmpty ? null : maps.first;
+      }
+
+      String jsonRpcResponse(MethodCall call) {
+        final arguments = call.arguments as Map<Object?, Object?>?;
+        final serviceName = arguments?['serviceName']?.toString() ?? '';
+        final methodName = arguments?['methodName']?.toString() ?? '';
+        final instance = jsonRpcInstance(call);
+        final instanceMap = jsonRpcInstanceMap(call);
+        if (serviceName == 'api.instance.PeerManageRpcService' &&
+            methodName == 'show_node_info') {
+          final rawNodeInfo =
+              instanceMap?['my_node_info'] ?? instanceMap?['myNodeInfo'];
+          final addresses = instance?.vpnConfig?['addresses'];
+          return jsonEncode({
+            'node_info':
+                rawNodeInfo ??
+                {
+                  if (addresses is List && addresses.isNotEmpty)
+                    'ipv4_addr': addresses.first,
+                },
+          });
+        }
+        if (serviceName == 'api.instance.PeerManageRpcService' &&
+            methodName == 'list_route') {
+          final pairRoutes = <Object?>[];
+          for (final item
+              in (instanceMap?['peer_route_pairs'] is List
+                  ? instanceMap!['peer_route_pairs'] as List
+                  : instanceMap?['peerRoutePairs'] is List
+                  ? instanceMap!['peerRoutePairs'] as List
+                  : const <Object?>[])) {
+            if (item is Map && item['route'] != null) {
+              pairRoutes.add(item['route']);
+            }
+          }
+          return jsonEncode({
+            'routes':
+                instanceMap?['routes'] ??
+                instanceMap?['route_infos'] ??
+                instanceMap?['routeInfos'] ??
+                pairRoutes,
+          });
+        }
+        if (serviceName == 'api.instance.PeerManageRpcService' &&
+            methodName == 'list_peer') {
+          final pairPeers = <Object?>[];
+          for (final item
+              in (instanceMap?['peer_route_pairs'] is List
+                  ? instanceMap!['peer_route_pairs'] as List
+                  : instanceMap?['peerRoutePairs'] is List
+                  ? instanceMap!['peerRoutePairs'] as List
+                  : const <Object?>[])) {
+            if (item is Map && item['peer'] != null) {
+              pairPeers.add(item['peer']);
+            }
+          }
+          return jsonEncode({
+            'my_info':
+                instanceMap?['my_node_info'] ?? instanceMap?['myNodeInfo'],
+            'peer_infos':
+                instanceMap?['peer_infos'] ??
+                instanceMap?['peerInfos'] ??
+                instanceMap?['peers'] ??
+                pairPeers,
+          });
+        }
+        if (serviceName == 'api.instance.StatsRpcService' &&
+            methodName == 'get_stats') {
+          return jsonEncode({
+            'metrics': networkInfos['json_rpc_metrics'] ?? <Object?>[],
+          });
+        }
+        fail('Unexpected JSON RPC call: $serviceName/$methodName');
+      }
+
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(methodChannel, (MethodCall call) async {
             calls.add(call);
@@ -444,8 +614,16 @@ void main() {
                   throw result;
                 }
                 return result;
-              case 'collectNetworkInfos':
-                return jsonEncode(networkInfos);
+              case 'listInstances':
+                final snapshot = AndroidNetworkInfoSnapshot.parse(
+                  jsonEncode(networkInfos),
+                );
+                return jsonEncode({
+                  for (final instance in snapshot.instances.values)
+                    instance.name: instance.id ?? '',
+                });
+              case 'callJsonRpc':
+                return jsonRpcResponse(call);
               default:
                 fail('Unexpected Android method call: ${call.method}');
             }
@@ -454,7 +632,6 @@ void main() {
       runtime = AndroidCoreRuntime(
         methodChannel: methodChannel,
         eventChannel: _FakeEventChannel(nativeEvents.stream),
-        networkInfoCacheDuration: Duration.zero,
       );
     });
 
@@ -499,7 +676,7 @@ void main() {
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
           'routes': ['10.10.0.0/24', '10.20.0.0/16'],
-          'dns': ['10.10.0.1'],
+          'dns': <String>[],
         },
       });
     });
@@ -678,7 +855,7 @@ void main() {
       expect(runtime.peerStatusPollInterval, const Duration(seconds: 15));
     });
 
-    test('caches network info reads to reduce JNI polling', () async {
+    test('reads Android runtime snapshots through JSON RPC', () async {
       final cachedRuntime = AndroidCoreRuntime(
         methodChannel: methodChannel,
         eventChannel: _FakeEventChannel(nativeEvents.stream),
@@ -688,10 +865,8 @@ void main() {
       await cachedRuntime.readNetworkPeerStatuses('network-a');
       await cachedRuntime.isNetworkInstanceRunning('network-a');
 
-      final collectCalls = calls.where(
-        (call) => call.method == 'collectNetworkInfos',
-      );
-      expect(collectCalls, hasLength(1));
+      expect(calls.where((call) => call.method == 'listInstances'), isNotEmpty);
+      expect(calls.where((call) => call.method == 'callJsonRpc'), isNotEmpty);
     });
 
     test('resolves instance id events before starting VPN', () async {
@@ -712,7 +887,7 @@ void main() {
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
           'routes': ['10.10.0.0/24', '10.20.0.0/16'],
-          'dns': ['10.10.0.1'],
+          'dns': <String>[],
         },
       });
     });
@@ -765,64 +940,66 @@ void main() {
       });
     });
 
-    test('matches UUID keyed running info by dev name without instance id', () async {
-      networkInfos = {
-        'map': {
-          'bce27f42-5c4c-41ff-9a49-2db5fd2560ca': {
-            'dev_name': 'network-a-android',
-            'running': true,
-            'my_node_info': {
-              'virtual_ipv4': {
-                'address': {'addr': 168427522},
-                'network_length': 24,
-              },
-            },
-            'routes': [
-              {
-                'ipv4_addr': {
-                  'address': {'addr': 168427523},
+    test(
+      'matches UUID keyed running info by dev name without instance id',
+      () async {
+        networkInfos = {
+          'map': {
+            'bce27f42-5c4c-41ff-9a49-2db5fd2560ca': {
+              'dev_name': 'network-a-android',
+              'running': true,
+              'my_node_info': {
+                'virtual_ipv4': {
+                  'address': {'addr': 168427522},
                   'network_length': 24,
                 },
-                'proxy_cidrs': ['192.168.50.0/24'],
               },
-            ],
+              'routes': [
+                {
+                  'ipv4_addr': {
+                    'address': {'addr': 168427523},
+                    'network_length': 24,
+                  },
+                  'proxy_cidrs': ['192.168.50.0/24'],
+                },
+              ],
+            },
           },
-        },
-      };
-      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        };
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
 
-      nativeEvents.add({
-        'type': CoreRuntimeEventTypes.configServer,
-        'payload': {
-          'event': 'run_network_instance',
-          'instance_name': 'network-a-android',
-          'network_name': 'network-a',
-        },
-      });
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a-android',
+            'network_name': 'network-a',
+          },
+        });
 
-      final startVpn = await _waitForCall(calls, 'startVpn');
-      final retain = calls.where(
-        (call) => call.method == 'retainNetworkInstance',
-      );
-      expect(retain.last.arguments, {
-        'instanceNames': ['network-a-android'],
-      });
-      expect(startVpn.arguments, {
-        'instanceName': 'network-a-android',
-        'vpnConfig': {
-          'addresses': ['10.10.0.2/24'],
-          'routes': ['10.10.0.0/24', '192.168.50.0/24'],
-          'dns': <String>[],
-        },
-      });
-    });
+        final startVpn = await _waitForCall(calls, 'startVpn');
+        final retain = calls.where(
+          (call) => call.method == 'retainNetworkInstance',
+        );
+        expect(retain.last.arguments, {
+          'instanceNames': ['network-a-android'],
+        });
+        expect(startVpn.arguments, {
+          'instanceName': 'network-a-android',
+          'vpnConfig': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.10.0.0/24', '192.168.50.0/24'],
+            'dns': <String>[],
+          },
+        });
+      },
+    );
 
     test('maps callback network name to UUID keyed running info', () async {
       await runtime.dispose();
       runtime = AndroidCoreRuntime(
         methodChannel: methodChannel,
         eventChannel: _FakeEventChannel(nativeEvents.stream),
-        networkInfoCacheDuration: Duration.zero,
         vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
         vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
         vpnRouteRefreshFastLimit: 2,
@@ -1026,48 +1203,77 @@ void main() {
       expect(totals['network-a']!.uploadBytes, 2048);
     });
 
-    test(
-      'falls back to the only collected instance for id-only events',
-      () async {
-        networkInfos = {
-          'map': {
-            'network-a': {
-              'running': true,
-              'my_node_info': {
-                'virtual_ipv4': {
-                  'address': {'addr': 168427522},
-                  'network_length': 24,
-                },
+    test('derives Android traffic totals from JSON RPC stats', () async {
+      networkInfos = {
+        'instances': [
+          {
+            'instance_id': 'instance-a',
+            'instance_name': 'network-a',
+            'running': true,
+            'ipv4_cidr': '10.10.0.2/24',
+          },
+        ],
+        'json_rpc_metrics': [
+          {
+            'name': 'traffic_bytes_self_rx',
+            'value': '4096',
+            'labels': {'network_name': 'network-a'},
+          },
+          {
+            'name': 'traffic_bytes_self_tx',
+            'value': 8192,
+            'labels': {'network_name': 'network-a'},
+          },
+        ],
+      };
+
+      final totals = await runtime.readNetworkTrafficTotals();
+
+      expect(totals.keys, ['network-a']);
+      expect(totals['network-a']!.downloadBytes, 4096);
+      expect(totals['network-a']!.uploadBytes, 8192);
+      expect(calls.map((call) => call.method), contains('callJsonRpc'));
+    });
+
+    test('falls back to the only listed instance for id-only events', () async {
+      networkInfos = {
+        'map': {
+          'network-a': {
+            'running': true,
+            'my_node_info': {
+              'virtual_ipv4': {
+                'address': {'addr': 168427522},
+                'network_length': 24,
               },
-              'routes': [
-                {
-                  'proxy_cidrs': ['10.20.0.0/16'],
-                },
-              ],
             },
+            'routes': [
+              {
+                'proxy_cidrs': ['10.20.0.0/16'],
+              },
+            ],
           },
-        };
+        },
+      };
 
-        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
-        nativeEvents.add({
-          'type': CoreRuntimeEventTypes.configServer,
-          'payload': {
-            'event': 'run_network_instance',
-            'instance_id': '8af8e8c8-4dd4-4f82-8e74-aaaaaaaaaaaa',
-          },
-        });
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
+          'instance_id': '8af8e8c8-4dd4-4f82-8e74-aaaaaaaaaaaa',
+        },
+      });
 
-        final startVpn = await _waitForCall(calls, 'startVpn');
-        expect(startVpn.arguments, {
-          'instanceName': 'network-a',
-          'vpnConfig': {
-            'addresses': ['10.10.0.2/24'],
-            'routes': ['10.10.0.0/24', '10.20.0.0/16'],
-            'dns': <String>[],
-          },
-        });
-      },
-    );
+      final startVpn = await _waitForCall(calls, 'startVpn');
+      expect(startVpn.arguments, {
+        'instanceName': 'network-a',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24', '10.20.0.0/16'],
+          'dns': <String>[],
+        },
+      });
+    });
 
     test('reports failed config server events without starting VPN', () async {
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
@@ -1254,7 +1460,6 @@ void main() {
       runtime = AndroidCoreRuntime(
         methodChannel: methodChannel,
         eventChannel: _FakeEventChannel(nativeEvents.stream),
-        networkInfoCacheDuration: Duration.zero,
         vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
         vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
         vpnRouteRefreshFastLimit: 2,
@@ -1287,7 +1492,7 @@ void main() {
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
           'routes': ['10.10.0.0/24'],
-          'dns': ['10.10.0.1'],
+          'dns': <String>[],
         },
       });
 
@@ -1313,7 +1518,7 @@ void main() {
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
           'routes': ['10.10.0.0/24', '10.20.0.0/16'],
-          'dns': ['10.10.0.1'],
+          'dns': <String>[],
         },
       });
     });
