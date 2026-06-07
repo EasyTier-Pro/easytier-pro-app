@@ -351,16 +351,97 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
-    expect(find.textContaining('1.00 KiB/s'), findsNWidgets(2));
-    expect(find.textContaining('2.00 KiB/s'), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsOneWidget,
+    );
+    expect(find.text('1.0K/s'), findsNWidgets(2));
+    expect(find.text('2.0K/s'), findsNWidgets(2));
+    expect(find.textContaining('1.00 KiB/s'), findsNothing);
+    expect(find.textContaining('2.00 KiB/s'), findsNothing);
 
     await _selectNetworkFromHeader(tester, '办公网');
 
+    expect(
+      find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsNothing,
+    );
     expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('very narrow status badge keeps online copy beside traffic', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(340, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'phone-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 0,
+            uploadBytes: 0,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-office': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-office',
+            downloadBytes: 204800,
+            uploadBytes: 614400,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsOneWidget,
+    );
+    expect(find.text('100K/s'), findsNWidgets(2));
+    expect(find.text('300K/s'), findsNWidgets(2));
+    expect(find.text('已在线'), findsOneWidget);
+    expect(find.text('1 个网络'), findsOneWidget);
   });
 
   testWidgets('keeps traffic sparkline x-axis stable as samples grow', (

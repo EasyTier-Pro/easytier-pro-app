@@ -539,51 +539,93 @@ class _NetworkTabButton extends StatelessWidget {
   }
 }
 
-class _TrafficPill extends StatelessWidget {
-  const _TrafficPill({
+class _TrafficRateStrip extends StatelessWidget {
+  const _TrafficRateStrip({
+    required this.downloadRate,
+    required this.uploadRate,
+  });
+
+  final double downloadRate;
+  final double uploadRate;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const ValueKey<String>('status-traffic-strip'),
+      width: 140,
+      height: 26,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: _TrafficRateMetric(
+                  icon: Icons.arrow_downward,
+                  label: _formatCompactTrafficRate(downloadRate),
+                  color: const Color(0xFF16A34A),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 12,
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                color: const Color(0xFFE2E8F0),
+              ),
+              Expanded(
+                child: _TrafficRateMetric(
+                  icon: Icons.arrow_upward,
+                  label: _formatCompactTrafficRate(uploadRate),
+                  color: const Color(0xFF2563EB),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrafficRateMetric extends StatelessWidget {
+  const _TrafficRateMetric({
     required this.icon,
     required this.label,
-    required this.bgColor,
-    required this.textColor,
+    required this.color,
   });
 
   final IconData icon;
   final String label;
-  final Color bgColor;
-  final Color textColor;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: textColor.withAlpha(38)),
-        boxShadow: [
-          BoxShadow(
-            color: textColor.withAlpha(13),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: textColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              letterSpacing: 0.3,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 11, color: color),
+        const SizedBox(width: 3),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -725,6 +767,8 @@ class _StatusBadge extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: const Color(0xFF0F172A),
@@ -748,29 +792,15 @@ class _StatusBadge extends StatelessWidget {
           ],
         );
 
-        final trafficPills =
+        final trafficStrip =
             hasTrafficStats &&
                 joinedCount > 0 &&
                 !error &&
                 !needsElevation &&
                 !needsVpnPermission
-            ? Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _TrafficPill(
-                    icon: Icons.arrow_downward,
-                    label: _formatTrafficRate(downloadRate),
-                    bgColor: const Color(0xFFF0FDF4),
-                    textColor: const Color(0xFF16A34A),
-                  ),
-                  _TrafficPill(
-                    icon: Icons.arrow_upward,
-                    label: _formatTrafficRate(uploadRate),
-                    bgColor: const Color(0xFFEFF6FF),
-                    textColor: const Color(0xFF2563EB),
-                  ),
-                ],
+            ? _TrafficRateStrip(
+                downloadRate: downloadRate,
+                uploadRate: uploadRate,
               )
             : null;
 
@@ -791,18 +821,6 @@ class _StatusBadge extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final narrow = constraints.maxWidth < 420;
-
-              if (narrow && trafficPills != null) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    statusBody,
-                    const SizedBox(height: 12),
-                    trafficPills,
-                  ],
-                );
-              }
-
               final elevationButton = needsElevation && onElevate != null
                   ? _ControlSelectionBoundary(
                       child: FButton(
@@ -831,9 +849,9 @@ class _StatusBadge extends StatelessWidget {
                   if (elevationButton != null) ...[
                     const SizedBox(width: 14),
                     elevationButton,
-                  ] else if (trafficPills != null) ...[
-                    const SizedBox(width: 14),
-                    trafficPills,
+                  ] else if (trafficStrip != null) ...[
+                    const SizedBox(width: 10),
+                    trafficStrip,
                   ],
                 ],
               );

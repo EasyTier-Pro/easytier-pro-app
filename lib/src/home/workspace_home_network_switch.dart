@@ -352,14 +352,14 @@ class _NetworkSwitchTile extends StatelessWidget {
                                             traffic != null) ...[
                                           _MiniTrafficPill(
                                             icon: Icons.arrow_downward,
-                                            label: _formatTrafficRate(
+                                            label: _formatCompactTrafficRate(
                                               traffic!.downloadBytesPerSecond,
                                             ),
                                             color: const Color(0xFF16A34A),
                                           ),
                                           _MiniTrafficPill(
                                             icon: Icons.arrow_upward,
-                                            label: _formatTrafficRate(
+                                            label: _formatCompactTrafficRate(
                                               traffic!.uploadBytesPerSecond,
                                             ),
                                             color: const Color(0xFF2563EB),
