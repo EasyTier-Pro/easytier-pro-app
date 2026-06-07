@@ -4,11 +4,42 @@
 
 调研日期：2026-06-06
 
+实现状态更新：2026-06-07
+
+## 当前实现状态
+
+截至 2026-06-07，Android 移植的主要工程闭环已经落到仓库内：
+
+- 已新增 `CorePlatformRuntime` 平台抽象，桌面端保留 `DesktopCoreRuntime`，Android 端走 `AndroidCoreRuntime`。
+- 已新增 Kotlin `MethodChannel` / `EventChannel` bridge，封装 EasyTier Android JNI 的 config server client、运行信息采集、实例保留、TUN fd 注入和错误分类。
+- 已新增 Android `VpnService` 前台服务，声明 VPN、foreground service、Android 14 special-use、通知权限和诊断日志分享所需 `FileProvider`。
+- 已实现 Android `machineId` 持久化、hostname 规范化、完整 config server URL 拼接、VPN 授权和通知权限处理。
+- 已实现一个活跃 VPN 网络实例的启动、停止、系统撤销清理、通知断开、退出登录/工作区失效清理，以及路由变化后的 VPN interface 刷新。
+- 已从 `collectNetworkInfos` / config server 下发信息解析本机虚拟 IP、peer、route、peer-route pair、子网路由、mapped route、DNS、MTU 和近似流量统计。
+- 已在 Android VPN 配置中自动排除 EasyTier Pro 自身 `applicationId`，避免控制面连接和 EasyTier 底层传输被自己的 VPN 路由回环；连通性测试应使用未排除的浏览器、Termux 或 ping 工具。
+- 已配置正式 `applicationId` 为 `net.easytier.pro`，release signing 前置检查、ABI split、随包 JNI ABI 校验、debug/profile 本地 E2E cleartext 策略和 Android CI。
+- 已补充 Android 发布和排查说明，详见 `docs/android-release.md`。
+
+当前已通过的仓库级验证包括：
+
+- `dart analyze`
+- `flutter test`
+- `.\scripts\verify_android_release_inputs.ps1`
+- `flutter build apk --debug`
+- `cd android; .\gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin`
+- `cd android; .\gradlew.bat :app:connectedDebugAndroidTest`
+
+仍不能视为完成的证据项：
+
+- 还需要 Android emulator 或真机在本地 E2E 与线上控制台分别完成真实登录、VPN 授权、config server 下发 `run_network_instance`、`Android VPN established` 诊断日志、系统 route table 和未排除应用访问虚拟 IP/子网的证据采集。
+- release 构建仍需要渠道/项目方提供 `android/key.properties` 和上传签名证书保管流程。
+- 国内渠道 VPN 权限说明、后台常驻通知文案和 Android 流量统计最终口径仍需产品确认。
+
 ## 结论
 
 Android 移植可行。上游 EasyTier 已经提供 JNI 层的 config server client、网络实例管理、运行信息采集和 TUN fd 注入能力，可以支撑 Android 客户端不再依赖 `easytier-cli` 或桌面 installer，而是通过 Android 原生层直接运行 EasyTier core。
 
-但这不是简单启用 Flutter Android 构建。当前本应用的核心生命周期是桌面模型，主要依赖 `Process.start` 调用 `easytier-pro-installer` 和 `easytier-cli`。Android 需要新增一套运行时后端：
+但这不是简单启用 Flutter Android 构建。调研时本应用的核心生命周期仍是桌面模型，主要依赖 `Process.start` 调用 `easytier-pro-installer` 和 `easytier-cli`。Android 需要新增一套运行时后端：
 
 ```text
 Flutter Dart
@@ -32,13 +63,13 @@ Flutter Dart
 
 ## 事实来源
 
-### 本应用
+### 本应用（调研时）
 
 - `android/` 目录已存在，但仍接近 Flutter 模板工程。
-- `android/app/src/main/kotlin/com/example/easytier_pro_app/MainActivity.kt` 当前仅继承 `FlutterActivity`。
-- `android/app/src/main/AndroidManifest.xml` 当前没有声明 VPN service、foreground service 等 Android 网络运行所需组件。
-- `lib/src/core/core_lifecycle_service.dart` 当前使用桌面 installer/CLI 管理 EasyTier core。
-- `lib/src/auth/console_auth_http_service.dart` 当前负责获取 release、config server base URL、device enrollment key 和 bootstrap token。
+- `android/app/src/main/kotlin/com/example/easytier_pro_app/MainActivity.kt` 调研时仅继承 `FlutterActivity`。
+- `android/app/src/main/AndroidManifest.xml` 调研时没有声明 VPN service、foreground service 等 Android 网络运行所需组件。
+- `lib/src/core/core_lifecycle_service.dart` 调研时使用桌面 installer/CLI 管理 EasyTier core。
+- `lib/src/auth/console_auth_http_service.dart` 调研时负责获取 release、config server base URL、device enrollment key 和 bootstrap token。
 
 ### EasyTier core
 
@@ -103,7 +134,7 @@ Android VPN 能力必须通过 `android.net.VpnService` 获取用户授权并建
 - Android `VpnService.Builder`: https://developer.android.com/reference/android/net/VpnService.Builder
 - Flutter platform channels: https://docs.flutter.dev/platform-integration/platform-channels
 
-## 当前应用现状
+## 调研时应用现状
 
 ### 可复用能力
 
@@ -116,7 +147,7 @@ Android VPN 能力必须通过 `android.net.VpnService` 获取用户授权并建
 
 ### 需要替换的桌面假设
 
-当前 `CoreLifecycleService` 中有大量桌面运行时假设：
+调研时 `CoreLifecycleService` 中有大量桌面运行时假设：
 
 - 使用 `Process.start` 执行 `easytier-pro-installer`。
 - 使用 `easytier-cli status/install/stats/node info/peer` 读取运行状态。
