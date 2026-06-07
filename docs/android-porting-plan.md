@@ -31,7 +31,7 @@
 
 仍不能视为完成的证据项：
 
-- 还需要 Android emulator 或真机在本地 E2E 与线上控制台分别完成真实登录、VPN 授权、config server 下发 `run_network_instance`、`Android VPN established` 诊断日志、系统 route table 和未排除应用访问虚拟 IP/子网的证据采集。
+- 还需要 Android emulator 或真机在本地 E2E 与线上控制台分别完成真实登录、VPN 授权、config server 下发 `run_network_instance`、`Android VPN established` 诊断日志、系统 route table 和未排除应用访问虚拟 IP/子网成功的证据采集。
 - release 构建仍需要渠道/项目方提供 `android/key.properties` 和上传签名证书保管流程。
 - 国内渠道 VPN 权限说明和后台常驻通知文案草案已补充到 `docs/android-release.md`，仍需产品/法务/渠道终审；Android 流量统计最终口径仍需产品确认。
 
