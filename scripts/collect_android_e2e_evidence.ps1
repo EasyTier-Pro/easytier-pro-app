@@ -9,6 +9,7 @@ param(
     [string[]] $ProbePackageName = @(),
     [switch] $RequireSystemRoute,
     [switch] $RequirePingSuccess,
+    [switch] $RequireProbePackageRoute,
     [switch] $RequireStop,
     [switch] $RequireConfigServerStop,
     [switch] $SkipVerify,
@@ -32,11 +33,22 @@ $nonEmptyPingTargets = @(
         ForEach-Object { if ($null -eq $_) { "" } else { $_.Trim() } } |
         Where-Object { $_.Length -gt 0 }
 )
+$nonEmptyProbePackageNames = @(
+    $ProbePackageName |
+        ForEach-Object { if ($null -eq $_) { "" } else { $_.Trim() } } |
+        Where-Object { $_.Length -gt 0 }
+)
 if ($RequireSystemRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
     throw "-RequireSystemRoute requires at least one -ExpectedRoute value."
 }
 if ($RequirePingSuccess -and $nonEmptyPingTargets.Count -eq 0) {
     throw "-RequirePingSuccess requires at least one -PingTarget value."
+}
+if ($RequireProbePackageRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
+    throw "-RequireProbePackageRoute requires at least one -ExpectedRoute value."
+}
+if ($RequireProbePackageRoute -and $nonEmptyProbePackageNames.Count -eq 0) {
+    throw "-RequireProbePackageRoute requires at least one -ProbePackageName value."
 }
 
 function Get-LocalAndroidSdkPath {
@@ -311,6 +323,7 @@ function Save-RouteProbeOutput {
     )
     $file = Join-Path $runOutputDirectory "route_probes.txt"
     $buffer = New-Object System.Text.StringBuilder
+    $probeResults = New-Object System.Collections.Generic.List[object]
     [void] $buffer.AppendLine("# Android route probes")
     foreach ($probe in $UidProbes) {
         [void] $buffer.AppendLine("# uid_probe=$($probe.Label) uid=$($probe.Uid)")
@@ -341,6 +354,15 @@ function Save-RouteProbeOutput {
         foreach ($command in $commands) {
             $arguments = $command.Args
             $result = Invoke-Adb -Arguments $arguments -AllowFailure
+            $probeResults.Add(
+                [pscustomobject] @{
+                    Probe = $command.Label
+                    Target = $target
+                    ExitCode = $result.ExitCode
+                    Output = $result.Output
+                    Arguments = $arguments
+                }
+            ) | Out-Null
             [void] $buffer.AppendLine("# probe=$($command.Label)")
             [void] $buffer.AppendLine("# adb $($arguments -join ' ')")
             [void] $buffer.AppendLine("# exit_code=$($result.ExitCode)")
@@ -349,6 +371,7 @@ function Save-RouteProbeOutput {
         }
     }
     Write-TextFile -Path $file -Text $buffer.ToString()
+    return $probeResults.ToArray()
 }
 
 function Test-RouteTextContainsCidr {
@@ -376,6 +399,50 @@ function Test-RouteTextContainsCidr {
         )
     }
 
+    return $false
+}
+
+function Get-RouteDevicesForCidrs {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RouteText,
+        [Parameter(Mandatory = $true)]
+        [string[]] $Cidrs
+    )
+
+    $devices = New-Object System.Collections.Generic.List[string]
+    $lines = @($RouteText -split '\r?\n')
+    foreach ($cidr in $Cidrs) {
+        $trimmed = if ($null -eq $cidr) { "" } else { $cidr.Trim() }
+        if ($trimmed.Length -eq 0) {
+            continue
+        }
+        foreach ($line in $lines) {
+            if ((Test-RouteTextContainsCidr $line $trimmed) -and $line -match '(^|\s)dev\s+(\S+)') {
+                $devices.Add($matches[2]) | Out-Null
+            }
+        }
+    }
+    return @($devices | Select-Object -Unique)
+}
+
+function Test-RouteProbeUsesAnyDevice {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProbeText,
+        [Parameter(Mandatory = $true)]
+        [string[]] $Devices
+    )
+
+    foreach ($device in $Devices) {
+        $trimmed = if ($null -eq $device) { "" } else { $device.Trim() }
+        if ($trimmed.Length -eq 0) {
+            continue
+        }
+        if ([regex]::IsMatch($ProbeText, "(^|\s)dev\s+$([regex]::Escape($trimmed))(\s|$)")) {
+            return $true
+        }
+    }
     return $false
 }
 
@@ -449,6 +516,7 @@ Save-AdbCommandOutput -FileName "netd.txt" -Arguments @("shell", "dumpsys", "net
 $packageResult = Save-AdbCommandOutput -FileName "package.txt" -Arguments @("shell", "dumpsys", "package", $PackageName)
 $packageUid = Get-PackageUid $packageResult.Output
 $uidProbes = New-Object System.Collections.Generic.List[object]
+$missingProbePackageUids = New-Object System.Collections.Generic.List[string]
 if (-not [string]::IsNullOrWhiteSpace($packageUid)) {
     $uidProbes.Add(
         [pscustomobject] @{
@@ -478,6 +546,7 @@ foreach ($probePackage in @($ProbePackageName | Select-Object -Unique)) {
         ) | Out-Null
     } else {
         Write-Warning "Could not resolve UID for probe package $trimmedProbePackage; package route probe will be skipped."
+        $missingProbePackageUids.Add($trimmedProbePackage) | Out-Null
     }
 }
 $routeProbeTargets = New-Object System.Collections.Generic.List[string]
@@ -496,7 +565,12 @@ foreach ($route in $ExpectedRoute) {
         }
     }
 }
-Save-RouteProbeOutput -Targets $routeProbeTargets.ToArray() -UidProbes $uidProbes.ToArray()
+$routeProbeResults = @(
+    Save-RouteProbeOutput -Targets $routeProbeTargets.ToArray() -UidProbes $uidProbes.ToArray()
+)
+$expectedRouteDevices = @(
+    Get-RouteDevicesForCidrs -RouteText $routeTables.Output -Cidrs $ExpectedRoute
+)
 
 $missingSystemRoutes = @(
     $ExpectedRoute |
@@ -542,6 +616,43 @@ if ($RequireSystemRoute -and $missingSystemRoutes.Count -gt 0) {
 if ($RequirePingSuccess -and $failedPings.Count -gt 0) {
     $requiredFailures.Add("Android ping checks failed: $($failedPings -join ', ')") | Out-Null
 }
+if ($RequireProbePackageRoute) {
+    if ($missingProbePackageUids.Count -gt 0) {
+        $requiredFailures.Add(
+            "Probe package UID was not resolved: $($missingProbePackageUids -join ', ')"
+        ) | Out-Null
+    }
+    if ($expectedRouteDevices.Count -eq 0) {
+        $requiredFailures.Add(
+            "No Android route devices were found for ExpectedRoute: $($nonEmptyExpectedRoutes -join ', ')"
+        ) | Out-Null
+    }
+    $probePackageResults = @(
+        $routeProbeResults |
+            Where-Object { $_.Probe -like 'probe:*' }
+    )
+    if ($probePackageResults.Count -eq 0) {
+        $requiredFailures.Add(
+            "No route probe results were collected for ProbePackageName."
+        ) | Out-Null
+    } else {
+        $failedProbeRoutes = @(
+            $probePackageResults |
+                Where-Object {
+                    $_.ExitCode -ne 0 -or
+                    -not (Test-RouteProbeUsesAnyDevice $_.Output $expectedRouteDevices)
+                } |
+                ForEach-Object {
+                    "$($_.Probe) target=$($_.Target) exit=$($_.ExitCode)"
+                }
+        )
+        if ($failedProbeRoutes.Count -gt 0) {
+            $requiredFailures.Add(
+                "Probe package route checks did not use expected VPN route devices ($($expectedRouteDevices -join ', ')): $($failedProbeRoutes -join '; ')"
+            ) | Out-Null
+        }
+    }
+}
 if ($requiredFailures.Count -gt 0) {
     throw "$($requiredFailures -join ' '). Evidence directory: $runOutputDirectory"
 }
@@ -554,6 +665,9 @@ Write-Host "Route probes: $(Join-Path $runOutputDirectory "route_probes.txt")"
 Write-Host "Connectivity: $(Join-Path $runOutputDirectory "connectivity.txt")"
 if ($missingSystemRoutes.Count -gt 0) {
     Write-Host "Missing system routes: $($missingSystemRoutes -join ', ')"
+}
+if ($expectedRouteDevices.Count -gt 0) {
+    Write-Host "Expected route devices: $($expectedRouteDevices -join ', ')"
 }
 if ($PingTarget.Count -gt 0) {
     Write-Host "Ping targets: $($PingTarget -join ', ')"
