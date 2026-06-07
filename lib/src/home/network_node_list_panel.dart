@@ -11,8 +11,6 @@ part 'network_node_os_icon.dart';
 part 'network_node_detail.dart';
 part 'network_node_meta.dart';
 
-const double _nodeListMinWidth = 360;
-
 class NetworkNodeListViewport extends StatefulWidget {
   const NetworkNodeListViewport({
     super.key,
@@ -107,41 +105,21 @@ class NetworkNodeListPanel extends StatelessWidget {
               const Center(child: _NodeStateMessage(message: '该网络暂无节点')),
             ],
           )
-        : LayoutBuilder(
+        : Column(
             key: const ValueKey<String>('network-node-list-panel-loaded'),
-            builder: (context, constraints) {
-              final sortedNodes = _sortNodes(nodes);
-              final isNarrow =
-                  constraints.hasBoundedWidth &&
-                  constraints.maxWidth < _nodeListMinWidth;
-
-              Widget list = Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (runtimeError != null) ...[
-                    _RuntimeStatusNotice(message: runtimeError!),
-                    const SizedBox(height: 12),
-                  ],
-                  for (final node in sortedNodes)
-                    _NodeCard(
-                      key: ValueKey<String>('network-node-${node.id}'),
-                      node: node,
-                      peer: _peerFor(node),
-                    ),
-                ],
-              );
-
-              if (isNarrow) {
-                return SingleChildScrollView(
-                  primary: false,
-                  scrollDirection: Axis.horizontal,
-                  physics: appScrollPhysics,
-                  child: SizedBox(width: _nodeListMinWidth, child: list),
-                );
-              }
-
-              return list;
-            },
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (runtimeError != null) ...[
+                _RuntimeStatusNotice(message: runtimeError!),
+                const SizedBox(height: 12),
+              ],
+              for (final node in _sortNodes(nodes))
+                _NodeCard(
+                  key: ValueKey<String>('network-node-${node.id}'),
+                  node: node,
+                  peer: _peerFor(node),
+                ),
+            ],
           );
 
     return AnimatedSwitcher(

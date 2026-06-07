@@ -97,42 +97,59 @@ class _DetailChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
-          const SizedBox(width: 6),
-          Text(
-            '$label:',
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF94A3B8),
-              fontWeight: FontWeight.w500,
-              height: 1.2,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.hasBoundedWidth;
+        final compact = bounded && constraints.maxWidth < 420;
+
+        return ConstrainedBox(
+          constraints: bounded
+              ? BoxConstraints(maxWidth: constraints.maxWidth)
+              : const BoxConstraints(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F9FB),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
+              mainAxisSize: compact ? MainAxisSize.max : MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
+                const SizedBox(width: 6),
+                Text(
+                  '$label:',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SelectableTextHitBoundary(
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Inter',
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 4),
-          SelectableTextHitBoundary(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF0F172A),
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Inter',
-                height: 1.2,
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

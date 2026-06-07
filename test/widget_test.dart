@@ -952,6 +952,25 @@ void main() {
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
     expect(listSize.width, closeTo(312, 0.1));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('network-node-list-scroll')),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal,
+        ),
+      ),
+      findsNothing,
+    );
+    final listRect = tester.getRect(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+    );
+    final cardRect = tester.getRect(
+      find.byKey(const ValueKey<String>('network-node-node-1')),
+    );
+    expect(cardRect.left, greaterThanOrEqualTo(listRect.left - 0.1));
+    expect(cardRect.right, lessThanOrEqualTo(listRect.right + 0.1));
     expect(find.byTooltip('刷新节点'), findsOneWidget);
   });
 
