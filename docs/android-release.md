@@ -148,7 +148,7 @@ EasyTier Pro 会把自身应用排除在 Android VPN 路由之外，避免控制
 - 在 Android 上导出诊断日志时通过系统分享面板发送文件；拿到文件后可运行 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>` 单独校验日志，也可以在 release 包或 `run-as` 不可用时把该文件传给 `.\scripts\collect_android_e2e_evidence.ps1 -DiagnosticsLogPath <diagnostics.log>`，继续采集系统 route、route probe 和 ping 证据。
 - 使用未被排除的应用访问虚拟 IP 和子网地址，确认系统 VPN route 能承载数据面流量。
 - 退出登录后，debug 包运行 `.\scripts\collect_android_e2e_evidence.ps1 -EnvironmentName local -ExpectedRoute <虚拟网CIDR>,<子网CIDR> -RequireStop -RequireConfigServerStop`，或对导出的诊断日志运行 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR> -RequireStop -RequireConfigServerStop`，确认最新一次 VPN 建立之后 config server client 与 VPN 均停止；线上控制台断开验收同样采集一份 `-EnvironmentName online` 的 stop 证据。
-- 宣布 Android 移植完成或准备 release sign-off 前，运行 `.\scripts\verify_android_porting_readiness.ps1 -RequireSigning -RequireE2E -RequireStopEvidence -LocalConnectedSummaryPath <local-connected-summary.json> -OnlineConnectedSummaryPath <online-connected-summary.json> -LocalStoppedSummaryPath <local-stopped-summary.json> -OnlineStoppedSummaryPath <online-stopped-summary.json>`，确认 release signing、本地/线上连接证据和断开证据都已满足。
+- 宣布 Android 移植完成或准备 release sign-off 前，运行 `.\scripts\verify_android_porting_readiness.ps1 -RequireSigning -RequireE2E -RequireStopEvidence -LocalConnectedSummaryPath <local-connected-summary.json> -OnlineConnectedSummaryPath <online-connected-summary.json> -LocalStoppedSummaryPath <local-stopped-summary.json> -OnlineStoppedSummaryPath <online-stopped-summary.json>`，确认 release signing、本地/线上连接证据和断开证据都已满足；传入的 summary 必须保留 `files.diagnostics`、`files.routes`、`files.route_probes`、`files.connectivity` 和 `files.metadata` 指向的原始证据文件。
 
 仍需产品确认：
 

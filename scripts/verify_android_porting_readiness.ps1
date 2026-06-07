@@ -91,11 +91,33 @@ function Assert-EnvironmentName([object] $Summary, [string] $Expected, [string] 
     }
 }
 
+function Assert-ReferencedEvidenceFile([object] $Summary, [string] $Field, [string] $Description) {
+    $files = Get-PropertyValue $Summary "files"
+    if ($null -eq $files) {
+        throw "$Description must include files.$Field."
+    }
+    $path = Get-PropertyValue $files $Field
+    $pathText = if ($null -eq $path) { "" } else { $path.ToString().Trim() }
+    if ($pathText.Length -eq 0) {
+        throw "$Description must include files.$Field."
+    }
+    if (-not (Test-Path $pathText)) {
+        throw "$Description referenced files.$Field was not found: $pathText"
+    }
+}
+
+function Assert-ReferencedEvidenceFiles([object] $Summary, [string] $Description) {
+    foreach ($field in @("diagnostics", "routes", "route_probes", "connectivity", "metadata")) {
+        Assert-ReferencedEvidenceFile $Summary $field $Description
+    }
+}
+
 function Assert-PassingSummary([object] $Summary, [string] $Description) {
     Assert-TrueField $Summary "passed" $Description
     Assert-TrueField $Summary "diagnostics_available" $Description
     Assert-TrueField $Summary "diagnostics_verification_passed" $Description
     Assert-EmptyArrayField $Summary "failures" $Description
+    Assert-ReferencedEvidenceFiles $Summary $Description
 }
 
 function Assert-ConnectedEvidence([string] $Path, [string] $Label) {
