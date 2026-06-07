@@ -552,7 +552,7 @@ class _TrafficRateStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       key: const ValueKey<String>('status-traffic-strip'),
-      width: 140,
+      width: 128,
       height: 26,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -839,6 +839,20 @@ class _StatusBadge extends StatelessWidget {
                     statusBody,
                     const SizedBox(height: 12),
                     elevationButton,
+                  ],
+                );
+              }
+
+              if (trafficStrip != null && constraints.maxWidth < 240) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    statusBody,
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: trafficStrip,
+                    ),
                   ],
                 );
               }

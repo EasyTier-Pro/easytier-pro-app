@@ -355,10 +355,10 @@ void main() {
       find.byKey(const ValueKey<String>('status-traffic-strip')),
       findsOneWidget,
     );
-    expect(find.text('1.0K/s'), findsNWidgets(2));
-    expect(find.text('2.0K/s'), findsNWidgets(2));
-    expect(find.textContaining('1.00 KiB/s'), findsNothing);
-    expect(find.textContaining('2.00 KiB/s'), findsNothing);
+    expect(find.text('1.0K/s'), findsOneWidget);
+    expect(find.text('2.0K/s'), findsOneWidget);
+    expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
+    expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
 
     await _selectNetworkFromHeader(tester, '办公网');
 
@@ -376,7 +376,7 @@ void main() {
   testWidgets('very narrow status badge keeps online copy beside traffic', (
     WidgetTester tester,
   ) async {
-    _useDesktopViewport(tester, size: const Size(340, 760));
+    _useDesktopViewport(tester, size: const Size(320, 760));
 
     final authService = _FakeAuthService(
       networks: const <ConsoleNetwork>[
@@ -438,8 +438,10 @@ void main() {
       find.byKey(const ValueKey<String>('status-traffic-strip')),
       findsOneWidget,
     );
-    expect(find.text('100K/s'), findsNWidgets(2));
-    expect(find.text('300K/s'), findsNWidgets(2));
+    expect(find.text('100K/s'), findsOneWidget);
+    expect(find.text('300K/s'), findsOneWidget);
+    expect(find.textContaining('100 KiB/s'), findsNothing);
+    expect(find.textContaining('300 KiB/s'), findsNothing);
     expect(find.text('已在线'), findsOneWidget);
     expect(find.text('1 个网络'), findsOneWidget);
   });
@@ -746,6 +748,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
+
+    expect(find.textContaining('1.00 KiB/s'), findsNothing);
+    expect(find.textContaining('2.00 KiB/s'), findsNothing);
 
     await tester.tap(find.byType(LineChart));
     await tester.pumpAndSettle();

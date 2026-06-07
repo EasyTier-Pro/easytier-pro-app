@@ -209,6 +209,8 @@ class _NetworkSwitchTile extends StatelessWidget {
     final localIpv4 = state.localIpv4?.trim();
     final cidrText = network.ipv4Cidr.trim();
     final history = trafficHistory;
+    final showMiniTraffic =
+        MediaQuery.sizeOf(context).width >= _mobileShellBreakpoint;
 
     final switchValue = joined || joining;
     final isLoading = joining || leaving;
@@ -348,18 +350,19 @@ class _NetworkSwitchTile extends StatelessWidget {
                                             label: '实例启动中',
                                             active: false,
                                           ),
-                                        if (instanceReady &&
+                                        if (showMiniTraffic &&
+                                            instanceReady &&
                                             traffic != null) ...[
                                           _MiniTrafficPill(
                                             icon: Icons.arrow_downward,
-                                            label: _formatCompactTrafficRate(
+                                            label: _formatTrafficRate(
                                               traffic!.downloadBytesPerSecond,
                                             ),
                                             color: const Color(0xFF16A34A),
                                           ),
                                           _MiniTrafficPill(
                                             icon: Icons.arrow_upward,
-                                            label: _formatCompactTrafficRate(
+                                            label: _formatTrafficRate(
                                               traffic!.uploadBytesPerSecond,
                                             ),
                                             color: const Color(0xFF2563EB),
