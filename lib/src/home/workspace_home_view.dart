@@ -114,6 +114,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   String? _trayWorkspaceName;
   bool? _trayConnectionEnabled;
   bool? _trayConnectionDisconnecting;
+  int _contentTransitionDirection = 1;
 
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
 
@@ -154,7 +155,15 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   void _updateState(VoidCallback fn) {
-    setState(fn);
+    final previousView = _activeView;
+    setState(() {
+      fn();
+      final previousIndex = _mobileDashboardViewOrder.indexOf(previousView);
+      final nextIndex = _mobileDashboardViewOrder.indexOf(_activeView);
+      if (previousIndex >= 0 && nextIndex >= 0 && previousIndex != nextIndex) {
+        _contentTransitionDirection = nextIndex > previousIndex ? 1 : -1;
+      }
+    });
     _syncTrayConnectionAction();
   }
 
@@ -352,9 +361,22 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                     child: DecoratedBox(
                       decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
                       child: AnimatedSwitcher(
-                        duration: appMotionMedium,
-                        reverseDuration: appMotionShort,
-                        transitionBuilder: appFadeSlideTransition,
+                        duration: mobile
+                            ? const Duration(milliseconds: 280)
+                            : appMotionMedium,
+                        reverseDuration: mobile
+                            ? const Duration(milliseconds: 220)
+                            : appMotionShort,
+                        transitionBuilder: mobile
+                            ? (child, animation) {
+                                return _mobileDashboardPageTransition(
+                                  child,
+                                  animation,
+                                  currentKey: contentKey,
+                                  direction: _contentTransitionDirection,
+                                );
+                              }
+                            : appFadeSlideTransition,
                         layoutBuilder: appSwitcherStackLayout,
                         child: KeyedSubtree(
                           key: contentKey,
@@ -475,6 +497,33 @@ class _MobilePageSwipeGateState extends State<_MobilePageSwipeGate> {
       child: widget.child,
     );
   }
+}
+
+Widget _mobileDashboardPageTransition(
+  Widget child,
+  Animation<double> animation, {
+  required Key currentKey,
+  required int direction,
+}) {
+  final normalizedDirection = direction < 0 ? -1.0 : 1.0;
+  final entering = child.key == currentKey;
+  final offsetDirection = entering ? normalizedDirection : -normalizedDirection;
+  final curved = CurvedAnimation(
+    parent: animation,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  return FadeTransition(
+    opacity: Tween<double>(begin: 0.72, end: 1).animate(curved),
+    child: SlideTransition(
+      position: Tween<Offset>(
+        begin: Offset(offsetDirection * 0.12, 0),
+        end: Offset.zero,
+      ).animate(curved),
+      child: child,
+    ),
+  );
 }
 
 class _DesktopSystemTopInset extends StatelessWidget {
