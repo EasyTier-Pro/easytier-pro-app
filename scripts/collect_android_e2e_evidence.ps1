@@ -11,6 +11,7 @@ param(
     [switch] $RequireSystemRoute,
     [switch] $RequirePingSuccess,
     [switch] $RequireProbePackageRoute,
+    [switch] $RequireSelfExcludedRoute,
     [switch] $RequireStop,
     [switch] $RequireConfigServerStop,
     [switch] $SkipVerify,
@@ -50,6 +51,9 @@ if ($RequireProbePackageRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
 }
 if ($RequireProbePackageRoute -and $nonEmptyProbePackageNames.Count -eq 0) {
     throw "-RequireProbePackageRoute requires at least one -ProbePackageName value."
+}
+if ($RequireSelfExcludedRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
+    throw "-RequireSelfExcludedRoute requires at least one -ExpectedRoute value."
 }
 
 $resolvedDiagnosticsLogPath = ""
@@ -617,24 +621,44 @@ foreach ($target in $PingTarget) {
     }
 }
 
+$diagnosticsVerificationFailure = ""
 if (-not $SkipVerify -and $diagnosticsAvailable) {
     $verifyScript = Join-Path $PSScriptRoot "verify_android_e2e_diagnostics.ps1"
-    & $verifyScript `
-        -LogPath $diagnosticsPath `
-        -ExpectedRoute $ExpectedRoute `
-        -ExpectedAddress $ExpectedAddress `
-        -PackageName $PackageName `
-        -RequireStop:$RequireStop `
-        -RequireConfigServerStop:$RequireConfigServerStop
+    try {
+        & $verifyScript `
+            -LogPath $diagnosticsPath `
+            -ExpectedRoute $ExpectedRoute `
+            -ExpectedAddress $ExpectedAddress `
+            -PackageName $PackageName `
+            -RequireStop:$RequireStop `
+            -RequireConfigServerStop:$RequireConfigServerStop
+    } catch {
+        $diagnosticsVerificationFailure = $_.Exception.Message
+    }
 }
 
 $requiredFailures = New-Object System.Collections.Generic.List[string]
+if ($diagnosticsVerificationFailure.Length -gt 0) {
+    $requiredFailures.Add(
+        "Android diagnostics verification failed: $diagnosticsVerificationFailure"
+    ) | Out-Null
+}
 if ($RequireSystemRoute -and $missingSystemRoutes.Count -gt 0) {
     $requiredFailures.Add($missingSystemRouteMessage) | Out-Null
 }
 if ($RequirePingSuccess -and $failedPings.Count -gt 0) {
     $requiredFailures.Add("Android ping checks failed: $($failedPings -join ', ')") | Out-Null
 }
+$probePackageResults = @(
+    $routeProbeResults |
+        Where-Object { $_.Probe -like 'probe:*' }
+)
+$selfPackageResults = @(
+    $routeProbeResults |
+        Where-Object { $_.Probe -like 'disallowed:*' }
+)
+$failedProbeRoutes = @()
+$failedSelfExcludedRoutes = @()
 if ($RequireProbePackageRoute) {
     if ($missingProbePackageUids.Count -gt 0) {
         $requiredFailures.Add(
@@ -646,10 +670,6 @@ if ($RequireProbePackageRoute) {
             "No Android route devices were found for ExpectedRoute: $($nonEmptyExpectedRoutes -join ', ')"
         ) | Out-Null
     }
-    $probePackageResults = @(
-        $routeProbeResults |
-            Where-Object { $_.Probe -like 'probe:*' }
-    )
     if ($probePackageResults.Count -eq 0) {
         $requiredFailures.Add(
             "No route probe results were collected for ProbePackageName."
@@ -672,6 +692,88 @@ if ($RequireProbePackageRoute) {
         }
     }
 }
+if ($RequireSelfExcludedRoute) {
+    if ([string]::IsNullOrWhiteSpace($packageUid)) {
+        $requiredFailures.Add(
+            "Self package UID was not resolved for $PackageName."
+        ) | Out-Null
+    }
+    if ($expectedRouteDevices.Count -eq 0) {
+        $requiredFailures.Add(
+            "No Android route devices were found for ExpectedRoute: $($nonEmptyExpectedRoutes -join ', ')"
+        ) | Out-Null
+    }
+    if ($selfPackageResults.Count -eq 0) {
+        $requiredFailures.Add(
+            "No route probe results were collected for the self-disallowed package."
+        ) | Out-Null
+    } else {
+        $failedSelfExcludedRoutes = @(
+            $selfPackageResults |
+                Where-Object {
+                    $_.ExitCode -eq 0 -and
+                    (Test-RouteProbeUsesAnyDevice $_.Output $expectedRouteDevices)
+                } |
+                ForEach-Object {
+                    "$($_.Probe) target=$($_.Target) exit=$($_.ExitCode)"
+                }
+        )
+        if ($failedSelfExcludedRoutes.Count -gt 0) {
+            $requiredFailures.Add(
+                "Self-disallowed package route checks still used VPN route devices ($($expectedRouteDevices -join ', ')): $($failedSelfExcludedRoutes -join '; ')"
+            ) | Out-Null
+        }
+    }
+}
+
+$summary = [ordered] @{
+    generated_at = (Get-Date).ToString("o")
+    passed = $requiredFailures.Count -eq 0
+    failures = @($requiredFailures.ToArray())
+    device = $script:DeviceSerial
+    package_name = $PackageName
+    diagnostics_source = if ($resolvedDiagnosticsLogPath.Length -gt 0) {
+        "exported"
+    } else {
+        "adb_run_as"
+    }
+    diagnostics_input = $resolvedDiagnosticsLogPath
+    diagnostics_available = $diagnosticsAvailable
+    diagnostics_verification_passed =
+        (-not $SkipVerify) -and $diagnosticsAvailable -and
+        $diagnosticsVerificationFailure.Length -eq 0
+    diagnostics_verification_failure = $diagnosticsVerificationFailure
+    expected_routes = @($nonEmptyExpectedRoutes)
+    expected_addresses = @($ExpectedAddress)
+    expected_route_devices = @($expectedRouteDevices)
+    missing_system_routes = @($missingSystemRoutes)
+    ping_targets = @($nonEmptyPingTargets)
+    failed_pings = @($failedPings.ToArray())
+    probe_package_names = @($nonEmptyProbePackageNames)
+    missing_probe_package_uids = @($missingProbePackageUids.ToArray())
+    failed_probe_routes = @($failedProbeRoutes)
+    self_package_uid = $packageUid
+    failed_self_excluded_routes = @($failedSelfExcludedRoutes)
+    require_system_route = [bool] $RequireSystemRoute
+    require_ping_success = [bool] $RequirePingSuccess
+    require_probe_package_route = [bool] $RequireProbePackageRoute
+    require_self_excluded_route = [bool] $RequireSelfExcludedRoute
+    require_stop = [bool] $RequireStop
+    require_config_server_stop = [bool] $RequireConfigServerStop
+    skip_verify = [bool] $SkipVerify
+    files = [ordered] @{
+        diagnostics = $diagnosticsPath
+        routes = (Join-Path $runOutputDirectory "route_tables.txt")
+        route_probes = (Join-Path $runOutputDirectory "route_probes.txt")
+        connectivity = (Join-Path $runOutputDirectory "connectivity.txt")
+        metadata = (Join-Path $runOutputDirectory "metadata.txt")
+    }
+}
+$summaryPath = Join-Path $runOutputDirectory "summary.json"
+Write-TextFile `
+    -Path $summaryPath `
+    -Text ($summary | ConvertTo-Json -Depth 8)
+
 if ($requiredFailures.Count -gt 0) {
     throw "$($requiredFailures -join ' '). Evidence directory: $runOutputDirectory"
 }
@@ -682,6 +784,7 @@ Write-Host "Diagnostics: $diagnosticsPath"
 Write-Host "Routes: $(Join-Path $runOutputDirectory "route_tables.txt")"
 Write-Host "Route probes: $(Join-Path $runOutputDirectory "route_probes.txt")"
 Write-Host "Connectivity: $(Join-Path $runOutputDirectory "connectivity.txt")"
+Write-Host "Summary: $summaryPath"
 if ($missingSystemRoutes.Count -gt 0) {
     Write-Host "Missing system routes: $($missingSystemRoutes -join ', ')"
 }
