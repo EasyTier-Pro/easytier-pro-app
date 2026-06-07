@@ -189,6 +189,16 @@ function Find-EntriesByMessage([string] $Message) {
     return @($entries | Where-Object { (Get-EntryValue $_ "message") -eq $Message })
 }
 
+function Find-EntryIndexesByMessage([string] $Message) {
+    $indexes = New-Object System.Collections.Generic.List[int]
+    for ($index = 0; $index -lt $entries.Count; $index++) {
+        if ((Get-EntryValue $entries[$index] "message") -eq $Message) {
+            $indexes.Add($index) | Out-Null
+        }
+    }
+    return $indexes.ToArray()
+}
+
 if ($RequireConfigServerStarted) {
     $configServerStarted = Find-EntriesByMessage "Android config server client started"
     if ($configServerStarted.Count -eq 0) {
@@ -200,6 +210,8 @@ $vpnEstablished = Find-EntriesByMessage "Android VPN established"
 if ($vpnEstablished.Count -eq 0) {
     throw "Missing Android VPN established log entry."
 }
+$vpnEstablishedIndexes = Find-EntryIndexesByMessage "Android VPN established"
+$latestVpnIndex = $vpnEstablishedIndexes[$vpnEstablishedIndexes.Count - 1]
 $latestVpn = $vpnEstablished[$vpnEstablished.Count - 1]
 $context = Get-EntryValue $latestVpn "context"
 
@@ -237,16 +249,24 @@ if (-not (Convert-ToBool (Get-EntryValue $context "self_disallowed"))) {
 }
 
 if ($RequireStop) {
-    $vpnStopped = Find-EntriesByMessage "Android VPN stopped"
-    if ($vpnStopped.Count -eq 0) {
-        throw "Missing Android VPN stopped log entry."
+    $vpnStoppedIndexes = Find-EntryIndexesByMessage "Android VPN stopped"
+    $vpnStoppedAfterLatest = @(
+        $vpnStoppedIndexes |
+            Where-Object { $_ -gt $latestVpnIndex }
+    )
+    if ($vpnStoppedAfterLatest.Count -eq 0) {
+        throw "Missing Android VPN stopped log entry after the latest Android VPN established log entry."
     }
 }
 
 if ($RequireConfigServerStop) {
-    $configServerStopped = Find-EntriesByMessage "Android config server client stopped"
-    if ($configServerStopped.Count -eq 0) {
-        throw "Missing Android config server client stopped log entry."
+    $configServerStoppedIndexes = Find-EntryIndexesByMessage "Android config server client stopped"
+    $configServerStoppedAfterLatest = @(
+        $configServerStoppedIndexes |
+            Where-Object { $_ -gt $latestVpnIndex }
+    )
+    if ($configServerStoppedAfterLatest.Count -eq 0) {
+        throw "Missing Android config server client stopped log entry after the latest Android VPN established log entry."
     }
 }
 
