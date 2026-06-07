@@ -17,6 +17,7 @@ class EasyTierVpnService : VpnService() {
     private var activeInstanceName: String? = null
     private var activeConfigServerConfig: ConfigServerConfig? = null
     private var configServerClientStarted = false
+    private var explicitStopSelfRequested = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
@@ -88,7 +89,16 @@ class EasyTierVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopRuntime(runtimeStopReason = stopReasonServiceDestroyed)
+        if (explicitStopSelfRequested) {
+            stopConfigServerClient(stopServiceIfIdle = false, emitEvent = false)
+            stopNetworkInstances()
+            stopVpn(stopService = false)
+        } else {
+            stopRuntime(
+                runtimeStopReason = stopReasonServiceDestroyed,
+                stopService = false,
+            )
+        }
         super.onDestroy()
     }
 
@@ -99,6 +109,7 @@ class EasyTierVpnService : VpnService() {
     }
 
     private fun startConfigServerClient(intent: Intent) {
+        explicitStopSelfRequested = false
         val url = intent.getStringExtra(extraConfigServerUrl)?.trim().orEmpty()
         val hostname = intent.getStringExtra(extraHostname)?.trim().orEmpty()
         val machineId = intent.getStringExtra(extraMachineId)?.trim().orEmpty()
@@ -171,17 +182,21 @@ class EasyTierVpnService : VpnService() {
         }
         if (stopServiceIfIdle && activeInstanceName == null) {
             stopForegroundCompat()
+            explicitStopSelfRequested = true
             stopSelf()
         }
     }
 
-    private fun stopRuntime(runtimeStopReason: String? = null) {
+    private fun stopRuntime(
+        runtimeStopReason: String? = null,
+        stopService: Boolean = true,
+    ) {
         stopConfigServerClient(
             stopServiceIfIdle = false,
             stopReason = runtimeStopReason,
         )
         stopNetworkInstances()
-        stopVpn(reason = runtimeStopReason)
+        stopVpn(stopService = stopService, reason = runtimeStopReason)
     }
 
     private fun stopNetworkInstances() {
@@ -194,6 +209,7 @@ class EasyTierVpnService : VpnService() {
     }
 
     private fun startVpn(intent: Intent) {
+        explicitStopSelfRequested = false
         val config = EasyTierVpnStartConfigParser.fromIntent(intent, packageName)
 
         stopVpn(stopService = false)
@@ -275,6 +291,7 @@ class EasyTierVpnService : VpnService() {
             stopForegroundCompat()
         }
         if (stopService) {
+            explicitStopSelfRequested = true
             stopSelf()
         }
     }
