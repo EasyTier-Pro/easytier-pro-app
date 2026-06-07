@@ -280,6 +280,16 @@ class ConsoleAuthService implements AuthService {
     );
   }
 
+  static String _firstNonEmptyString(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+    return '';
+  }
+
   @override
   Future<List<ManagedDevice>> fetchManagedDevices({
     required String accessToken,
@@ -303,14 +313,16 @@ class ConsoleAuthService implements AuthService {
           if (id.isEmpty || machineId.isEmpty) {
             return null;
           }
-          final hostname =
-              item['hostname']?.toString() ??
-              item['display_name']?.toString() ??
-              machineId;
+          final displayName = _firstNonEmptyString([
+            item['display_name'],
+            item['displayName'],
+          ]);
+          final hostname = _firstNonEmptyString([item['hostname'], machineId]);
           return ManagedDevice(
             id: id,
             machineId: machineId,
             hostname: hostname,
+            displayName: displayName,
             approvalState: item['approval_state']?.toString() ?? '',
             connectivityState: item['connectivity_state']?.toString() ?? '',
             os: item['os']?.toString() ?? item['os_type']?.toString() ?? '',
@@ -350,13 +362,33 @@ class ConsoleAuthService implements AuthService {
           if (id.isEmpty) {
             return null;
           }
-          final device = item['device'] as Map<String, dynamic>?;
-          final rawName =
-              item['hostname']?.toString() ??
-              item['name']?.toString() ??
-              item['device_name']?.toString() ??
-              device?['hostname']?.toString() ??
-              device?['display_name']?.toString();
+          final rawDevice = item['device'];
+          final device = rawDevice is Map<String, dynamic>
+              ? rawDevice
+              : rawDevice is Map
+              ? Map<String, dynamic>.from(rawDevice)
+              : null;
+          final hostname = _firstNonEmptyString([
+            item['hostname'],
+            device?['hostname'],
+          ]);
+          final rawName = _firstNonEmptyString([
+            item['display_name'],
+            item['displayName'],
+            item['device_display_name'],
+            item['deviceDisplayName'],
+            device?['display_name'],
+            device?['displayName'],
+            item['name'],
+            item['device_name'],
+            item['deviceName'],
+            device?['name'],
+            device?['hostname'],
+            item['hostname'],
+            item['machine_id'],
+            device?['machine_id'],
+            id,
+          ]);
           final status =
               item['status']?.toString() ??
               item['connectivity_state']?.toString() ??
@@ -394,8 +426,9 @@ class ConsoleAuthService implements AuthService {
 
           return NetworkDevice(
             id: id,
-            name: (rawName == null || rawName.isEmpty) ? id : rawName,
+            name: rawName,
             online: online,
+            hostname: hostname,
             ipv4: ipv4,
             deviceId: deviceId == null || deviceId.isEmpty ? null : deviceId,
             machineId: machineId == null || machineId.isEmpty

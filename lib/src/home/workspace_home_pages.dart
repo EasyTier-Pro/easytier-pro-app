@@ -277,7 +277,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
       if (!a.online && b.online) return 1;
       if (a.approved && !b.approved) return -1;
       if (!a.approved && b.approved) return 1;
-      return a.hostname.compareTo(b.hostname);
+      return a.displayLabel.compareTo(b.displayLabel);
     });
 
     final summaryText = _deviceSummaryText(devices);
@@ -385,7 +385,7 @@ class _ManagedDeviceRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  device.hostname,
+                  device.displayLabel,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF0F172A),
@@ -469,7 +469,14 @@ String _managedDeviceMeta(ManagedDevice device) {
     device.osVersion.trim(),
   ].where((part) => part.isNotEmpty).toList(growable: false);
   final os = osParts.isNotEmpty ? osParts.join(' ') : device.os.trim();
-  final parts = <String>[if (os.isNotEmpty) os, _shortId(device.machineId)];
+  final hostname = device.hostname.trim();
+  final showHostname =
+      hostname.isNotEmpty && hostname != device.displayLabel.trim();
+  final parts = <String>[
+    if (showHostname) hostname,
+    if (os.isNotEmpty) os,
+    _shortId(device.machineId),
+  ];
   return parts.join(' · ');
 }
 

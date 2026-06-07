@@ -143,7 +143,7 @@ class NetworkNodeListPanel extends StatelessWidget {
       if (aLocal && !bLocal) return -1;
       if (!aLocal && bLocal) return 1;
 
-      return a.name.compareTo(b.name);
+      return a.displayLabel.compareTo(b.displayLabel);
     });
   }
 

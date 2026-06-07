@@ -914,8 +914,9 @@ void main() {
         'net-1': <NetworkDevice>[
           NetworkDevice(
             id: 'node-1',
-            name: 'desktop-1',
+            name: '工作笔记本',
             online: true,
+            hostname: 'desktop-1',
             ipv4: '10.144.0.2',
             deviceId: 'device-1',
             machineId: 'machine-1',
@@ -942,7 +943,7 @@ void main() {
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
       findsOneWidget,
     );
-    expect(find.text('desktop-1'), findsOneWidget);
+    expect(find.text('工作笔记本'), findsOneWidget);
 
     final scrollTop = tester
         .getTopLeft(
@@ -2402,6 +2403,7 @@ void main() {
         ManagedDevice(
           id: 'device-1',
           machineId: 'machine-1',
+          displayName: '工作笔记本',
           hostname: 'desktop-1',
           approvalState: 'approved',
           connectivityState: 'online',
@@ -2451,7 +2453,8 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, '设备'));
     await tester.pumpAndSettle();
 
-    expect(find.text('desktop-1'), findsOneWidget);
+    expect(find.text('工作笔记本'), findsOneWidget);
+    expect(find.textContaining('desktop-1'), findsOneWidget);
     expect(find.text('laptop-2'), findsOneWidget);
     expect(find.text('old-desktop'), findsNothing);
     expect(find.text('node-alias'), findsNothing);
@@ -2643,6 +2646,7 @@ void main() {
             {
               'id': 'device-1',
               'machine_id': 'machine-1',
+              'display_name': '工作笔记本',
               'hostname': 'desktop-1',
               'approval_state': 'approved',
               'connectivity_state': 'online',
@@ -2685,6 +2689,9 @@ void main() {
     expect(regions.single.code, 'ap-east');
     expect(regions.single.active, isTrue);
     expect(devices.single.machineId, 'machine-1');
+    expect(devices.single.displayName, '工作笔记本');
+    expect(devices.single.displayLabel, '工作笔记本');
+    expect(devices.single.hostname, 'desktop-1');
     expect(devices.single.approved, isTrue);
     expect(devices.single.online, isTrue);
     expect(devices.single.os, 'windows');
@@ -2738,6 +2745,10 @@ void main() {
               'os': 'linux',
               'os_version': '6.8.0',
               'os_distribution': 'Ubuntu',
+              'device': {
+                'display_name': '工作笔记本',
+                'hostname': 'device-hostname',
+              },
             },
           ]);
         }
@@ -2754,6 +2765,8 @@ void main() {
     expect(nodes.single.os, 'linux');
     expect(nodes.single.osVersion, '6.8.0');
     expect(nodes.single.osDistribution, 'Ubuntu');
+    expect(nodes.single.name, '工作笔记本');
+    expect(nodes.single.hostname, 'desktop-1');
   });
 
   test(
@@ -3655,8 +3668,9 @@ class _FakeAuthService implements AuthService {
       ...(networkDevices[networkId] ?? const <NetworkDevice>[]),
       NetworkDevice(
         id: 'node-${networkId.substring(networkId.length - 1)}',
-        name: device.hostname,
+        name: device.displayLabel,
         online: true,
+        hostname: device.hostname,
         ipv4: networkId == 'net-1' ? '10.144.0.2' : '10.145.0.2',
         deviceId: device.id,
         machineId: device.machineId,

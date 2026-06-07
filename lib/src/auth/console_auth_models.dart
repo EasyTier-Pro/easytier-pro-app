@@ -140,6 +140,7 @@ class NetworkDevice {
     required this.id,
     required this.name,
     required this.online,
+    this.hostname = '',
     this.ipv4,
     this.deviceId,
     this.machineId,
@@ -154,6 +155,7 @@ class NetworkDevice {
   final String id;
   final String name;
   final bool online;
+  final String hostname;
   final String? ipv4;
   final String? deviceId;
   final String? machineId;
@@ -173,6 +175,15 @@ class NetworkDevice {
         lifecycle != 'deleted' &&
         connectivity != 'removed';
   }
+
+  String get displayLabel {
+    final label = name.trim();
+    if (label.isNotEmpty) {
+      return label;
+    }
+    final host = hostname.trim();
+    return host.isNotEmpty ? host : id;
+  }
 }
 
 class ManagedDevice {
@@ -182,6 +193,7 @@ class ManagedDevice {
     required this.hostname,
     required this.approvalState,
     required this.connectivityState,
+    this.displayName = '',
     this.os = '',
     this.osVersion = '',
     this.osDistribution = '',
@@ -192,6 +204,7 @@ class ManagedDevice {
   final String id;
   final String machineId;
   final String hostname;
+  final String displayName;
   final String approvalState;
   final String connectivityState;
   final String os;
@@ -202,6 +215,15 @@ class ManagedDevice {
 
   bool get approved => approvalState.toLowerCase() == 'approved';
   bool get online => connectivityState.toLowerCase() == 'online';
+  String get displayLabel {
+    final label = displayName.trim();
+    if (label.isNotEmpty) {
+      return label;
+    }
+    final host = hostname.trim();
+    return host.isNotEmpty ? host : machineId;
+  }
+
   bool get removed {
     final approval = approvalState.toLowerCase();
     final connectivity = connectivityState.toLowerCase();
