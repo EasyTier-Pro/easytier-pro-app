@@ -362,6 +362,7 @@ cd /d "$installerDir"
   static bool _isInstanceNotReadyMessage(String message) {
     final lower = message.toLowerCase();
     return lower.contains('no running instances found') ||
+        lower.contains('instance not found') ||
         lower.contains('no instance matches') ||
         lower.contains('no instance');
   }
@@ -1120,6 +1121,18 @@ cd /d "$installerDir"
     if (event.type == CoreRuntimeEventTypes.error) {
       final payload = _runtimeEventPayload(event);
       final message = payload['error']?.toString().trim() ?? '';
+      if (_isInstanceNotReadyMessage(message)) {
+        _logger.warn(
+          'core.runtime',
+          'Android runtime instance is not ready',
+          context: {
+            'error': message,
+            'instance_name':
+                payload['instanceName'] ?? payload['instance_name'] ?? '',
+          },
+        );
+        return;
+      }
       _logger.error(
         'core.runtime',
         'Android runtime error',

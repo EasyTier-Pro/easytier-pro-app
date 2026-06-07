@@ -443,6 +443,7 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
   bool _isInstanceNotReadyError(String message) {
     final lower = message.toLowerCase();
     return lower.contains('no running instances found') ||
+        lower.contains('instance not found') ||
         lower.contains('no instance matches') ||
         lower.contains('no instance');
   }

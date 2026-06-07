@@ -390,6 +390,7 @@ void main() {
     Object? vpnPrepared = true;
     var configServerConnected = false;
     Object? notificationResult = true;
+    var throwMissingJsonRpcInstances = false;
 
     setUp(() {
       TestWidgetsFlutterBinding.ensureInitialized();
@@ -399,6 +400,7 @@ void main() {
       vpnPrepared = true;
       configServerConnected = false;
       notificationResult = true;
+      throwMissingJsonRpcInstances = false;
       networkInfos = {
         'instances': [
           {
@@ -517,6 +519,12 @@ void main() {
         final methodName = arguments?['methodName']?.toString() ?? '';
         final instance = jsonRpcInstance(call);
         final instanceMap = jsonRpcInstanceMap(call);
+        if (throwMissingJsonRpcInstances && instance == null) {
+          throw PlatformException(
+            code: 'ANDROID_RUNTIME_ERROR',
+            message: 'Instance Not Found RPC ERROR',
+          );
+        }
         if (serviceName == 'api.instance.PeerManageRpcService' &&
             methodName == 'show_node_info') {
           final rawNodeInfo =
@@ -850,9 +858,9 @@ void main() {
       },
     );
 
-    test('uses low-frequency Android runtime polling intervals', () {
-      expect(runtime.networkTrafficPollInterval, const Duration(seconds: 15));
-      expect(runtime.peerStatusPollInterval, const Duration(seconds: 15));
+    test('uses fast traffic and low-frequency peer polling intervals', () {
+      expect(runtime.networkTrafficPollInterval, const Duration(seconds: 2));
+      expect(runtime.peerStatusPollInterval, const Duration(seconds: 5));
     });
 
     test('reads Android runtime snapshots through JSON RPC', () async {
@@ -1522,6 +1530,68 @@ void main() {
         },
       });
     });
+
+    test(
+      'returns empty traffic totals when the active instance has disappeared',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+          },
+        });
+        await _waitForCall(calls, 'startVpn');
+
+        networkInfos = {'instances': <Object?>[]};
+        throwMissingJsonRpcInstances = true;
+
+        final totals = await runtime.readNetworkTrafficTotals();
+
+        expect(totals, isEmpty);
+      },
+    );
+
+    test(
+      'stops stale VPN without runtime error when route refresh loses instance',
+      () async {
+        await runtime.dispose();
+        runtime = AndroidCoreRuntime(
+          methodChannel: methodChannel,
+          eventChannel: _FakeEventChannel(nativeEvents.stream),
+          vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
+          vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
+          vpnRouteRefreshFastLimit: 2,
+        );
+        final runtimeEvents = <CoreRuntimeEvent>[];
+        final subscription = runtime.events.listen(runtimeEvents.add);
+        addTearDown(subscription.cancel);
+
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+          },
+        });
+        await _waitForCall(calls, 'startVpn');
+
+        networkInfos = {'instances': <Object?>[]};
+        throwMissingJsonRpcInstances = true;
+
+        await _waitForCall(calls, 'stopVpn');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          runtimeEvents.where(
+            (event) => event.type == CoreRuntimeEventTypes.error,
+          ),
+          isEmpty,
+        );
+      },
+    );
 
     test('waits for VPN permission before starting pending instance', () async {
       vpnPrepared = false;

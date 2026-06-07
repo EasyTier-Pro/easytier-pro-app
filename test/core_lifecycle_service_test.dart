@@ -372,6 +372,37 @@ void main() {
     });
 
     test(
+      'keeps Android instance-not-found runtime errors transitional',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.error,
+            data: {
+              'payload': {
+                'error': 'Instance Not Found RPC ERROR',
+                'instanceName': 'network-a',
+              },
+            },
+          ),
+        );
+
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(service.status.value.phase, CoreRunPhase.running);
+        expect(service.status.value.machineId, 'machine-1');
+      },
+    );
+
+    test(
       'logs repeated Android config server starts as already started',
       () async {
         final authService = _LifecycleAuthService();

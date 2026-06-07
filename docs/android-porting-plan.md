@@ -366,7 +366,7 @@ JNI config server client 和 JSON RPC 能力非常新，应固定到明确 commi
 
 ### JSON RPC 轮询
 
-Android 首页运行态轮询采用 15 秒间隔。VPN 建立后会短时每 3 秒、随后每 15 秒调用 JSON RPC `list_route` 重新读取路由；因此其他节点后续新增或撤销子网声明时，Android VPN interface 会按新路由签名刷新。
+Android 首页流量统计采用 2 秒间隔轮询 JSON RPC stats，保证首页能尽快出现速率样本；peer/status 采用 5 秒间隔，用于刷新节点详情里的延迟、丢包、隧道协议、NAT 类型等状态。VPN 建立后会短时每 3 秒、随后每 5 秒调用 JSON RPC `list_route` 重新读取路由；因此其他节点后续新增或撤销子网声明时，Android VPN interface 会按新路由签名刷新。
 
 ### 单 VPN 接口限制
 

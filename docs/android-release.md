@@ -86,7 +86,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - Android 通知权限或 VPN 授权请求已在系统弹窗中等待时，重复启动不会进入运行时错误；通知权限 pending 会继续后续流程，VPN 授权 pending 会继续展示 `needsVpnPermission` 等待用户处理。
 - 用户拒绝系统 VPN 授权时，Dart 运行态会继续展示 `needsVpnPermission`，并在诊断状态中记录授权被拒绝，避免被误判为 config server 或 JNI 运行时错误。
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
-- Android 运行态信息轮询采用 15 秒间隔，VPN 路由刷新在启动后短时 3 秒、随后 15 秒调用 JSON RPC `list_route`；随包 JNI 固定到 EasyTier/EasyTier#2326 的 `75cd6ab4c6809875b76f18efd00e8cf091dd3f52`，由上游提供 `listInstances` 和 JSON RPC 调用。
+- Android 流量统计采用 2 秒间隔轮询 JSON RPC stats，peer/status 采用 5 秒间隔刷新节点详情状态；VPN 路由刷新在启动后短时 3 秒、随后 5 秒调用 JSON RPC `list_route`。随包 JNI 固定到 EasyTier/EasyTier#2326 的 `75cd6ab4c6809875b76f18efd00e8cf091dd3f52`，由上游提供 `listInstances` 和 JSON RPC 调用。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
 - Android 导出诊断日志会写入应用缓存日志目录，并通过 `FileProvider` 拉起系统分享面板；导出聚合时会跳过旧的 `diagnostics-*.log` 文件，避免重复导出导致日志自我嵌套膨胀。
 - 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`，并暴露 `listInstances` 与 JSON RPC；Dart 使用 `listInstances` / callback 定位 EasyTier instance name，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，通过 JSON RPC `show_node_info` / `list_route` / `get_stats` 获取虚拟 IP、动态路由和流量统计，并使用 `network_name` 关联首页 readiness、peer status、流量统计和后续删除事件，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入、路由刷新或停止失败。
