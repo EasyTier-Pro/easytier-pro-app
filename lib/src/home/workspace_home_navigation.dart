@@ -1,6 +1,8 @@
 part of 'workspace_home_view.dart';
 
 extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
+  static const double _mobileSwipeVelocityThreshold = 320;
+
   void _openNetworkDetail(ConsoleNetwork network) {
     _updateState(() {
       _selectedNetworkId = network.id;
@@ -56,5 +58,37 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
       _activeView = _DashboardView.settings;
     });
     _refreshPeerPolling();
+  }
+
+  void _handleMobilePageSwipeEnd(DragEndDetails details) {
+    final velocityX = details.velocity.pixelsPerSecond.dx;
+    if (velocityX.abs() < _mobileSwipeVelocityThreshold) {
+      return;
+    }
+
+    final currentIndex = _mobileDashboardViewOrder.indexOf(_activeView);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    final nextIndex = velocityX < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex < 0 || nextIndex >= _mobileDashboardViewOrder.length) {
+      return;
+    }
+
+    _showMobileView(_mobileDashboardViewOrder[nextIndex]);
+  }
+
+  void _showMobileView(_DashboardView view) {
+    switch (view) {
+      case _DashboardView.overview:
+        _showOverview();
+      case _DashboardView.network:
+        _showNetwork();
+      case _DashboardView.devices:
+        _showDevices();
+      case _DashboardView.settings:
+        _showSettings();
+    }
   }
 }

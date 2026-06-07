@@ -1945,6 +1945,71 @@ void main() {
     expect(find.text('phone-1'), findsOneWidget);
   });
 
+  testWidgets('mobile shell switches pages with horizontal swipes', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'phone-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'phone-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final navigation = find.byKey(
+      const ValueKey<String>('mobile-dashboard-navigation'),
+    );
+    final swipeTarget = find.byKey(
+      const ValueKey<String>('mobile-dashboard-page-swipe'),
+    );
+    expect(tester.widget<FBottomNavigationBar>(navigation).index, 0);
+
+    await tester.fling(swipeTarget, const Offset(-320, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FBottomNavigationBar>(navigation).index, 1);
+
+    await tester.fling(swipeTarget, const Offset(-320, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FBottomNavigationBar>(navigation).index, 2);
+
+    await tester.fling(swipeTarget, const Offset(320, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FBottomNavigationBar>(navigation).index, 1);
+  });
+
   testWidgets('mobile network nav opens picker when already on network page', (
     WidgetTester tester,
   ) async {

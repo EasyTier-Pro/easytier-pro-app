@@ -346,38 +346,42 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                 ),
               Expanded(
                 child: AppTextSelectionTapCleaner(
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-                    child: AnimatedSwitcher(
-                      duration: appMotionMedium,
-                      reverseDuration: appMotionShort,
-                      transitionBuilder: appFadeSlideTransition,
-                      layoutBuilder: appSwitcherStackLayout,
-                      child: KeyedSubtree(
-                        key: contentKey,
-                        child: _activeView == _DashboardView.network
-                            ? Padding(
-                                padding: pagePadding,
-                                child: Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 1040,
+                  child: _MobilePageSwipeGate(
+                    enabled: mobile,
+                    onSwipeEnd: _handleMobilePageSwipeEnd,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+                      child: AnimatedSwitcher(
+                        duration: appMotionMedium,
+                        reverseDuration: appMotionShort,
+                        transitionBuilder: appFadeSlideTransition,
+                        layoutBuilder: appSwitcherStackLayout,
+                        child: KeyedSubtree(
+                          key: contentKey,
+                          child: _activeView == _DashboardView.network
+                              ? Padding(
+                                  padding: pagePadding,
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 1040,
+                                      ),
+                                      child: _buildContent(context),
                                     ),
-                                    child: _buildContent(context),
+                                  ),
+                                )
+                              : AppSmoothScrollView(
+                                  padding: pagePadding,
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 1040,
+                                      ),
+                                      child: _buildContent(context),
+                                    ),
                                   ),
                                 ),
-                              )
-                            : AppSmoothScrollView(
-                                padding: pagePadding,
-                                child: Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 1040,
-                                    ),
-                                    child: _buildContent(context),
-                                  ),
-                                ),
-                              ),
+                        ),
                       ),
                     ),
                   ),
@@ -403,6 +407,32 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
+  }
+}
+
+class _MobilePageSwipeGate extends StatelessWidget {
+  const _MobilePageSwipeGate({
+    required this.enabled,
+    required this.onSwipeEnd,
+    required this.child,
+  });
+
+  final bool enabled;
+  final GestureDragEndCallback onSwipeEnd;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) {
+      return child;
+    }
+
+    return GestureDetector(
+      key: const ValueKey<String>('mobile-dashboard-page-swipe'),
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: onSwipeEnd,
+      child: child,
+    );
   }
 }
 
