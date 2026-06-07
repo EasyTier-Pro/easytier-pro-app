@@ -262,15 +262,21 @@ class _MobileDashboardHeader extends StatelessWidget {
 class _MobileDashboardNavigation extends StatelessWidget {
   const _MobileDashboardNavigation({
     required this.activeView,
+    required this.networks,
+    required this.selectedNetworkId,
     required this.onShowOverview,
     required this.onShowNetwork,
+    required this.onSelectNetwork,
     required this.onShowDevices,
     required this.onShowSettings,
   });
 
   final _DashboardView activeView;
+  final List<ConsoleNetwork> networks;
+  final String? selectedNetworkId;
   final VoidCallback onShowOverview;
   final VoidCallback onShowNetwork;
+  final ValueChanged<String> onSelectNetwork;
   final VoidCallback onShowDevices;
   final VoidCallback onShowSettings;
 
@@ -292,7 +298,11 @@ class _MobileDashboardNavigation extends StatelessWidget {
             case 0:
               onShowOverview();
             case 1:
-              onShowNetwork();
+              if (activeView == _DashboardView.network && networks.length > 1) {
+                _showNetworkPicker(context);
+              } else {
+                onShowNetwork();
+              }
             case 2:
               onShowDevices();
             case 3:
@@ -321,6 +331,66 @@ class _MobileDashboardNavigation extends StatelessWidget {
             label: Text('设置'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showNetworkPicker(BuildContext context) {
+    unawaited(
+      showFSheet<void>(
+        context: context,
+        side: FLayout.btt,
+        mainAxisMaxRatio: 0.5,
+        builder: (context) => _MobileNetworkPickerSheet(
+          networks: networks,
+          selectedNetworkId: selectedNetworkId,
+          onSelectNetwork: onSelectNetwork,
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileNetworkPickerSheet extends StatelessWidget {
+  const _MobileNetworkPickerSheet({
+    required this.networks,
+    required this.selectedNetworkId,
+    required this.onSelectNetwork,
+  });
+
+  final List<ConsoleNetwork> networks;
+  final String? selectedNetworkId;
+  final ValueChanged<String> onSelectNetwork;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectionContainer.disabled(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          key: const ValueKey<String>('mobile-network-picker-sheet'),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: FItemGroup(
+            divider: FItemDivider.full,
+            children: [
+              for (final network in networks)
+                FItem(
+                  key: ValueKey<String>('mobile-network-option-${network.id}'),
+                  prefix: SizedBox(
+                    width: 18,
+                    child: network.id == selectedNetworkId
+                        ? const Icon(Icons.check, size: 16)
+                        : null,
+                  ),
+                  title: Text(network.name, overflow: TextOverflow.ellipsis),
+                  onPress: () {
+                    Navigator.of(context).pop();
+                    onSelectNetwork(network.id);
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

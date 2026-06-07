@@ -385,8 +385,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
               if (mobile)
                 _MobileDashboardNavigation(
                   activeView: _activeView,
+                  networks: _networks,
+                  selectedNetworkId: _selectedNetworkId,
                   onShowOverview: _showOverview,
                   onShowNetwork: _showNetwork,
+                  onSelectNetwork: _selectNetwork,
                   onShowDevices: _showDevices,
                   onShowSettings: _showSettings,
                 ),

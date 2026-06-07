@@ -1795,6 +1795,76 @@ void main() {
     expect(find.text('phone-1'), findsOneWidget);
   });
 
+  testWidgets('mobile network nav opens picker when already on network page', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'Office', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: 'Lab', regions: ['ap-east']),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(id: 'node-1', name: 'office-phone', online: true),
+        ],
+        'net-2': <NetworkDevice>[
+          NetworkDevice(id: 'node-2', name: 'lab-phone', online: true),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('office-phone'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-option-net-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-option-net-2')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('mobile-network-option-net-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsNothing,
+    );
+    expect(find.text('lab-phone'), findsOneWidget);
+    expect(find.text('office-phone'), findsNothing);
+  });
+
   testWidgets('settings exposes selectable and copyable runtime errors', (
     WidgetTester tester,
   ) async {
