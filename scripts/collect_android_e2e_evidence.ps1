@@ -113,6 +113,23 @@ function Resolve-AdbPath {
 
 $script:ResolvedAdbPath = Resolve-AdbPath
 
+function Invoke-AdbProcess {
+    param([Parameter(Mandatory = $true)][string[]] $Arguments)
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & $script:ResolvedAdbPath @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+    }
+}
+
 function Invoke-Adb {
     param(
         [Parameter(Mandatory = $true)]
@@ -129,16 +146,11 @@ function Invoke-Adb {
         $fullArgs.Add($argument) | Out-Null
     }
 
-    $output = & $script:ResolvedAdbPath @($fullArgs.ToArray()) 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
-    if ($exitCode -ne 0 -and -not $AllowFailure) {
-        throw "adb $($fullArgs -join ' ') failed with exit code ${exitCode}:`n$text"
+    $result = Invoke-AdbProcess -Arguments $fullArgs.ToArray()
+    if ($result.ExitCode -ne 0 -and -not $AllowFailure) {
+        throw "adb $($fullArgs -join ' ') failed with exit code $($result.ExitCode):`n$($result.Output)"
     }
-    return [pscustomobject]@{
-        ExitCode = $exitCode
-        Output = $text
-    }
+    return $result
 }
 
 function Resolve-DeviceSerial {
@@ -146,13 +158,12 @@ function Resolve-DeviceSerial {
         return
     }
 
-    $output = & $script:ResolvedAdbPath devices 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "adb devices failed:`n$($output -join "`n")"
+    $result = Invoke-AdbProcess -Arguments @("devices")
+    if ($result.ExitCode -ne 0) {
+        throw "adb devices failed:`n$($result.Output)"
     }
     $devices = @(
-        $output |
-            ForEach-Object { $_.ToString() } |
+        $result.Output -split '\r?\n' |
             Where-Object { $_ -match '^(\S+)\s+device$' } |
             ForEach-Object { $matches[1] }
     )
@@ -313,7 +324,11 @@ function Save-AdbCommandOutput {
 }
 
 function Get-PackageUid {
-    param([Parameter(Mandatory = $true)][string] $PackageText)
+    param([string] $PackageText = "")
+
+    if ([string]::IsNullOrWhiteSpace($PackageText)) {
+        return ""
+    }
 
     foreach ($pattern in @('userId=(\d+)', 'uid=(\d+)')) {
         if ($PackageText -match $pattern) {
