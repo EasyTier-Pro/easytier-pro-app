@@ -82,7 +82,7 @@ object EasyTierVpnBuilderConfigurator {
         }
 
         for (route in config.routes) {
-            val cidr = EasyTierVpnStartConfigParser.parseCidr(route)
+            val cidr = EasyTierVpnStartConfigParser.parseRouteCidr(route)
             builder.addRoute(cidr.address, cidr.prefixLength)
         }
 

@@ -21,7 +21,7 @@ class EasyTierVpnIntentFactoryInstrumentedTest {
                     " 10.10.0.3/32 ",
                 ),
                 "routes" to listOf(
-                    mapOf("address" to "10.20.0.0", "prefix" to 16),
+                    mapOf("address" to "10.20.4.3", "prefix" to 16),
                     "192.168.50.0/24",
                 ),
                 "dnsServers" to listOf(" 10.10.0.53 ", ""),

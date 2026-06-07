@@ -62,6 +62,25 @@ class EasyTierVpnStartConfigInstrumentedTest {
     }
 
     @Test
+    fun parsesRouteCidrToNetworkAddress() {
+        val subnet = EasyTierVpnStartConfigParser.parseRouteCidr("10.10.0.42/24")
+        val host = EasyTierVpnStartConfigParser.parseRouteCidr("10.10.0.42")
+        val defaultRoute = EasyTierVpnStartConfigParser.parseRouteCidr("10.10.0.42/0")
+        val mapped = EasyTierVpnStartConfigParser.parseRouteCidr(
+            "10.2.0.42/24->192.168.2.45/24",
+        )
+
+        assertEquals("10.10.0.0", subnet.address)
+        assertEquals(24, subnet.prefixLength)
+        assertEquals("10.10.0.42", host.address)
+        assertEquals(32, host.prefixLength)
+        assertEquals("0.0.0.0", defaultRoute.address)
+        assertEquals(0, defaultRoute.prefixLength)
+        assertEquals("192.168.2.0", mapped.address)
+        assertEquals(24, mapped.prefixLength)
+    }
+
+    @Test
     fun rejectsVpnStartIntentWithoutAddress() {
         val intent = Intent().apply {
             putExtra(EasyTierVpnService.extraInstanceName, "network-a")
@@ -118,6 +137,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
             addresses = listOf("10.10.0.2/24"),
             routes = listOf(
                 "10.10.0.0/24",
+                "10.30.0.42/24",
                 "10.2.0.0/24->192.168.2.0/24",
             ),
             dnsServers = listOf("10.10.0.53"),
@@ -139,6 +159,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
                 "setMtu:1280",
                 "addAddress:10.10.0.2/24",
                 "addRoute:10.10.0.0/24",
+                "addRoute:10.30.0.0/24",
                 "addRoute:192.168.2.0/24",
                 "addDnsServer:10.10.0.53",
                 "setMetered:false",

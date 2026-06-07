@@ -26,7 +26,7 @@ object EasyTierVpnStartConfigParser {
         return AndroidVpnStartConfig(
             instanceName = instanceName,
             addresses = addresses,
-            routes = stringList(intent, EasyTierVpnService.extraRoutes),
+            routes = routeList(intent, EasyTierVpnService.extraRoutes),
             dnsServers = stringList(intent, EasyTierVpnService.extraDnsServers),
             disallowedApplications = disallowedApplications(
                 packageName,
@@ -85,6 +85,14 @@ object EasyTierVpnStartConfigParser {
         return AndroidVpnCidr(parts[0], prefix)
     }
 
+    fun parseRouteCidr(value: String): AndroidVpnCidr {
+        val cidr = parseCidr(value)
+        return AndroidVpnCidr(
+            address = ipv4NetworkAddress(cidr.address, cidr.prefixLength) ?: cidr.address,
+            prefixLength = cidr.prefixLength,
+        )
+    }
+
     private fun routeEndpointCidr(value: String): String {
         val text = value.trim()
         val mappedIndex = text.indexOf("->")
@@ -93,6 +101,50 @@ object EasyTierVpnStartConfigParser {
         }
         val mapped = text.substring(mappedIndex + 2).trim()
         return mapped.ifEmpty { text.substring(0, mappedIndex).trim() }
+    }
+
+    private fun routeList(intent: Intent?, extraName: String): List<String> {
+        return stringList(intent, extraName)
+            .map {
+                val cidr = parseRouteCidr(it)
+                "${cidr.address}/${cidr.prefixLength}"
+            }
+            .distinct()
+    }
+
+    private fun ipv4NetworkAddress(address: String, prefixLength: Int): String? {
+        val value = ipv4ToUInt(address) ?: return null
+        val mask = if (prefixLength == 0) {
+            0L
+        } else {
+            (0xffffffffL shl (32 - prefixLength)) and 0xffffffffL
+        }
+        return ipv4FromUInt(value and mask)
+    }
+
+    private fun ipv4ToUInt(address: String): Long? {
+        val parts = address.split(".")
+        if (parts.size != 4) {
+            return null
+        }
+        var value = 0L
+        for (part in parts) {
+            val octet = part.toIntOrNull() ?: return null
+            if (octet < 0 || octet > 255) {
+                return null
+            }
+            value = (value shl 8) or octet.toLong()
+        }
+        return value
+    }
+
+    private fun ipv4FromUInt(value: Long): String {
+        return listOf(
+            (value shr 24) and 0xff,
+            (value shr 16) and 0xff,
+            (value shr 8) and 0xff,
+            value and 0xff,
+        ).joinToString(".")
     }
 
     private fun stringList(intent: Intent?, extraName: String): List<String> {

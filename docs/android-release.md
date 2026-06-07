@@ -75,7 +75,7 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 原生服务事件会在 Flutter `EventChannel` 暂未监听时短暂缓存，避免回前台或 engine 重建期间丢失 config server/VPN 状态事件。
 - Android Dart runtime 在本轮进程尚未确认 `VpnService.prepare()` 已授权前，不会仅凭 config server client 在线就报告 running；这会强制重新进入 VPN 授权/恢复路径，避免控制面在线但系统 VPN route 未恢复时出现假阳性。
 - Android runtime 主动停止时会清空 Dart 侧本轮 VPN 授权确认状态，避免退出登录、工作区失效或登录态失效后的 stop 过程中继续凭旧状态报告 running。
-- Android VPN 会从 `my_node_info.virtual_ipv4` 派生虚拟网自身路由，并从 `routes[].proxy_cidrs`、`peer_route_pairs`、按 peer/route id 分组的 map 形路由、runtime config 的 `routes`/`proxy_networks` 和常见子网路由别名下发虚拟网/子网路由；如果子网路由使用 `real_cidr->mapped_cidr` 映射，Android 系统 VPN route 使用右侧 mapped CIDR。如果 native 运行态同时返回嵌套 `vpn_config` 和外层 route 信息，Android runtime 会合并两侧配置，避免只拿到虚拟 IP 而丢失外层路由。
+- Android VPN 会从 `my_node_info.virtual_ipv4` 派生虚拟网自身路由，并从 `routes[].proxy_cidrs`、`peer_route_pairs`、按 peer/route id 分组的 map 形路由、runtime config 的 `routes`/`proxy_networks` 和常见子网路由别名下发虚拟网/子网路由；如果子网路由使用 `real_cidr->mapped_cidr` 映射，Android 系统 VPN route 使用右侧 mapped CIDR。如果 native 运行态同时返回嵌套 `vpn_config` 和外层 route 信息，Android runtime 会合并两侧配置，避免只拿到虚拟 IP 而丢失外层路由。原生层在建立 VPN 前会再次把 route 规范为网络 CIDR，例如 `10.10.0.42/24` 会进入系统 VPN route 表为 `10.10.0.0/24`；本机地址仍保留主机 IP 传给 `addAddress`。
 - Android VPN interface 会以 non-blocking TUN fd 建立后再交给 EasyTier core，保持与上游 mobile launcher 对 raw fd 的使用方式一致，降低 Rust/tokio 数据面读写被阻塞 fd 卡住的风险。
 - Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
 - Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
