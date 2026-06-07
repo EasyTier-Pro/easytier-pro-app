@@ -199,13 +199,6 @@ function Find-EntryIndexesByMessage([string] $Message) {
     return $indexes.ToArray()
 }
 
-if ($RequireConfigServerStarted) {
-    $configServerStarted = Find-EntriesByMessage "Android config server client started"
-    if ($configServerStarted.Count -eq 0) {
-        throw "Missing Android config server client started log entry."
-    }
-}
-
 $vpnEstablished = Find-EntriesByMessage "Android VPN established"
 if ($vpnEstablished.Count -eq 0) {
     throw "Missing Android VPN established log entry."
@@ -214,6 +207,30 @@ $vpnEstablishedIndexes = Find-EntryIndexesByMessage "Android VPN established"
 $latestVpnIndex = $vpnEstablishedIndexes[$vpnEstablishedIndexes.Count - 1]
 $latestVpn = $vpnEstablished[$vpnEstablished.Count - 1]
 $context = Get-EntryValue $latestVpn "context"
+
+if ($RequireConfigServerStarted) {
+    $configServerStartedIndexes = Find-EntryIndexesByMessage "Android config server client started"
+    $configServerStoppedIndexes = Find-EntryIndexesByMessage "Android config server client stopped"
+    $configServerStartsBeforeLatestVpn = @(
+        $configServerStartedIndexes |
+            Where-Object { $_ -lt $latestVpnIndex }
+    )
+    if ($configServerStartsBeforeLatestVpn.Count -eq 0) {
+        throw "Missing Android config server client started log entry before the latest Android VPN established log entry."
+    }
+    $latestConfigServerStartIndex =
+        $configServerStartsBeforeLatestVpn[$configServerStartsBeforeLatestVpn.Count - 1]
+    $configServerStoppedAfterStartBeforeVpn = @(
+        $configServerStoppedIndexes |
+            Where-Object {
+                $_ -gt $latestConfigServerStartIndex -and
+                $_ -lt $latestVpnIndex
+            }
+    )
+    if ($configServerStoppedAfterStartBeforeVpn.Count -gt 0) {
+        throw "Android config server client was stopped after the latest start and before the latest Android VPN established log entry."
+    }
+}
 
 $tunFd = Get-EntryValue $context "tun_fd"
 if ($null -eq $tunFd -or $tunFd.ToString().Trim().Length -eq 0 -or $tunFd.ToString().Trim() -eq "0") {
