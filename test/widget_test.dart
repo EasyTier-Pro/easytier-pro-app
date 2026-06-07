@@ -951,7 +951,7 @@ void main() {
     final listSize = tester.getSize(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
-    expect(listSize.width, closeTo(312, 0.1));
+    expect(listSize.width, closeTo(328, 0.1));
     expect(
       find.descendant(
         of: find.byKey(const ValueKey<String>('network-node-list-scroll')),
@@ -1728,6 +1728,66 @@ void main() {
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  testWidgets('mobile shell uses bottom navigation', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'phone-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'phone-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-dashboard-navigation')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('network-tab-current')),
+      findsNothing,
+    );
+    expect(find.text('EasyTier Pro'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-devices')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('phone-1'), findsOneWidget);
   });
 
   testWidgets('settings exposes selectable and copyable runtime errors', (
@@ -2861,7 +2921,7 @@ Future<void> _openSettingsFromUserMenu(WidgetTester tester) async {
     find.descendant(of: find.byType(FAvatar), matching: find.text('T')),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.text('设置'));
+  await tester.tap(find.byKey(const ValueKey<String>('user-menu-settings')));
   await _pumpAppMotionFrames(tester);
 }
 

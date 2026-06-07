@@ -155,6 +155,212 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+class _MobileDashboardHeader extends StatelessWidget {
+  const _MobileDashboardHeader({
+    required this.userName,
+    required this.workspaceName,
+    required this.onShowSettings,
+    required this.onLogout,
+    required this.coreStatusListenable,
+  });
+
+  final String userName;
+  final String workspaceName;
+  final VoidCallback onShowSettings;
+  final Future<void> Function() onLogout;
+  final ValueListenable<CoreRunStatus> coreStatusListenable;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmedName = userName.trim();
+    final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
+
+    return SelectionContainer.disabled(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 58,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  const _BrandMark(),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EasyTier Pro',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: const Color(0xFF0F172A),
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          workspaceName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: const Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<CoreRunStatus>(
+                    valueListenable: coreStatusListenable,
+                    builder: (context, status, _) {
+                      return Tooltip(
+                        message: status.message,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _mobileCoreStatusColor(
+                              status.phase,
+                            ).withAlpha(20),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.circle,
+                            size: 10,
+                            color: _mobileCoreStatusColor(status.phase),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  _UserMenu(
+                    userName: trimmedName,
+                    workspaceName: workspaceName,
+                    initial: initial,
+                    onShowSettings: onShowSettings,
+                    onLogout: onLogout,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileDashboardNavigation extends StatelessWidget {
+  const _MobileDashboardNavigation({
+    required this.activeView,
+    required this.onShowOverview,
+    required this.onShowNetwork,
+    required this.onShowDevices,
+    required this.onShowSettings,
+  });
+
+  final _DashboardView activeView;
+  final VoidCallback onShowOverview;
+  final VoidCallback onShowNetwork;
+  final VoidCallback onShowDevices;
+  final VoidCallback onShowSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedIndex = switch (activeView) {
+      _DashboardView.overview => 0,
+      _DashboardView.network => 1,
+      _DashboardView.devices => 2,
+      _DashboardView.settings => 3,
+    };
+
+    return SelectionContainer.disabled(
+      child: Container(
+        key: const ValueKey<String>('mobile-dashboard-navigation'),
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBar(
+            height: 64,
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (index) {
+              switch (index) {
+                case 0:
+                  onShowOverview();
+                case 1:
+                  onShowNetwork();
+                case 2:
+                  onShowDevices();
+                case 3:
+                  onShowSettings();
+              }
+            },
+            backgroundColor: const Color(0xFFFFFFFF),
+            surfaceTintColor: Colors.transparent,
+            indicatorColor: const Color(0xFFEFF6FF),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: const [
+              NavigationDestination(
+                key: ValueKey<String>('mobile-nav-overview'),
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: '首页',
+              ),
+              NavigationDestination(
+                key: ValueKey<String>('mobile-nav-network'),
+                icon: Icon(Icons.hub_outlined),
+                selectedIcon: Icon(Icons.hub),
+                label: '网络',
+              ),
+              NavigationDestination(
+                key: ValueKey<String>('mobile-nav-devices'),
+                icon: Icon(Icons.devices_other_outlined),
+                selectedIcon: Icon(Icons.devices_other),
+                label: '设备',
+              ),
+              NavigationDestination(
+                key: ValueKey<String>('mobile-nav-settings'),
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: '设置',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Color _mobileCoreStatusColor(CoreRunPhase phase) {
+  return switch (phase) {
+    CoreRunPhase.running => const Color(0xFF16A34A),
+    CoreRunPhase.repairing => const Color(0xFFF59E0B),
+    CoreRunPhase.checking => const Color(0xFF2563EB),
+    CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
+    CoreRunPhase.needsVpnPermission => const Color(0xFFF59E0B),
+    CoreRunPhase.error => const Color(0xFFDC2626),
+    CoreRunPhase.stopped => Colors.grey,
+    CoreRunPhase.signedOut => Colors.grey,
+  };
+}
+
 class _NetworkTabMenu extends StatelessWidget {
   const _NetworkTabMenu({
     required this.active,

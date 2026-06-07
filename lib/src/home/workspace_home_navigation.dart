@@ -17,6 +17,21 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     _refreshPeerPolling();
   }
 
+  void _showNetwork() {
+    String? networkId;
+    _updateState(() {
+      if (_selectedNetworkId == null && _networks.isNotEmpty) {
+        _selectedNetworkId = _networks.first.id;
+      }
+      networkId = _selectedNetworkId;
+      _activeView = _DashboardView.network;
+    });
+    _refreshPeerPolling();
+    if (networkId != null) {
+      unawaited(_loadSingleNetworkDevices(networkId!));
+    }
+  }
+
   void _selectNetwork(String networkId) {
     _updateState(() {
       _selectedNetworkId = networkId;

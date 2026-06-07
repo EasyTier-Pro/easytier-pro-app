@@ -312,63 +312,87 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
     return FScaffold(
       childPad: false,
-      child: Column(
-        children: [
-          _DashboardHeader(
-            userName: widget.session.user.effectiveName,
-            workspaceName: workspaceName,
-            activeView: _activeView,
-            networks: _networks,
-            deviceCount: _totalDeviceCount,
-            onlineDeviceCount: _onlineDeviceCount,
-            selectedNetworkId: _selectedNetworkId,
-            onShowOverview: _showOverview,
-            onSelectNetwork: _selectNetwork,
-            onShowDevices: _showDevices,
-            onShowSettings: _showSettings,
-            onLogout: widget.onLogout,
-            coreStatusListenable: widget.coreLifecycleService.status,
-          ),
-          Expanded(
-            child: AppTextSelectionTapCleaner(
-              child: DecoratedBox(
-                decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-                child: AnimatedSwitcher(
-                  duration: appMotionMedium,
-                  reverseDuration: appMotionShort,
-                  transitionBuilder: appFadeSlideTransition,
-                  layoutBuilder: appSwitcherStackLayout,
-                  child: KeyedSubtree(
-                    key: contentKey,
-                    child: _activeView == _DashboardView.network
-                        ? Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1040,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final mobile = constraints.maxWidth < _mobileShellBreakpoint;
+          final pagePadding = EdgeInsets.all(mobile ? 16 : 24);
+
+          return Column(
+            children: [
+              if (mobile)
+                _MobileDashboardHeader(
+                  userName: widget.session.user.effectiveName,
+                  workspaceName: workspaceName,
+                  onShowSettings: _showSettings,
+                  onLogout: widget.onLogout,
+                  coreStatusListenable: widget.coreLifecycleService.status,
+                )
+              else
+                _DashboardHeader(
+                  userName: widget.session.user.effectiveName,
+                  workspaceName: workspaceName,
+                  activeView: _activeView,
+                  networks: _networks,
+                  deviceCount: _totalDeviceCount,
+                  onlineDeviceCount: _onlineDeviceCount,
+                  selectedNetworkId: _selectedNetworkId,
+                  onShowOverview: _showOverview,
+                  onSelectNetwork: _selectNetwork,
+                  onShowDevices: _showDevices,
+                  onShowSettings: _showSettings,
+                  onLogout: widget.onLogout,
+                  coreStatusListenable: widget.coreLifecycleService.status,
+                ),
+              Expanded(
+                child: AppTextSelectionTapCleaner(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+                    child: AnimatedSwitcher(
+                      duration: appMotionMedium,
+                      reverseDuration: appMotionShort,
+                      transitionBuilder: appFadeSlideTransition,
+                      layoutBuilder: appSwitcherStackLayout,
+                      child: KeyedSubtree(
+                        key: contentKey,
+                        child: _activeView == _DashboardView.network
+                            ? Padding(
+                                padding: pagePadding,
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 1040,
+                                    ),
+                                    child: _buildContent(context),
+                                  ),
                                 ),
-                                child: _buildContent(context),
-                              ),
-                            ),
-                          )
-                        : AppSmoothScrollView(
-                            padding: const EdgeInsets.all(24),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1040,
+                              )
+                            : AppSmoothScrollView(
+                                padding: pagePadding,
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 1040,
+                                    ),
+                                    child: _buildContent(context),
+                                  ),
                                 ),
-                                child: _buildContent(context),
                               ),
-                            ),
-                          ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+              if (mobile)
+                _MobileDashboardNavigation(
+                  activeView: _activeView,
+                  onShowOverview: _showOverview,
+                  onShowNetwork: _showNetwork,
+                  onShowDevices: _showDevices,
+                  onShowSettings: _showSettings,
+                ),
+            ],
+          );
+        },
       ),
     );
   }

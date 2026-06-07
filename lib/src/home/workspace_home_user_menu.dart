@@ -58,6 +58,7 @@ class _UserMenu extends StatelessWidget {
                 ),
               ),
               FItem(
+                key: const ValueKey<String>('user-menu-settings'),
                 prefix: const Icon(Icons.settings_outlined, size: 18),
                 title: SelectionContainer.disabled(child: const Text('设置')),
                 onPress: () {

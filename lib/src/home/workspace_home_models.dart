@@ -5,6 +5,7 @@ enum _DashboardView { overview, network, devices, settings }
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
 const double _dashboardHeaderCompactBreakpoint = 560;
+const double _mobileShellBreakpoint = 600;
 const double _itemListMinWidth = 360;
 
 class _JoinNetworkState {
