@@ -2468,6 +2468,8 @@ void main() {
           hostname: 'desktop-1',
           approvalState: 'approved',
           connectivityState: 'online',
+          os: 'windows',
+          osDistribution: 'Windows 11 Pro',
         ),
         ManagedDevice(
           id: 'device-2',
@@ -2475,6 +2477,8 @@ void main() {
           hostname: 'laptop-2',
           approvalState: 'pending',
           connectivityState: 'offline',
+          os: 'linux',
+          osDistribution: 'Ubuntu',
         ),
         ManagedDevice(
           id: 'device-removed',
@@ -2519,6 +2523,8 @@ void main() {
     expect(find.text('laptop-2'), findsOneWidget);
     expect(find.text('old-desktop'), findsNothing);
     expect(find.text('node-alias'), findsNothing);
+    expect(find.byTooltip('Windows 11 Pro · windows'), findsOneWidget);
+    expect(find.byTooltip('Ubuntu · linux'), findsOneWidget);
     expect(find.text('2 台设备 · 1 在线 · 1 待批准'), findsOneWidget);
   });
 

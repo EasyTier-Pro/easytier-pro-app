@@ -281,6 +281,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
     });
 
     final summaryText = _deviceSummaryText(devices);
+    final localMachineId =
+        widget.coreLifecycleService.status.value.machineId?.trim() ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,6 +338,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                   _ManagedDeviceRow(
                     key: ValueKey<String>('managed-device-${devices[i].id}'),
                     device: devices[i],
+                    localMachineId: localMachineId,
                   ),
                 ],
               ],
@@ -365,20 +368,35 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
 }
 
 class _ManagedDeviceRow extends StatelessWidget {
-  const _ManagedDeviceRow({super.key, required this.device});
+  const _ManagedDeviceRow({
+    super.key,
+    required this.device,
+    required this.localMachineId,
+  });
 
   final ManagedDevice device;
+  final String localMachineId;
 
   @override
   Widget build(BuildContext context) {
     final status = _managedDeviceStatus(device);
     final meta = _managedDeviceMeta(device);
+    final isLocal =
+        localMachineId.isNotEmpty && localMachineId == device.machineId.trim();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          DeviceOsIcon(
+            os: device.os,
+            osVersion: device.osVersion,
+            osDistribution: device.osDistribution,
+            online: device.online,
+            isLocal: isLocal,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
