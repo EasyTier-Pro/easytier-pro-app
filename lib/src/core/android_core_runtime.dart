@@ -1712,6 +1712,8 @@ class AndroidNetworkInfoSnapshot {
       final explicitName = _firstNonEmptyString([
         map['instance_name'],
         map['instanceName'],
+        map['dev_name'],
+        map['devName'],
         map['network_name'],
         map['networkName'],
         map['runtime_network_name'],

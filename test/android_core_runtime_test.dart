@@ -367,6 +367,7 @@ void main() {
       expect(instance, isNotNull);
       expect(instance!.running, isTrue);
       expect(instance.id, 'bce27f42-5c4c-41ff-9a49-2db5fd2560ca');
+      expect(snapshot.instanceNamed('network-a'), same(instance));
       expect(instance.vpnConfig?['addresses'], ['10.10.0.2/24']);
       expect(instance.vpnConfig?['routes'], [
         '10.10.0.0/24',
@@ -742,6 +743,58 @@ void main() {
         'payload': {
           'event': 'run_network_instance',
           'instance_id': 'bce27f42-5c4c-41ff-9a49-2db5fd2560ca',
+          'instance_name': 'network-a-android',
+          'network_name': 'network-a',
+        },
+      });
+
+      final startVpn = await _waitForCall(calls, 'startVpn');
+      final retain = calls.where(
+        (call) => call.method == 'retainNetworkInstance',
+      );
+      expect(retain.last.arguments, {
+        'instanceNames': ['network-a-android'],
+      });
+      expect(startVpn.arguments, {
+        'instanceName': 'network-a-android',
+        'vpnConfig': {
+          'addresses': ['10.10.0.2/24'],
+          'routes': ['10.10.0.0/24', '192.168.50.0/24'],
+          'dns': <String>[],
+        },
+      });
+    });
+
+    test('matches UUID keyed running info by dev name without instance id', () async {
+      networkInfos = {
+        'map': {
+          'bce27f42-5c4c-41ff-9a49-2db5fd2560ca': {
+            'dev_name': 'network-a-android',
+            'running': true,
+            'my_node_info': {
+              'virtual_ipv4': {
+                'address': {'addr': 168427522},
+                'network_length': 24,
+              },
+            },
+            'routes': [
+              {
+                'ipv4_addr': {
+                  'address': {'addr': 168427523},
+                  'network_length': 24,
+                },
+                'proxy_cidrs': ['192.168.50.0/24'],
+              },
+            ],
+          },
+        },
+      };
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+
+      nativeEvents.add({
+        'type': CoreRuntimeEventTypes.configServer,
+        'payload': {
+          'event': 'run_network_instance',
           'instance_name': 'network-a-android',
           'network_name': 'network-a',
         },
