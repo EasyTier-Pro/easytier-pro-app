@@ -47,18 +47,6 @@ class _NodeMetaLine extends StatelessWidget {
       if (loss.isNotEmpty && loss != '-' && loss != '0%' && loss != '0.0%') {
         parts.add('丢包 $loss');
       }
-
-      final rxRaw = p.rxBytes.trim();
-      final txRaw = p.txBytes.trim();
-      final rx = (rxRaw.isNotEmpty && rxRaw != '-' && rxRaw != '0 B')
-          ? '↓$rxRaw'
-          : '';
-      final tx = (txRaw.isNotEmpty && txRaw != '-' && txRaw != '0 B')
-          ? '↑$txRaw'
-          : '';
-      if (rx.isNotEmpty || tx.isNotEmpty) {
-        parts.add('$rx $tx'.trim());
-      }
     } else {
       parts.add('运行态未知');
     }

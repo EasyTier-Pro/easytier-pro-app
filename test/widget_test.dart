@@ -1298,10 +1298,18 @@ void main() {
     await _pumpAppMotionFrames(tester);
 
     expect(find.text('desktop-1'), findsOneWidget);
-    expect(find.textContaining('P2P'), findsOneWidget);
-    expect(find.textContaining('UDP'), findsOneWidget);
-    expect(find.textContaining('10.144.0.3  ·  1'), findsNothing);
-    expect(find.textContaining('10.144.0.3  ·  TCP'), findsOneWidget);
+    final p2pMeta = tester.widget<Text>(
+      find.textContaining('10.144.0.2').first,
+    );
+    final numericCostMeta = tester.widget<Text>(
+      find.textContaining('10.144.0.3').first,
+    );
+    expect(p2pMeta.data, contains('P2P'));
+    expect(p2pMeta.data, contains('UDP'));
+    expect(p2pMeta.data, isNot(contains('17.33 kB')));
+    expect(p2pMeta.data, isNot(contains('20.42 kB')));
+    expect(numericCostMeta.data, contains('TCP'));
+    expect(numericCostMeta.data, isNot(contains(' ·  1')));
     expect(find.textContaining('3.45 ms'), findsWidgets);
     expect(find.textContaining('Peer: 390879727'), findsNothing);
     expect(find.textContaining('Peer: 123'), findsNothing);
