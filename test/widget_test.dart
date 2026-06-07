@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
@@ -167,6 +168,124 @@ void main() {
     expect(authService.attachedNetworkIds, <String>['net-1']);
     expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
   });
+
+  testWidgets(
+    'android blocks joining a second network while first is joining',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+
+      final attachGate = Completer<void>();
+      final authService = _FakeAuthService(
+        networks: const <ConsoleNetwork>[
+          ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+          ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+        ],
+        managedDevices: const <ManagedDevice>[
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'android-phone',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+        attachDeviceDelay: attachGate.future,
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+          androidMvpSingleActiveNetworkOverride: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pump();
+      await tester.pump();
+      expect(authService.attachedNetworkIds, isEmpty);
+
+      await tester.tap(find.byType(FSwitch).at(1));
+      await tester.pump();
+      await tester.pump();
+
+      expect(authService.attachedNetworkIds, isEmpty);
+      expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+
+      attachGate.complete();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'android blocks joining a second network while first is leaving',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+
+      final removeGate = Completer<void>();
+      final authService = _FakeAuthService(
+        networks: const <ConsoleNetwork>[
+          ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+          ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+        ],
+        managedDevices: const <ManagedDevice>[
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'android-phone',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+        networkDevices: const <String, List<NetworkDevice>>{
+          'net-1': <NetworkDevice>[
+            NetworkDevice(
+              id: 'node-1',
+              name: 'android-phone',
+              online: true,
+              ipv4: '10.144.0.2',
+              deviceId: 'device-1',
+              machineId: 'machine-1',
+            ),
+          ],
+        },
+        removeNetworkNodeDelay: removeGate.future,
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+          androidMvpSingleActiveNetworkOverride: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pump();
+      await tester.pump();
+      expect(authService.removedNodeIds, isEmpty);
+
+      await tester.tap(find.byType(FSwitch).at(1));
+      await tester.pump();
+      await tester.pump();
+
+      expect(authService.attachedNetworkIds, isEmpty);
+      expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+
+      removeGate.complete();
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('shows realtime traffic after joining a network', (
     WidgetTester tester,
@@ -2919,12 +3038,16 @@ class _FakeAuthService implements AuthService {
     this.managedDevices = const <ManagedDevice>[],
     Map<String, List<NetworkDevice>> networkDevices =
         const <String, List<NetworkDevice>>{},
+    this.attachDeviceDelay,
+    this.removeNetworkNodeDelay,
   }) : networks = List<ConsoleNetwork>.of(networks),
        networkDevices = Map<String, List<NetworkDevice>>.from(networkDevices);
 
   final List<ConsoleNetwork> networks;
   final List<ManagedDevice> managedDevices;
   final Map<String, List<NetworkDevice>> networkDevices;
+  final Future<void>? attachDeviceDelay;
+  final Future<void>? removeNetworkNodeDelay;
   final List<String> attachedNetworkIds = <String>[];
   final List<String> removedNodeIds = <String>[];
   final List<String> deletedNetworkIds = <String>[];
@@ -3045,6 +3168,10 @@ class _FakeAuthService implements AuthService {
     required String networkId,
     required String deviceId,
   }) async {
+    final delay = attachDeviceDelay;
+    if (delay != null) {
+      await delay;
+    }
     attachedNetworkIds.add(networkId);
     final device = managedDevices.firstWhere((item) => item.id == deviceId);
     networkDevices[networkId] = <NetworkDevice>[
@@ -3070,6 +3197,10 @@ class _FakeAuthService implements AuthService {
     required String workspaceId,
     required String nodeId,
   }) async {
+    final delay = removeNetworkNodeDelay;
+    if (delay != null) {
+      await delay;
+    }
     removedNodeIds.add(nodeId);
     for (final entry in networkDevices.entries.toList()) {
       networkDevices[entry.key] = entry.value
