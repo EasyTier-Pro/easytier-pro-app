@@ -221,7 +221,7 @@ class EasyTierVpnService : VpnService() {
         startForeground(notificationId, notification("Connected to ${config.instanceName}"))
 
         val builder = Builder()
-        EasyTierVpnBuilderConfigurator.configure(
+        val builderConfig = EasyTierVpnBuilderConfigurator.configure(
             EasyTierVpnServiceBuilderOperations(builder),
             config,
             sdkInt = Build.VERSION.SDK_INT,
@@ -247,11 +247,23 @@ class EasyTierVpnService : VpnService() {
                 "dnsServers" to config.dnsServers,
                 "mtu" to config.mtu,
                 "disallowedApplications" to config.disallowedApplications,
+                "builderAddresses" to builderConfig.addresses,
+                "builderRoutes" to builderConfig.routes,
+                "builderDnsServers" to builderConfig.dnsServers,
+                "builderDisallowedApplications" to builderConfig.disallowedApplications,
+                "ignoredDisallowedApplications" to builderConfig.ignoredDisallowedApplications,
                 "packageName" to packageName,
                 "addressCount" to config.addresses.size,
                 "routeCount" to config.routes.size,
                 "disallowedApplicationCount" to config.disallowedApplications.size,
+                "builderAddressCount" to builderConfig.addresses.size,
+                "builderRouteCount" to builderConfig.routes.size,
+                "builderDisallowedApplicationCount" to builderConfig.disallowedApplications.size,
+                "ignoredDisallowedApplicationCount" to
+                    builderConfig.ignoredDisallowedApplications.size,
                 "selfDisallowed" to config.disallowedApplications.contains(packageName),
+                "builderSelfDisallowed" to
+                    builderConfig.disallowedApplications.contains(packageName),
             ),
         )
     }

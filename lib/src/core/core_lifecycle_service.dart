@@ -960,6 +960,22 @@ cd /d "$installerDir"
       final payload = _runtimeEventPayload(event);
       final addresses = payload['addresses'] ?? const <String>[];
       final routes = payload['routes'] ?? const <String>[];
+      final builderAddresses =
+          payload['builderAddresses'] ??
+          payload['builder_addresses'] ??
+          const <String>[];
+      final builderRoutes =
+          payload['builderRoutes'] ??
+          payload['builder_routes'] ??
+          const <String>[];
+      final builderDisallowedApplications =
+          payload['builderDisallowedApplications'] ??
+          payload['builder_disallowed_applications'] ??
+          const <String>[];
+      final ignoredDisallowedApplications =
+          payload['ignoredDisallowedApplications'] ??
+          payload['ignored_disallowed_applications'] ??
+          const <String>[];
       final disallowedApplications =
           payload['disallowedApplications'] ??
           payload['disallowed_applications'] ??
@@ -977,14 +993,37 @@ cd /d "$installerDir"
           'routes': routes,
           'route_count': payload['routeCount'] ?? _payloadListLength(routes),
           'dns': payload['dns'] ?? payload['dnsServers'] ?? const <String>[],
+          'builder_addresses': builderAddresses,
+          'builder_address_count':
+              payload['builderAddressCount'] ??
+              _payloadListLength(builderAddresses),
+          'builder_routes': builderRoutes,
+          'builder_route_count':
+              payload['builderRouteCount'] ?? _payloadListLength(builderRoutes),
+          'builder_dns':
+              payload['builderDnsServers'] ??
+              payload['builder_dns_servers'] ??
+              const <String>[],
           'disallowed_applications': disallowedApplications,
           'disallowed_application_count':
               payload['disallowedApplicationCount'] ??
               _payloadListLength(disallowedApplications),
+          'builder_disallowed_applications': builderDisallowedApplications,
+          'builder_disallowed_application_count':
+              payload['builderDisallowedApplicationCount'] ??
+              _payloadListLength(builderDisallowedApplications),
+          'ignored_disallowed_applications': ignoredDisallowedApplications,
+          'ignored_disallowed_application_count':
+              payload['ignoredDisallowedApplicationCount'] ??
+              _payloadListLength(ignoredDisallowedApplications),
           'package_name':
               payload['packageName'] ?? payload['package_name'] ?? '',
           'self_disallowed':
               payload['selfDisallowed'] ?? payload['self_disallowed'] ?? '',
+          'builder_self_disallowed':
+              payload['builderSelfDisallowed'] ??
+              payload['builder_self_disallowed'] ??
+              '',
         },
       );
       _restoreRunningStatusAfterVpnRecovery();

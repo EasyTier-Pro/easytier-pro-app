@@ -145,12 +145,20 @@ class EasyTierVpnStartConfigInstrumentedTest {
             mtu = 1280,
         )
 
-        EasyTierVpnBuilderConfigurator.configure(
+        val appliedConfig = EasyTierVpnBuilderConfigurator.configure(
             builder,
             config,
             sdkInt = Build.VERSION_CODES.Q,
         )
 
+        assertEquals(listOf("10.10.0.2/24"), appliedConfig.addresses)
+        assertEquals(
+            listOf("10.10.0.0/24", "10.30.0.0/24", "192.168.2.0/24"),
+            appliedConfig.routes,
+        )
+        assertEquals(listOf("10.10.0.53"), appliedConfig.dnsServers)
+        assertEquals(listOf(context.packageName), appliedConfig.disallowedApplications)
+        assertEquals(emptyList<String>(), appliedConfig.ignoredDisallowedApplications)
         assertEquals(
             listOf(
                 "setSession:EasyTier Pro",
@@ -175,7 +183,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
         )
         val ignored = mutableListOf<String>()
 
-        EasyTierVpnBuilderConfigurator.configure(
+        val appliedConfig = EasyTierVpnBuilderConfigurator.configure(
             builder,
             AndroidVpnStartConfig(
                 instanceName = "network-a",
@@ -194,6 +202,11 @@ class EasyTierVpnStartConfigInstrumentedTest {
         }
 
         assertEquals(listOf("com.example.missing"), ignored)
+        assertEquals(listOf(context.packageName), appliedConfig.disallowedApplications)
+        assertEquals(
+            listOf("com.example.missing"),
+            appliedConfig.ignoredDisallowedApplications,
+        )
         assertEquals(
             listOf(
                 "setSession:EasyTier Pro",

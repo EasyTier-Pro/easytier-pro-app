@@ -253,10 +253,19 @@ if ($routes.Count -eq 0) {
 }
 Assert-ContainsAll $routes $ExpectedRoute "Android VPN routes" -NormalizeRoutes
 
+$builderRoutes = Convert-ToStringList (Get-EntryValue $context "builder_routes")
+if ($builderRoutes.Count -gt 0) {
+    Assert-ContainsAll $builderRoutes $ExpectedRoute "Android VPN builder_routes" -NormalizeRoutes
+}
+
 if (-not $AllowMappedRouteText) {
     $mappedTexts = $routes | Where-Object { $_.Contains("->") }
     if ($mappedTexts.Count -gt 0) {
         throw "Android VPN routes still contain raw mapped route text: $($mappedTexts -join ', ')"
+    }
+    $builderMappedTexts = $builderRoutes | Where-Object { $_.Contains("->") }
+    if ($builderMappedTexts.Count -gt 0) {
+        throw "Android VPN builder_routes still contain raw mapped route text: $($builderMappedTexts -join ', ')"
     }
 }
 
@@ -273,6 +282,21 @@ if ($disallowedApplications -notcontains $PackageName) {
 
 if (-not (Convert-ToBool (Get-EntryValue $context "self_disallowed"))) {
     throw "Android VPN established log does not confirm self_disallowed=true."
+}
+
+$builderDisallowedApplications = Convert-ToStringList (
+    Get-EntryValue $context "builder_disallowed_applications"
+)
+if (
+    $builderDisallowedApplications.Count -gt 0 -and
+    $builderDisallowedApplications -notcontains $PackageName
+) {
+    throw "Android VPN builder_disallowed_applications does not contain $PackageName. Actual: $($builderDisallowedApplications -join ', ')"
+}
+
+$builderSelfDisallowed = Get-EntryValue $context "builder_self_disallowed"
+if ($null -ne $builderSelfDisallowed -and -not (Convert-ToBool $builderSelfDisallowed)) {
+    throw "Android VPN established log does not confirm builder_self_disallowed=true."
 }
 
 if ($RequireStop) {
@@ -317,4 +341,10 @@ Write-Host "Log: $resolvedLogPath"
 Write-Host "tun_fd: $tunFd"
 Write-Host "addresses: $($addresses -join ', ')"
 Write-Host "routes: $($routes -join ', ')"
+if ($builderRoutes.Count -gt 0) {
+    Write-Host "builder_routes: $($builderRoutes -join ', ')"
+}
 Write-Host "disallowed_applications: $($disallowedApplications -join ', ')"
+if ($builderDisallowedApplications.Count -gt 0) {
+    Write-Host "builder_disallowed_applications: $($builderDisallowedApplications -join ', ')"
+}

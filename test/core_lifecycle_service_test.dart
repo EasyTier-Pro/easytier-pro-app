@@ -256,6 +256,10 @@ void main() {
             'payload': {
               'instanceName': 'network-a',
               'routes': ['10.10.0.0/24'],
+              'builderRoutes': ['10.10.0.0/24'],
+              'builderDisallowedApplications': ['net.easytier.pro'],
+              'ignoredDisallowedApplications': ['com.example.missing'],
+              'builderSelfDisallowed': true,
             },
           },
         ),
@@ -267,6 +271,18 @@ void main() {
       expect(service.status.value.message, 'Android 连接引擎运行中');
       expect(service.status.value.machineId, 'machine-1');
       expect(service.status.value.details, 'EasyTier 2.6.4');
+      final entry = AppLogger.instance.recentSnapshot.lastWhere(
+        (entry) => entry.message == 'Android VPN established',
+      );
+      expect(entry.context['routes'], ['10.10.0.0/24']);
+      expect(entry.context['builder_routes'], ['10.10.0.0/24']);
+      expect(entry.context['builder_disallowed_applications'], [
+        'net.easytier.pro',
+      ]);
+      expect(entry.context['ignored_disallowed_applications'], [
+        'com.example.missing',
+      ]);
+      expect(entry.context['builder_self_disallowed'], isTrue);
     });
 
     test(

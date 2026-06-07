@@ -15,6 +15,14 @@ interface EasyTierVpnBuilderOperations {
     fun setMetered(metered: Boolean)
 }
 
+data class AndroidVpnAppliedConfig(
+    val addresses: List<String>,
+    val routes: List<String>,
+    val dnsServers: List<String>,
+    val disallowedApplications: List<String>,
+    val ignoredDisallowedApplications: List<String>,
+)
+
 class EasyTierVpnServiceBuilderOperations(
     private val builder: VpnService.Builder,
 ) : EasyTierVpnBuilderOperations {
@@ -60,14 +68,22 @@ object EasyTierVpnBuilderConfigurator {
             String,
             PackageManager.NameNotFoundException,
         ) -> Unit = { _, _ -> },
-    ) {
+    ): AndroidVpnAppliedConfig {
         builder.setSession("EasyTier Pro")
         builder.setBlocking(false)
+
+        val builderAddresses = mutableListOf<String>()
+        val builderRoutes = mutableListOf<String>()
+        val builderDnsServers = mutableListOf<String>()
+        val builderDisallowedApplications = mutableListOf<String>()
+        val ignoredDisallowedApplications = mutableListOf<String>()
 
         for (application in config.disallowedApplications) {
             try {
                 builder.addDisallowedApplication(application)
+                builderDisallowedApplications.add(application)
             } catch (error: PackageManager.NameNotFoundException) {
+                ignoredDisallowedApplications.add(application)
                 onUnknownDisallowedApplication(application, error)
             }
         }
@@ -79,19 +95,30 @@ object EasyTierVpnBuilderConfigurator {
         for (address in config.addresses) {
             val cidr = EasyTierVpnStartConfigParser.parseCidr(address)
             builder.addAddress(cidr.address, cidr.prefixLength)
+            builderAddresses.add("${cidr.address}/${cidr.prefixLength}")
         }
 
         for (route in config.routes) {
             val cidr = EasyTierVpnStartConfigParser.parseRouteCidr(route)
             builder.addRoute(cidr.address, cidr.prefixLength)
+            builderRoutes.add("${cidr.address}/${cidr.prefixLength}")
         }
 
         for (server in config.dnsServers) {
             builder.addDnsServer(server)
+            builderDnsServers.add(server)
         }
 
         if (sdkInt >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
+
+        return AndroidVpnAppliedConfig(
+            addresses = builderAddresses,
+            routes = builderRoutes,
+            dnsServers = builderDnsServers,
+            disallowedApplications = builderDisallowedApplications,
+            ignoredDisallowedApplications = ignoredDisallowedApplications,
+        )
     }
 }
