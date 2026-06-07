@@ -353,6 +353,7 @@ if (-not $SkipVerify -and $remoteLogs.Count -gt 0) {
         -LogPath $diagnosticsPath `
         -ExpectedRoute $ExpectedRoute `
         -ExpectedAddress $ExpectedAddress `
+        -PackageName $PackageName `
         -RequireStop:$RequireStop `
         -RequireConfigServerStop:$RequireConfigServerStop
 }
