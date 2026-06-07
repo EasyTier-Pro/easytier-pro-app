@@ -21,6 +21,23 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repoRoot "build\android-e2e-evidence"
 }
 
+$nonEmptyExpectedRoutes = @(
+    $ExpectedRoute |
+        ForEach-Object { if ($null -eq $_) { "" } else { $_.Trim() } } |
+        Where-Object { $_.Length -gt 0 }
+)
+$nonEmptyPingTargets = @(
+    $PingTarget |
+        ForEach-Object { if ($null -eq $_) { "" } else { $_.Trim() } } |
+        Where-Object { $_.Length -gt 0 }
+)
+if ($RequireSystemRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
+    throw "-RequireSystemRoute requires at least one -ExpectedRoute value."
+}
+if ($RequirePingSuccess -and $nonEmptyPingTargets.Count -eq 0) {
+    throw "-RequirePingSuccess requires at least one -PingTarget value."
+}
+
 function Get-LocalAndroidSdkPath {
     $localProperties = Join-Path $repoRoot "android\local.properties"
     if (-not (Test-Path $localProperties)) {
