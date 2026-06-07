@@ -67,8 +67,32 @@ Assert-Matches `
 $mainManifestText = Get-Content -Path $mainManifest -Raw
 Assert-Matches `
     $mainManifestText `
+    'android\.permission\.INTERNET' `
+    "Android main manifest must request INTERNET permission."
+Assert-Matches `
+    $mainManifestText `
+    'android\.permission\.ACCESS_NETWORK_STATE' `
+    "Android main manifest must request ACCESS_NETWORK_STATE permission."
+Assert-Matches `
+    $mainManifestText `
+    'android\.permission\.FOREGROUND_SERVICE"' `
+    "Android main manifest must request FOREGROUND_SERVICE permission."
+Assert-Matches `
+    $mainManifestText `
+    'android\.permission\.FOREGROUND_SERVICE_SPECIAL_USE' `
+    "Android main manifest must request FOREGROUND_SERVICE_SPECIAL_USE permission."
+Assert-Matches `
+    $mainManifestText `
+    'android\.permission\.POST_NOTIFICATIONS' `
+    "Android main manifest must request POST_NOTIFICATIONS permission."
+Assert-Matches `
+    $mainManifestText `
     'android\.permission\.BIND_VPN_SERVICE' `
     "Android main manifest must declare the VPN service binding permission."
+Assert-Matches `
+    $mainManifestText `
+    '<service\b(?=[^>]*android:name="\.EasyTierVpnService")(?=[^>]*android:exported="false")' `
+    "Android VPN service must be non-exported."
 Assert-Matches `
     $mainManifestText `
     'android\.net\.VpnService' `
@@ -77,6 +101,10 @@ Assert-Matches `
     $mainManifestText `
     'android:foregroundServiceType="specialUse"' `
     "Android main manifest must declare the specialUse foreground service type."
+Assert-Matches `
+    $mainManifestText `
+    'android\.app\.PROPERTY_SPECIAL_USE_FGS_SUBTYPE' `
+    "Android main manifest must declare the special-use foreground service subtype property."
 Assert-Matches `
     $mainManifestText `
     'androidx\.core\.content\.FileProvider' `
