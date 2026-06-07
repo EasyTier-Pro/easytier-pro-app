@@ -176,88 +176,84 @@ class _MobileDashboardHeader extends StatelessWidget {
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
     return SelectionContainer.disabled(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFFFFF),
-          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      child: FHeader(
+        style: FHeaderStyleDelta.delta(
+          constraints: const BoxConstraints(minHeight: 58),
+          decoration: DecorationDelta.value(
+            const BoxDecoration(
+              color: Color(0xFFFFFFFF),
+              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+            ),
+          ),
+          padding: EdgeInsetsGeometryDelta.value(
+            const EdgeInsets.symmetric(horizontal: 14),
+          ),
+          actionSpacing: 4,
         ),
-        child: SafeArea(
-          bottom: false,
-          child: SizedBox(
-            height: 58,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
+        title: Row(
+          children: [
+            const _BrandMark(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _BrandMark(),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'EasyTier Pro',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: const Color(0xFF0F172A),
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          workspaceName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: const Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
-                        ),
-                      ],
+                  Text(
+                    'EasyTier Pro',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  ValueListenableBuilder<CoreRunStatus>(
-                    valueListenable: coreStatusListenable,
-                    builder: (context, status, _) {
-                      return Tooltip(
-                        message: status.message,
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: _mobileCoreStatusColor(
-                              status.phase,
-                            ).withAlpha(20),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.circle,
-                            size: 10,
-                            color: _mobileCoreStatusColor(status.phase),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 4),
-                  _UserMenu(
-                    userName: trimmedName,
-                    workspaceName: workspaceName,
-                    initial: initial,
-                    onShowSettings: onShowSettings,
-                    onLogout: onLogout,
+                  const SizedBox(height: 2),
+                  Text(
+                    workspaceName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
+        suffixes: [
+          ValueListenableBuilder<CoreRunStatus>(
+            valueListenable: coreStatusListenable,
+            builder: (context, status, _) {
+              return Tooltip(
+                message: status.message,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _mobileCoreStatusColor(status.phase).withAlpha(20),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: _mobileCoreStatusColor(status.phase),
+                  ),
+                ),
+              );
+            },
+          ),
+          _UserMenu(
+            userName: trimmedName,
+            workspaceName: workspaceName,
+            initial: initial,
+            onShowSettings: onShowSettings,
+            onLogout: onLogout,
+          ),
+        ],
       ),
     );
   }

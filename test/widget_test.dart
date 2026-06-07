@@ -1782,6 +1782,10 @@ void main() {
       find.byKey(const ValueKey<String>('network-tab-current')),
       findsNothing,
     );
+    expect(
+      find.byWidgetPredicate((widget) => widget is FHeader),
+      findsOneWidget,
+    );
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('EasyTier Pro'), findsOneWidget);
 
