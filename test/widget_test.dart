@@ -1770,6 +1770,41 @@ void main() {
     },
   );
 
+  testWidgets('wide shell avoids top system inset without growing header', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(760, 390));
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(() {
+      tester.view.resetPadding();
+      tester.view.resetViewPadding();
+    });
+
+    final authService = _FakeAuthService();
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('desktop-system-top-inset')),
+      findsOneWidget,
+    );
+    final headerRect = tester.getRect(
+      find.byKey(const ValueKey<String>('desktop-dashboard-header-content')),
+    );
+    expect(headerRect.top, 24);
+    expect(headerRect.height, 64);
+  });
+
   testWidgets('mobile shell uses bottom navigation', (
     WidgetTester tester,
   ) async {

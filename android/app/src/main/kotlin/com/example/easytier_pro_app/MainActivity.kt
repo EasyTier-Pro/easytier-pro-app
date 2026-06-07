@@ -1,11 +1,18 @@
 package com.example.easytier_pro_app
 
 import android.content.Intent
-import io.flutter.embedding.engine.FlutterEngine
+import android.os.Bundle
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private lateinit var easyTierBridge: EasyTierFlutterBridge
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

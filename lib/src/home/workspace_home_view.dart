@@ -319,6 +319,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
           return Column(
             children: [
+              if (!mobile) const _DesktopSystemTopInset(),
               if (mobile)
                 _MobileDashboardHeader(
                   userName: widget.session.user.effectiveName,
@@ -402,5 +403,22 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
+  }
+}
+
+class _DesktopSystemTopInset extends StatelessWidget {
+  const _DesktopSystemTopInset();
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    if (topInset <= 0) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      key: const ValueKey<String>('desktop-system-top-inset'),
+      height: topInset,
+      color: const Color(0xFFF8F9FB),
+    );
   }
 }

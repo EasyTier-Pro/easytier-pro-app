@@ -38,6 +38,7 @@ class _DashboardHeader extends StatelessWidget {
 
     return SelectionContainer.disabled(
       child: Container(
+        key: const ValueKey<String>('desktop-dashboard-header-content'),
         height: 64,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: const BoxDecoration(
