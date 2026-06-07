@@ -3,6 +3,7 @@ param(
     [string] $DeviceSerial = "",
     [string] $PackageName = "net.easytier.pro",
     [string] $OutputDirectory = "",
+    [string] $DiagnosticsLogPath = "",
     [string[]] $ExpectedRoute = @(),
     [string[]] $ExpectedAddress = @(),
     [string[]] $PingTarget = @(),
@@ -49,6 +50,14 @@ if ($RequireProbePackageRoute -and $nonEmptyExpectedRoutes.Count -eq 0) {
 }
 if ($RequireProbePackageRoute -and $nonEmptyProbePackageNames.Count -eq 0) {
     throw "-RequireProbePackageRoute requires at least one -ProbePackageName value."
+}
+
+$resolvedDiagnosticsLogPath = ""
+if (-not [string]::IsNullOrWhiteSpace($DiagnosticsLogPath)) {
+    if (-not (Test-Path $DiagnosticsLogPath)) {
+        throw "Diagnostics log was not found: $DiagnosticsLogPath"
+    }
+    $resolvedDiagnosticsLogPath = (Resolve-Path $DiagnosticsLogPath).Path
 }
 
 function Get-LocalAndroidSdkPath {
@@ -458,52 +467,62 @@ $metadata = @(
     "# adb=$script:ResolvedAdbPath",
     "# device=$script:DeviceSerial",
     "# package=$PackageName",
+    "# diagnostics_log=$resolvedDiagnosticsLogPath",
     "# probe_packages=$($ProbePackageName -join ',')",
     ""
 ) -join "`n"
 Write-TextFile -Path (Join-Path $runOutputDirectory "metadata.txt") -Text $metadata
-
-$remoteLogDir = "/data/data/$PackageName/cache/easytier-pro-app/logs"
-$listResult = Invoke-Adb `
-    -Arguments @("shell", "run-as", $PackageName, "sh", "-c", "ls -1 $remoteLogDir/*.log 2>/dev/null") `
-    -AllowFailure
-
-$remoteLogs = @(
-    $listResult.Output -split '\r?\n' |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { $_.Length -gt 0 -and $_ -notmatch '^run-as:' }
-)
 
 $diagnosticsPath = Join-Path $runOutputDirectory "diagnostics.log"
 $diagnostics = New-Object System.Text.StringBuilder
 [void] $diagnostics.AppendLine("# EasyTier Pro adb diagnostics export")
 [void] $diagnostics.AppendLine("# generated_at=$((Get-Date).ToString("o"))")
 [void] $diagnostics.AppendLine("# package=$PackageName")
-[void] $diagnostics.AppendLine("# remote_log_dir=$remoteLogDir")
 [void] $diagnostics.AppendLine()
 
-if ($remoteLogs.Count -eq 0) {
-    [void] $diagnostics.AppendLine("# No app log files were found through adb run-as.")
-    [void] $diagnostics.AppendLine("# Install a debug build, open the app, reproduce the issue, then run this script again.")
+$diagnosticsAvailable = $false
+if ($resolvedDiagnosticsLogPath.Length -gt 0) {
+    [void] $diagnostics.AppendLine("# FILE: exported:$resolvedDiagnosticsLogPath")
+    [void] $diagnostics.AppendLine((Get-Content -LiteralPath $resolvedDiagnosticsLogPath -Raw))
     Write-TextFile -Path $diagnosticsPath -Text $diagnostics.ToString()
-    if (-not $AllowMissingAppLogs) {
-        throw "No app log files were found for $PackageName. For release builds, export diagnostics from the app share sheet instead."
-    }
+    $diagnosticsAvailable = $true
 } else {
-    foreach ($remoteLog in $remoteLogs) {
-        $catResult = Invoke-Adb `
-            -Arguments @("shell", "run-as", $PackageName, "cat", $remoteLog) `
-            -AllowFailure
-        [void] $diagnostics.AppendLine("## FILE: run-as:$remoteLog")
-        if ($catResult.ExitCode -eq 0) {
-            [void] $diagnostics.AppendLine($catResult.Output)
-        } else {
-            [void] $diagnostics.AppendLine("<failed to read $remoteLog>")
-            [void] $diagnostics.AppendLine($catResult.Output)
+    $remoteLogDir = "/data/data/$PackageName/cache/easytier-pro-app/logs"
+    [void] $diagnostics.AppendLine("# remote_log_dir=$remoteLogDir")
+    $listResult = Invoke-Adb `
+        -Arguments @("shell", "run-as", $PackageName, "sh", "-c", "ls -1 $remoteLogDir/*.log 2>/dev/null") `
+        -AllowFailure
+
+    $remoteLogs = @(
+        $listResult.Output -split '\r?\n' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_.Length -gt 0 -and $_ -notmatch '^run-as:' }
+    )
+
+    if ($remoteLogs.Count -eq 0) {
+        [void] $diagnostics.AppendLine("# No app log files were found through adb run-as.")
+        [void] $diagnostics.AppendLine("# Install a debug build, open the app, reproduce the issue, then run this script again.")
+        Write-TextFile -Path $diagnosticsPath -Text $diagnostics.ToString()
+        if (-not $AllowMissingAppLogs) {
+            throw "No app log files were found for $PackageName. For release builds, pass -DiagnosticsLogPath with a diagnostics log exported from the app share sheet."
         }
-        [void] $diagnostics.AppendLine()
+    } else {
+        foreach ($remoteLog in $remoteLogs) {
+            $catResult = Invoke-Adb `
+                -Arguments @("shell", "run-as", $PackageName, "cat", $remoteLog) `
+                -AllowFailure
+            [void] $diagnostics.AppendLine("## FILE: run-as:$remoteLog")
+            if ($catResult.ExitCode -eq 0) {
+                [void] $diagnostics.AppendLine($catResult.Output)
+            } else {
+                [void] $diagnostics.AppendLine("<failed to read $remoteLog>")
+                [void] $diagnostics.AppendLine($catResult.Output)
+            }
+            [void] $diagnostics.AppendLine()
+        }
+        Write-TextFile -Path $diagnosticsPath -Text $diagnostics.ToString()
+        $diagnosticsAvailable = $true
     }
-    Write-TextFile -Path $diagnosticsPath -Text $diagnostics.ToString()
 }
 
 $routeTables = Save-AdbCommandOutput -FileName "route_tables.txt" -Arguments @("shell", "ip", "route", "show", "table", "all")
@@ -598,7 +617,7 @@ foreach ($target in $PingTarget) {
     }
 }
 
-if (-not $SkipVerify -and $remoteLogs.Count -gt 0) {
+if (-not $SkipVerify -and $diagnosticsAvailable) {
     $verifyScript = Join-Path $PSScriptRoot "verify_android_e2e_diagnostics.ps1"
     & $verifyScript `
         -LogPath $diagnosticsPath `
