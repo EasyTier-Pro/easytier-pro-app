@@ -68,12 +68,92 @@ function Convert-ToBool([object] $Value) {
     return @("true", "1", "yes") -contains $text.ToLowerInvariant()
 }
 
-function Assert-ContainsAll([string[]] $Actual, [string[]] $Expected, [string] $Description) {
-    $missing = $Expected |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { $_.Length -gt 0 -and $Actual -notcontains $_ }
+function Normalize-RouteCidr([string] $Value) {
+    $text = $Value.Trim()
+    if ($text.Length -eq 0) {
+        return ""
+    }
+
+    $mappedIndex = $text.IndexOf("->")
+    if ($mappedIndex -ge 0) {
+        $mapped = $text.Substring($mappedIndex + 2).Trim()
+        if ($mapped.Length -gt 0) {
+            $text = $mapped
+        } else {
+            $text = $text.Substring(0, $mappedIndex).Trim()
+        }
+    }
+
+    $slashIndex = $text.IndexOf("/")
+    if ($slashIndex -lt 0) {
+        $addressText = $text
+        $prefix = 32
+    } elseif ($slashIndex -eq 0 -or $slashIndex -eq $text.Length - 1) {
+        return $text
+    } else {
+        $addressText = $text.Substring(0, $slashIndex)
+        $prefixText = $text.Substring($slashIndex + 1)
+        $prefix = 0
+        if (-not [int]::TryParse($prefixText, [ref] $prefix) -or $prefix -lt 0 -or $prefix -gt 32) {
+            return $text
+        }
+    }
+
+    $octets = $addressText.Split(".")
+    if ($octets.Count -ne 4) {
+        return $text
+    }
+    [uint64] $address = 0
+    foreach ($octetText in $octets) {
+        $octet = 0
+        if (-not [int]::TryParse($octetText, [ref] $octet) -or $octet -lt 0 -or $octet -gt 255) {
+            return $text
+        }
+        $address = ($address -shl 8) -bor [uint64] $octet
+    }
+
+    [uint64] $mask = if ($prefix -eq 0) {
+        0
+    } else {
+        ([uint64] 4294967295 -shl (32 - $prefix)) -band [uint64] 4294967295
+    }
+    [uint64] $network = $address -band $mask
+    $networkAddress = @(
+        ($network -shr 24) -band 0xff
+        ($network -shr 16) -band 0xff
+        ($network -shr 8) -band 0xff
+        $network -band 0xff
+    ) -join "."
+    return "$networkAddress/$prefix"
+}
+
+function Convert-ToComparableList([string[]] $Values, [switch] $NormalizeRoutes) {
+    return @(
+        $Values |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_.Length -gt 0 } |
+            ForEach-Object {
+                if ($NormalizeRoutes) {
+                    Normalize-RouteCidr $_
+                } else {
+                    $_
+                }
+            }
+    )
+}
+
+function Assert-ContainsAll(
+    [string[]] $Actual,
+    [string[]] $Expected,
+    [string] $Description,
+    [switch] $NormalizeRoutes
+) {
+    $actualValues = Convert-ToComparableList $Actual -NormalizeRoutes:$NormalizeRoutes
+    $expectedValues = Convert-ToComparableList $Expected -NormalizeRoutes:$NormalizeRoutes
+    $missing = $expectedValues |
+        Where-Object { $ActualValues -notcontains $_ }
     if ($missing.Count -gt 0) {
-        throw "$Description missing: $($missing -join ', '). Actual: $($Actual -join ', ')"
+        throw "$Description missing: $($missing -join ', '). Actual: $($actualValues -join ', ')"
     }
 }
 
@@ -132,7 +212,7 @@ $routes = Convert-ToStringList (Get-EntryValue $context "routes")
 if ($routes.Count -eq 0) {
     throw "Android VPN established log does not contain routes."
 }
-Assert-ContainsAll $routes $ExpectedRoute "Android VPN routes"
+Assert-ContainsAll $routes $ExpectedRoute "Android VPN routes" -NormalizeRoutes
 
 if (-not $AllowMappedRouteText) {
     $mappedTexts = $routes | Where-Object { $_.Contains("->") }

@@ -108,8 +108,8 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 如果日志缺少虚拟网 CIDR 或子网 CIDR，问题在 Dart 对 `collectNetworkInfos` / config server 下发结果的解析或路由刷新链路。
 - 如果日志 routes 正确但未被排除的浏览器、Termux 或 ping 工具仍无法访问虚拟 IP/子网，问题更可能在系统 VPN interface、TUN fd 注入或 EasyTier data-plane 转发链路。
 - 不要用 EasyTier Pro 自己访问虚拟网作为连通性判断，因为应用自身会被 `addDisallowedApplication(packageName)` 排除在 VPN 外，用来避免控制面和 EasyTier 底层传输路由回环。
-- 导出诊断日志后，可以用 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>` 自动检查 config server 启动、TUN fd、routes、mapped route 归一化和自身应用排除是否满足。该脚本不证明数据面已通，虚拟 IP/子网访问仍需用未被排除的应用实际验证。
-- 本地 debug 包可以直接运行 `.\scripts\collect_android_e2e_evidence.ps1 -ExpectedRoute <虚拟网CIDR>,<子网CIDR> -PingTarget <虚拟IP或子网地址>`，脚本会通过 `adb run-as net.easytier.pro` 拉取应用日志，收集 `ip route`、`ip rule`、`dumpsys connectivity`、包信息和可选 ping 输出，并调用诊断校验脚本；如果要把系统 route table 缺少期望 CIDR 视为失败，可加 `-RequireSystemRoute`。release 包无法使用 `run-as`，应改用应用内分享面板导出诊断日志。
+- 导出诊断日志后，可以用 `.\scripts\verify_android_e2e_diagnostics.ps1 -LogPath <diagnostics.log> -ExpectedRoute <虚拟网CIDR>,<子网CIDR>` 自动检查 config server 启动、TUN fd、routes、mapped route 归一化和自身应用排除是否满足。`-ExpectedRoute` 会按 Android 系统 route 语义归一化，例如 `10.10.0.42/24` 会按 `10.10.0.0/24` 校验，`real_cidr->mapped_cidr` 会按右侧 mapped CIDR 校验。该脚本不证明数据面已通，虚拟 IP/子网访问仍需用未被排除的应用实际验证。
+- 本地 debug 包可以直接运行 `.\scripts\collect_android_e2e_evidence.ps1 -ExpectedRoute <虚拟网CIDR>,<子网CIDR> -PingTarget <虚拟IP或子网地址>`，脚本会通过 `adb run-as net.easytier.pro` 拉取应用日志，收集 `ip route`、`ip rule`、`dumpsys connectivity`、包信息和可选 ping 输出，并调用诊断校验脚本；如果要把系统 route table 缺少期望 CIDR 视为失败，可加 `-RequireSystemRoute`。系统 route table 检查同样会归一化 `-ExpectedRoute`。release 包无法使用 `run-as`，应改用应用内分享面板导出诊断日志。
 
 ## 发布前验证
 

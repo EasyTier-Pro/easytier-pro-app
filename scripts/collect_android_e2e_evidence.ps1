@@ -128,6 +128,67 @@ function Write-TextFile {
     Set-Content -LiteralPath $Path -Value $Text -Encoding UTF8
 }
 
+function Normalize-RouteCidr {
+    param([Parameter(Mandatory = $true)][string] $Value)
+
+    $text = $Value.Trim()
+    if ($text.Length -eq 0) {
+        return ""
+    }
+
+    $mappedIndex = $text.IndexOf("->")
+    if ($mappedIndex -ge 0) {
+        $mapped = $text.Substring($mappedIndex + 2).Trim()
+        if ($mapped.Length -gt 0) {
+            $text = $mapped
+        } else {
+            $text = $text.Substring(0, $mappedIndex).Trim()
+        }
+    }
+
+    $slashIndex = $text.IndexOf("/")
+    if ($slashIndex -lt 0) {
+        $addressText = $text
+        $prefix = 32
+    } elseif ($slashIndex -eq 0 -or $slashIndex -eq $text.Length - 1) {
+        return $text
+    } else {
+        $addressText = $text.Substring(0, $slashIndex)
+        $prefixText = $text.Substring($slashIndex + 1)
+        $prefix = 0
+        if (-not [int]::TryParse($prefixText, [ref] $prefix) -or $prefix -lt 0 -or $prefix -gt 32) {
+            return $text
+        }
+    }
+
+    $octets = $addressText.Split(".")
+    if ($octets.Count -ne 4) {
+        return $text
+    }
+    [uint64] $address = 0
+    foreach ($octetText in $octets) {
+        $octet = 0
+        if (-not [int]::TryParse($octetText, [ref] $octet) -or $octet -lt 0 -or $octet -gt 255) {
+            return $text
+        }
+        $address = ($address -shl 8) -bor [uint64] $octet
+    }
+
+    [uint64] $mask = if ($prefix -eq 0) {
+        0
+    } else {
+        ([uint64] 4294967295 -shl (32 - $prefix)) -band [uint64] 4294967295
+    }
+    [uint64] $network = $address -band $mask
+    $networkAddress = @(
+        ($network -shr 24) -band 0xff
+        ($network -shr 16) -band 0xff
+        ($network -shr 8) -band 0xff
+        $network -band 0xff
+    ) -join "."
+    return "$networkAddress/$prefix"
+}
+
 function Save-AdbCommandOutput {
     param(
         [Parameter(Mandatory = $true)]
@@ -159,11 +220,12 @@ function Test-RouteTextContainsCidr {
     if ($trimmed.Length -eq 0) {
         return $true
     }
-    if ($RouteText.Contains($trimmed)) {
+    $normalized = Normalize-RouteCidr $trimmed
+    if ($RouteText.Contains($trimmed) -or $RouteText.Contains($normalized)) {
         return $true
     }
 
-    $parts = $trimmed.Split("/", 2)
+    $parts = $normalized.Split("/", 2)
     if ($parts.Count -eq 2 -and $parts[1] -eq "32") {
         return [regex]::IsMatch(
             $RouteText,
