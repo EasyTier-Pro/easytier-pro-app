@@ -83,6 +83,14 @@ function Assert-NonEmptyArrayField([object] $Summary, [string] $Field, [string] 
     }
 }
 
+function Assert-EnvironmentName([object] $Summary, [string] $Expected, [string] $Description) {
+    $actual = Get-PropertyValue $Summary "environment_name"
+    $actualText = if ($null -eq $actual) { "" } else { $actual.ToString().Trim().ToLowerInvariant() }
+    if ($actualText -ne $Expected) {
+        throw "$Description must have environment_name=$Expected. Actual: $actualText"
+    }
+}
+
 function Assert-PassingSummary([object] $Summary, [string] $Description) {
     Assert-TrueField $Summary "passed" $Description
     Assert-TrueField $Summary "diagnostics_available" $Description
@@ -93,6 +101,7 @@ function Assert-PassingSummary([object] $Summary, [string] $Description) {
 function Assert-ConnectedEvidence([string] $Path, [string] $Label) {
     $summary = Read-Summary $Path "$Label connected Android E2E summary"
     Assert-PassingSummary $summary "$Label connected Android E2E summary"
+    Assert-EnvironmentName $summary $Label "$Label connected Android E2E summary"
     Assert-TrueField $summary "require_system_route" "$Label connected Android E2E summary"
     Assert-TrueField $summary "require_ping_success" "$Label connected Android E2E summary"
     Assert-TrueField $summary "require_probe_package_route" "$Label connected Android E2E summary"
@@ -111,6 +120,7 @@ function Assert-ConnectedEvidence([string] $Path, [string] $Label) {
 function Assert-StoppedEvidence([string] $Path, [string] $Label) {
     $summary = Read-Summary $Path "$Label stopped Android E2E summary"
     Assert-PassingSummary $summary "$Label stopped Android E2E summary"
+    Assert-EnvironmentName $summary $Label "$Label stopped Android E2E summary"
     Assert-TrueField $summary "require_stop" "$Label stopped Android E2E summary"
     Assert-TrueField $summary "require_config_server_stop" "$Label stopped Android E2E summary"
     Write-Host "$Label stopped Android E2E evidence verified: $Path"

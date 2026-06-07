@@ -4,6 +4,7 @@ param(
     [string] $PackageName = "net.easytier.pro",
     [string] $OutputDirectory = "",
     [string] $DiagnosticsLogPath = "",
+    [string] $EnvironmentName = "",
     [string[]] $ExpectedRoute = @(),
     [string[]] $ExpectedAddress = @(),
     [string[]] $PingTarget = @(),
@@ -63,6 +64,7 @@ if (-not [string]::IsNullOrWhiteSpace($DiagnosticsLogPath)) {
     }
     $resolvedDiagnosticsLogPath = (Resolve-Path $DiagnosticsLogPath).Path
 }
+$normalizedEnvironmentName = $EnvironmentName.Trim().ToLowerInvariant()
 
 function Get-LocalAndroidSdkPath {
     $localProperties = Join-Path $repoRoot "android\local.properties"
@@ -471,6 +473,7 @@ $metadata = @(
     "# adb=$script:ResolvedAdbPath",
     "# device=$script:DeviceSerial",
     "# package=$PackageName",
+    "# environment=$normalizedEnvironmentName",
     "# diagnostics_log=$resolvedDiagnosticsLogPath",
     "# probe_packages=$($ProbePackageName -join ',')",
     ""
@@ -732,6 +735,7 @@ $summary = [ordered] @{
     failures = @($requiredFailures.ToArray())
     device = $script:DeviceSerial
     package_name = $PackageName
+    environment_name = $normalizedEnvironmentName
     diagnostics_source = if ($resolvedDiagnosticsLogPath.Length -gt 0) {
         "exported"
     } else {
