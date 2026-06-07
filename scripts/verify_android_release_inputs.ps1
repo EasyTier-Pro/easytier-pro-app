@@ -41,6 +41,55 @@ function Read-KeyProperties([string] $Path) {
     return $values
 }
 
+function Resolve-KeytoolPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+        $candidate = Join-Path $env:JAVA_HOME "bin\keytool.exe"
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+        $candidate = Join-Path $env:JAVA_HOME "bin\keytool"
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    $command = Get-Command keytool -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+    throw "keytool was not found. Install a JDK or set JAVA_HOME before running -RequireSigning."
+}
+
+function Assert-KeystoreAlias {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $StorePath,
+        [Parameter(Mandatory = $true)]
+        [string] $StorePassword,
+        [Parameter(Mandatory = $true)]
+        [string] $KeyAlias
+    )
+
+    $keytool = Resolve-KeytoolPath
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & $keytool `
+            -list `
+            -keystore $StorePath `
+            -storepass $StorePassword `
+            -alias $KeyAlias `
+            -v 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) {
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        throw "Android release keystore alias could not be verified. storeFile=$StorePath alias=$KeyAlias keytool_exit=$exitCode`n$text"
+    }
+}
+
 & (Join-Path $PSScriptRoot "verify_android_jni_libs.ps1")
 
 Assert-FileExists $buildGradle "Android app Gradle file"
@@ -166,6 +215,10 @@ if ($RequireSigning) {
     if (-not (Test-Path $storePath)) {
         throw "Android release keystore was not found: $storePath"
     }
+    Assert-KeystoreAlias `
+        -StorePath $storePath `
+        -StorePassword $properties["storePassword"] `
+        -KeyAlias $properties["keyAlias"]
     Write-Host "Android release signing inputs verified: $storePath"
 } else {
     Write-Host "Android release signing input check skipped. Pass -RequireSigning before producing release artifacts."

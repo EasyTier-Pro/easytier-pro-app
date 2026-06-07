@@ -22,7 +22,7 @@ keyPassword=<key-password>
 - `storeFile` 相对 `android/` 目录解析，也可以使用绝对路径。
 - 未提供 `android/key.properties` 时，release 构建会失败；release 变体不会使用 debug key 签名。
 - Debug 构建不依赖该文件。
-- 生成 release artifact 前，建议先运行 `.\scripts\verify_android_release_inputs.ps1 -RequireSigning`，确认签名文件、JNI ABI、正式 `applicationId`、VPN manifest 和 cleartext 策略都符合发布前置条件。
+- 生成 release artifact 前，建议先运行 `.\scripts\verify_android_release_inputs.ps1 -RequireSigning`，确认签名文件、keystore 可被 `keytool` 打开、`keyAlias` 存在、JNI ABI、正式 `applicationId`、VPN manifest 和 cleartext 策略都符合发布前置条件。
 
 常用命令：
 
