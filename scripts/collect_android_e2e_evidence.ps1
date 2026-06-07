@@ -8,6 +8,8 @@ param(
     [string[]] $PingTarget = @(),
     [switch] $RequireSystemRoute,
     [switch] $RequirePingSuccess,
+    [switch] $RequireStop,
+    [switch] $RequireConfigServerStop,
     [switch] $SkipVerify,
     [switch] $AllowMissingAppLogs
 )
@@ -333,7 +335,9 @@ if (-not $SkipVerify -and $remoteLogs.Count -gt 0) {
     & $verifyScript `
         -LogPath $diagnosticsPath `
         -ExpectedRoute $ExpectedRoute `
-        -ExpectedAddress $ExpectedAddress
+        -ExpectedAddress $ExpectedAddress `
+        -RequireStop:$RequireStop `
+        -RequireConfigServerStop:$RequireConfigServerStop
 }
 
 if ($RequirePingSuccess -and $failedPings.Count -gt 0) {
