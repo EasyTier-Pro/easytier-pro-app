@@ -60,6 +60,81 @@ function Convert-ToArray([object] $Value) {
     return @($Value)
 }
 
+function Normalize-RouteCidr([string] $Value) {
+    $text = $Value.Trim()
+    if ($text.Length -eq 0) {
+        return ""
+    }
+
+    $mappedIndex = $text.IndexOf("->")
+    if ($mappedIndex -ge 0) {
+        $mapped = $text.Substring($mappedIndex + 2).Trim()
+        if ($mapped.Length -gt 0) {
+            $text = $mapped
+        } else {
+            $text = $text.Substring(0, $mappedIndex).Trim()
+        }
+    }
+
+    $slashIndex = $text.IndexOf("/")
+    if ($slashIndex -lt 0) {
+        $addressText = $text
+        $prefix = 32
+    } elseif ($slashIndex -eq 0 -or $slashIndex -eq $text.Length - 1) {
+        return $text
+    } else {
+        $addressText = $text.Substring(0, $slashIndex)
+        $prefixText = $text.Substring($slashIndex + 1)
+        $prefix = 0
+        if (-not [int]::TryParse($prefixText, [ref] $prefix) -or $prefix -lt 0 -or $prefix -gt 32) {
+            return $text
+        }
+    }
+
+    $octets = $addressText.Split(".")
+    if ($octets.Count -ne 4) {
+        return $text
+    }
+    [uint64] $address = 0
+    foreach ($octetText in $octets) {
+        $octet = 0
+        if (-not [int]::TryParse($octetText, [ref] $octet) -or $octet -lt 0 -or $octet -gt 255) {
+            return $text
+        }
+        $address = ($address -shl 8) -bor [uint64] $octet
+    }
+
+    [uint64] $mask = if ($prefix -eq 0) {
+        0
+    } else {
+        ([uint64] 4294967295 -shl (32 - $prefix)) -band [uint64] 4294967295
+    }
+    [uint64] $network = $address -band $mask
+    $networkAddress = @(
+        ($network -shr 24) -band 0xff
+        ($network -shr 16) -band 0xff
+        ($network -shr 8) -band 0xff
+        $network -band 0xff
+    ) -join "."
+    return "$networkAddress/$prefix"
+}
+
+function Convert-ToComparableList([object] $Value, [switch] $NormalizeRoutes) {
+    return @(
+        Convert-ToArray $Value |
+            Where-Object { $null -ne $_ } |
+            ForEach-Object { $_.ToString().Trim() } |
+            Where-Object { $_.Length -gt 0 } |
+            ForEach-Object {
+                if ($NormalizeRoutes) {
+                    Normalize-RouteCidr $_
+                } else {
+                    $_
+                }
+            }
+    )
+}
+
 function Assert-TrueField([object] $Summary, [string] $Field, [string] $Description) {
     if (-not (Convert-ToBool (Get-PropertyValue $Summary $Field))) {
         throw "$Description must have $Field=true."
@@ -80,6 +155,39 @@ function Assert-NonEmptyArrayField([object] $Summary, [string] $Field, [string] 
     )
     if ($values.Count -eq 0) {
         throw "$Description must have non-empty $Field."
+    }
+}
+
+function Assert-ArrayFieldContainsAll(
+    [object] $Summary,
+    [string] $ActualField,
+    [string] $ExpectedField,
+    [string] $Description,
+    [switch] $NormalizeRoutes
+) {
+    $actualValues = Convert-ToComparableList (Get-PropertyValue $Summary $ActualField) `
+        -NormalizeRoutes:$NormalizeRoutes
+    $expectedValues = Convert-ToComparableList (Get-PropertyValue $Summary $ExpectedField) `
+        -NormalizeRoutes:$NormalizeRoutes
+    $missing = @($expectedValues | Where-Object { $actualValues -notcontains $_ })
+    if ($missing.Count -gt 0) {
+        throw "$Description must have $ActualField containing $ExpectedField. Missing: $($missing -join ', '). Actual: $($actualValues -join ', ')"
+    }
+}
+
+function Assert-ArrayFieldContainsValue(
+    [object] $Summary,
+    [string] $Field,
+    [string] $ExpectedValue,
+    [string] $Description
+) {
+    $values = Convert-ToComparableList (Get-PropertyValue $Summary $Field)
+    $expected = $ExpectedValue.Trim()
+    if ($expected.Length -eq 0) {
+        throw "$Description expected value for $Field is empty."
+    }
+    if ($values -notcontains $expected) {
+        throw "$Description must have $Field containing $expected. Actual: $($values -join ', ')"
     }
 }
 
@@ -132,9 +240,36 @@ function Assert-ConnectedEvidence([string] $Path, [string] $Label) {
     Assert-NonEmptyArrayField $summary "expected_route_devices" "$Label connected Android E2E summary"
     Assert-NonEmptyArrayField $summary "ping_targets" "$Label connected Android E2E summary"
     Assert-NonEmptyArrayField $summary "probe_package_names" "$Label connected Android E2E summary"
+    Assert-NonEmptyArrayField $summary "diagnostics_routes" "$Label connected Android E2E summary"
     Assert-NonEmptyArrayField $summary "diagnostics_builder_routes" "$Label connected Android E2E summary"
     Assert-NonEmptyArrayField $summary "diagnostics_builder_disallowed_applications" "$Label connected Android E2E summary"
     Assert-TrueField $summary "diagnostics_builder_self_disallowed" "$Label connected Android E2E summary"
+    Assert-ArrayFieldContainsAll `
+        $summary `
+        "diagnostics_routes" `
+        "expected_routes" `
+        "$Label connected Android E2E summary" `
+        -NormalizeRoutes
+    Assert-ArrayFieldContainsAll `
+        $summary `
+        "diagnostics_builder_routes" `
+        "expected_routes" `
+        "$Label connected Android E2E summary" `
+        -NormalizeRoutes
+    $packageName = Get-PropertyValue $summary "package_name"
+    $packageNameText = if ($null -eq $packageName) {
+        ""
+    } else {
+        $packageName.ToString().Trim()
+    }
+    if ($packageNameText.Length -eq 0) {
+        throw "$Label connected Android E2E summary must have package_name."
+    }
+    Assert-ArrayFieldContainsValue `
+        $summary `
+        "diagnostics_builder_disallowed_applications" `
+        $packageNameText `
+        "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "missing_system_routes" "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "failed_pings" "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "failed_probe_routes" "$Label connected Android E2E summary"

@@ -31,7 +31,7 @@
 
 仍不能视为完成的证据项：
 
-- 还需要 Android emulator 或真机在本地 E2E 与线上控制台分别完成真实登录、VPN 授权、config server 下发 `run_network_instance`、`Android VPN established` 诊断日志、系统 route table、未排除应用访问虚拟 IP/子网成功、EasyTier Pro 自身 UID 不走 VPN route 的证据采集；最终应由 `.\scripts\verify_android_porting_readiness.ps1 -RequireE2E` 校验本地与线上 `summary.json`，并要求 `environment_name` 分别为 `local` 和 `online`，connected summary 中的 `diagnostics_builder_routes`、`diagnostics_builder_disallowed_applications` 和 `diagnostics_builder_self_disallowed` 证明 Android VPN Builder 实际收到了期望路由和自排除配置。
+- 还需要 Android emulator 或真机在本地 E2E 与线上控制台分别完成真实登录、VPN 授权、config server 下发 `run_network_instance`、`Android VPN established` 诊断日志、系统 route table、未排除应用访问虚拟 IP/子网成功、EasyTier Pro 自身 UID 不走 VPN route 的证据采集；最终应由 `.\scripts\verify_android_porting_readiness.ps1 -RequireE2E` 校验本地与线上 `summary.json`，并要求 `environment_name` 分别为 `local` 和 `online`，connected summary 中的 `diagnostics_builder_routes` 覆盖全部 `expected_routes`、`diagnostics_builder_disallowed_applications` 包含 `package_name` 且 `diagnostics_builder_self_disallowed=true`，证明 Android VPN Builder 实际收到了期望路由和自排除配置。
 - release 构建仍需要渠道/项目方提供 `android/key.properties` 和上传签名证书保管流程；最终 release sign-off 应由 `.\scripts\verify_android_porting_readiness.ps1 -RequireSigning` 校验。
 - 国内渠道 VPN 权限说明和后台常驻通知文案草案已补充到 `docs/android-release.md`，仍需产品/法务/渠道终审；Android 流量统计最终口径仍需产品确认。
 
