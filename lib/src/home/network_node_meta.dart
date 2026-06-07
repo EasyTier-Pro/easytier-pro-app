@@ -26,9 +26,14 @@ class _NodeMetaLine extends StatelessWidget {
     if (peer != null) {
       final p = peer!;
 
-      final cost = p.cost.trim();
-      if (cost.isNotEmpty && cost != '-' && cost.toLowerCase() != 'local') {
-        parts.add(cost.toLowerCase() == 'p2p' ? 'P2P' : cost);
+      final cost = _formatConnectionCost(p.cost);
+      if (cost.isNotEmpty) {
+        parts.add(cost);
+      }
+
+      final tunnel = _formatTunnelProto(p.tunnelProto);
+      if (tunnel.isNotEmpty) {
+        parts.add(tunnel);
       }
 
       final latency = p.latencyText.trim();
@@ -36,11 +41,6 @@ class _NodeMetaLine extends StatelessWidget {
         parts.add(
           latency.toLowerCase().endsWith('ms') ? latency : '$latency ms',
         );
-      }
-
-      final peerId = p.peerId.trim();
-      if (peerId.isNotEmpty) {
-        parts.add('Peer: $peerId');
       }
 
       final loss = p.lossText.trim();
@@ -116,6 +116,43 @@ class _NodeStateMessage extends StatelessWidget {
       child: Text(message, textAlign: TextAlign.center),
     );
   }
+}
+
+String _formatConnectionCost(String costText) {
+  final value = costText.trim();
+  if (value.isEmpty || value == '-' || value == '*') {
+    return '';
+  }
+
+  final normalized = value.toLowerCase();
+  if (normalized == 'local') {
+    return '';
+  }
+  if (normalized == 'p2p') {
+    return 'P2P';
+  }
+  if (normalized == 'relay') {
+    return '中继';
+  }
+  if (num.tryParse(value) != null) {
+    return '';
+  }
+  return value;
+}
+
+String _formatTunnelProto(String tunnelProto) {
+  final value = tunnelProto.trim();
+  if (value.isEmpty || value == '-' || value == '*') {
+    return '';
+  }
+
+  return switch (value.toLowerCase()) {
+    'udp' => 'UDP',
+    'tcp' => 'TCP',
+    'ws' => 'WebSocket',
+    'wss' => 'WebSocket TLS',
+    _ => value,
+  };
 }
 
 String _formatLatency(String latencyText) {

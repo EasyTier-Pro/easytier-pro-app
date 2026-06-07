@@ -1223,6 +1223,14 @@ void main() {
             deviceId: 'device-1',
             machineId: 'machine-1',
           ),
+          NetworkDevice(
+            id: 'node-2',
+            name: 'laptop-2',
+            online: true,
+            ipv4: '10.144.0.3',
+            deviceId: 'device-2',
+            machineId: 'machine-2',
+          ),
         ],
       },
     );
@@ -1259,6 +1267,20 @@ void main() {
             peerId: '999',
             version: '2.6.4',
           ),
+          '10.144.0.3': CorePeerStatus(
+            cidr: '10.144.0.3/24',
+            ipv4: '10.144.0.3',
+            hostname: 'laptop-2',
+            cost: '1',
+            latencyText: '8.00',
+            lossText: '0.0%',
+            rxBytes: '0 B',
+            txBytes: '0 B',
+            tunnelProto: 'tcp',
+            natType: 'Symmetric',
+            peerId: '123',
+            version: '2.6.4',
+          ),
         },
       ],
     );
@@ -1277,8 +1299,12 @@ void main() {
 
     expect(find.text('desktop-1'), findsOneWidget);
     expect(find.textContaining('P2P'), findsOneWidget);
+    expect(find.textContaining('UDP'), findsOneWidget);
+    expect(find.textContaining('10.144.0.3  ·  1'), findsNothing);
+    expect(find.textContaining('10.144.0.3  ·  TCP'), findsOneWidget);
     expect(find.textContaining('3.45 ms'), findsWidgets);
-    expect(find.textContaining('Peer: 390879727'), findsOneWidget);
+    expect(find.textContaining('Peer: 390879727'), findsNothing);
+    expect(find.textContaining('Peer: 123'), findsNothing);
     expect(find.textContaining('Peer: 999'), findsNothing);
   });
 
