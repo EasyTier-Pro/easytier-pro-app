@@ -220,10 +220,18 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final nextOffset = offset
         .clamp(0.0, _networkDetailHeaderCollapseDistance)
         .toDouble();
-    if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.5) {
+    final notifiedOffset =
+        _networkDetailHeaderCollapse.value.progress *
+        _networkDetailHeaderCollapseDistance;
+    if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.001) {
       return;
     }
     _networkDetailHeaderCollapseOffset = nextOffset;
+    final reachedEdge =
+        nextOffset == 0 || nextOffset == _networkDetailHeaderCollapseDistance;
+    if (!reachedEdge && (notifiedOffset - nextOffset).abs() < 0.5) {
+      return;
+    }
     _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
       progress: _networkDetailHeaderCollapseProgress,
       animate: animate,
