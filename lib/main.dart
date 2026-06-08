@@ -19,6 +19,7 @@ const Color _foreground = Color(0xFF0A0A0A);
 const Color _border = Color(0xFFE5E7EB);
 const Color _brandCoral = Color(0xFFFF5530);
 const String _appFontFamily = 'Inter';
+const double _foruiTypographyScale = 0.96;
 const List<String> _appFontFamilyFallback = <String>[
   'Noto Sans SC',
   'PingFang SC',
@@ -158,14 +159,32 @@ class _MyAppState extends State<MyApp> {
 
 final TextTheme _materialTextTheme = TextTheme(
   headlineMedium: _appTextStyle(
-    const TextStyle(fontWeight: FontWeight.w800, height: 1.08),
+    const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.12),
   ),
   headlineSmall: _appTextStyle(
-    const TextStyle(fontWeight: FontWeight.w800, height: 1.12),
+    const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.16),
   ),
-  titleLarge: _appTextStyle(const TextStyle(fontWeight: FontWeight.w800)),
-  titleMedium: _appTextStyle(const TextStyle(fontWeight: FontWeight.w700)),
-  bodyMedium: _appTextStyle(const TextStyle(height: 1.5)),
+  titleLarge: _appTextStyle(
+    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, height: 1.25),
+  ),
+  titleMedium: _appTextStyle(
+    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.35),
+  ),
+  titleSmall: _appTextStyle(
+    const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, height: 1.35),
+  ),
+  bodyLarge: _appTextStyle(const TextStyle(fontSize: 13.5, height: 1.45)),
+  bodyMedium: _appTextStyle(const TextStyle(fontSize: 13, height: 1.45)),
+  bodySmall: _appTextStyle(const TextStyle(fontSize: 11.5, height: 1.35)),
+  labelLarge: _appTextStyle(
+    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.35),
+  ),
+  labelMedium: _appTextStyle(
+    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.3),
+  ),
+  labelSmall: _appTextStyle(
+    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, height: 1.25),
+  ),
 );
 
 FThemeData _createForuiThemeData() {
@@ -183,7 +202,7 @@ FTypography _foruiTypography(FColors colors) {
     colors: colors,
     touch: false,
     fontFamily: _appFontFamily,
-  );
+  ).scale(sizeScalar: _foruiTypographyScale);
 
   return base.copyWith(
     xs3: _appTextStyle(base.xs3),
