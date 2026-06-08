@@ -370,11 +370,9 @@ class _NetworkDetailHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = collapseProgress.clamp(0.0, 1.0).toDouble();
-    final verticalPadding = _networkDetailLerp(8, 6, progress);
 
     return Container(
       key: const ValueKey<String>('network-detail-header'),
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: verticalPadding),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
@@ -506,8 +504,4 @@ class _NetworkDetailCollapsibleGap extends StatelessWidget {
     final visible = (1 - progress).clamp(0.0, 1.0).toDouble();
     return SizedBox(height: height * visible);
   }
-}
-
-double _networkDetailLerp(double start, double end, double progress) {
-  return start + (end - start) * progress;
 }
