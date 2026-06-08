@@ -1,6 +1,6 @@
 param(
     [string] $EasyTierRoot = "",
-    [string] $EasyTierCommit = "75cd6ab4c6809875b76f18efd00e8cf091dd3f52",
+    [string] $EasyTierCommit = "c0f42ebe8c0b18e49370ae810b13fba1bdbbb811",
     [string] $AndroidSdk = "",
     [string] $NdkVersion = "28.2.13676358",
     [string[]] $Abi = @("arm64-v8a", "x86_64"),
@@ -42,7 +42,7 @@ function Read-AndroidSdkFromLocalProperties() {
 
 if ([string]::IsNullOrWhiteSpace($EasyTierRoot)) {
     $EasyTierRoot = Resolve-FirstPath @(
-        (Join-Path $PSScriptRoot "..\..\EasyTier-android-jni-75cd"),
+        (Join-Path $PSScriptRoot "..\..\EasyTier-android-jni-c0f42"),
         (Join-Path $PSScriptRoot "..\..\EasyTier")
     )
 }
@@ -128,11 +128,6 @@ foreach ($abiName in $Abi) {
     $bindgenArgs = "--sysroot=$sysrootArg -I$includeBase -I$includeTargetPath"
 
     Write-Host "Building EasyTier JNI for $abiName ($rustTarget)"
-    & rustup target add $rustTarget
-    if ($LASTEXITCODE -ne 0) {
-        throw "rustup target add failed for $rustTarget"
-    }
-
     Set-Item -Path "Env:CC_$envSuffix" -Value $clangCmd
     Set-Item -Path "Env:AR_$envSuffix" -Value $llvmAr
     Set-Item -Path "Env:$cargoTargetEnv" -Value $clangCmd
@@ -142,6 +137,12 @@ foreach ($abiName in $Abi) {
 
     Push-Location $jniCrate
     try {
+        Write-Host "Using Rust toolchain: $((& rustup show active-toolchain).Trim())"
+        & rustup target add $rustTarget
+        if ($LASTEXITCODE -ne 0) {
+            throw "rustup target add failed for $rustTarget"
+        }
+
         & cargo build --target $rustTarget --release
         if ($LASTEXITCODE -ne 0) {
             throw "cargo build failed for $rustTarget"

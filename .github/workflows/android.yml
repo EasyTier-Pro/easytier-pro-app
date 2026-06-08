@@ -6,6 +6,13 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
+env:
+  EASYTIER_COMMIT: c0f42ebe8c0b18e49370ae810b13fba1bdbbb811
+  ANDROID_NDK_VERSION: 28.2.13676358
+
 jobs:
   android-jni:
     name: Android JNI and debug build
@@ -19,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: EasyTier/EasyTier
-          ref: 75cd6ab4c6809875b76f18efd00e8cf091dd3f52
+          ref: ${{ env.EASYTIER_COMMIT }}
           path: EasyTier
           submodules: recursive
 
@@ -30,14 +37,17 @@ jobs:
           cache: true
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95"
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android NDK
         shell: pwsh
-        run: sdkmanager "ndk;28.2.13676358"
+        run: sdkmanager "ndk;$env:ANDROID_NDK_VERSION"
 
       - name: Install Flutter dependencies
         run: flutter pub get
@@ -53,8 +63,9 @@ jobs:
         run: >
           ./scripts/build_android_jni.ps1
           -EasyTierRoot ./EasyTier
+          -EasyTierCommit $env:EASYTIER_COMMIT
           -AndroidSdk $env:ANDROID_HOME
-          -SkipCopy
+          -NdkVersion $env:ANDROID_NDK_VERSION
 
       - name: Verify Android release inputs
         shell: pwsh

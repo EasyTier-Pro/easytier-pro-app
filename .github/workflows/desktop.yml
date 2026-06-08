@@ -1,0 +1,90 @@
+name: Desktop Packages
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows release package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package Windows release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive `
+            -Path build\windows\x64\runner\Release\* `
+            -DestinationPath dist\easytier-pro-windows-x64.zip `
+            -Force
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-windows-x64
+          path: dist/easytier-pro-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS release package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Package macOS release
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent \
+            "build/macos/Build/Products/Release/EasyTier Pro.app" \
+            "dist/easytier-pro-macos-${{ matrix.arch }}.zip"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-macos-${{ matrix.arch }}
+          path: dist/easytier-pro-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error

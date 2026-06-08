@@ -239,6 +239,7 @@ python -m http.server 5002
 
 每次发布前检查：
 
+- GitHub Actions 的 `Desktop Packages` workflow 已为 Windows release 目录和 macOS `.app` 生成 zip artifact；正式分发前仍需使用受控证书、私钥和渠道配置完成签名、公证、安装器或 DMG 制作。
 - `pubspec.yaml` 的 `version` 已更新。
 - 使用正确的 `EASYTIER_APPCAST_URL` 构建 release 包。
 - macOS release 构建已完成签名和 notarization。
