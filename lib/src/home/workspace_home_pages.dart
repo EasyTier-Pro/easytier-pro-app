@@ -273,7 +273,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _NetworkDetailSectionSelector(
           selected: _networkDetailSection,
           nodeCount: devices.length,
@@ -282,7 +282,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           onChanged: (section) =>
               _updateState(() => _networkDetailSection = section),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Expanded(
           child: AnimatedSwitcher(
             duration: appMotionMedium,
@@ -436,46 +436,43 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SelectionContainer.disabled(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 520;
-              return Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  _NetworkDetailSectionButton(
-                    selected: selected == _NetworkDetailSection.nodes,
-                    icon: Icons.devices_other_outlined,
-                    label: compact ? '节点' : '节点 $nodeCount',
-                    onPressed: () => onChanged(_NetworkDetailSection.nodes),
-                  ),
-                  _NetworkDetailSectionButton(
-                    selected: selected == _NetworkDetailSection.subnets,
-                    icon: Icons.alt_route_outlined,
-                    label: subnetCount == null || compact
-                        ? '子网'
-                        : '子网 $subnetCount',
-                    onPressed: () => onChanged(_NetworkDetailSection.subnets),
-                  ),
-                  _NetworkDetailSectionButton(
-                    selected: selected == _NetworkDetailSection.local,
-                    icon: Icons.computer_outlined,
-                    label: hasLocalNode && !compact ? '本机已加入' : '本机',
-                    onPressed: () => onChanged(_NetworkDetailSection.local),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          return Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+              ),
+            ),
+            child: Wrap(
+              spacing: 0,
+              runSpacing: 0,
+              children: [
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.nodes,
+                  icon: Icons.devices_other_outlined,
+                  label: compact ? '节点' : '节点 $nodeCount',
+                  onPressed: () => onChanged(_NetworkDetailSection.nodes),
+                ),
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.subnets,
+                  icon: Icons.alt_route_outlined,
+                  label: subnetCount == null || compact
+                      ? '子网'
+                      : '子网 $subnetCount',
+                  onPressed: () => onChanged(_NetworkDetailSection.subnets),
+                ),
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.local,
+                  icon: Icons.computer_outlined,
+                  label: hasLocalNode && !compact ? '本机已加入' : '本机',
+                  onPressed: () => onChanged(_NetworkDetailSection.local),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -496,14 +493,42 @@ class _NetworkDetailSectionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FButton(
-      variant: selected ? .secondary : .ghost,
-      size: .sm,
-      onPress: onPressed,
-      mainAxisSize: MainAxisSize.min,
-      child: Row(
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        border: selected
+            ? const Border(
+                bottom: BorderSide(color: Color(0xFF0F172A), width: 2),
+              )
+            : null,
+      ),
+      child: FButton(
+        variant: .ghost,
+        size: .sm,
+        onPress: onPressed,
         mainAxisSize: MainAxisSize.min,
-        children: [Icon(icon, size: 15), const SizedBox(width: 5), Text(label)],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: selected
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -610,21 +635,26 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _NetworkDetailInfoPanel(
-          icon: Icons.alt_route_outlined,
-          title: '子网路由',
-          subtitle: routes.allowedProxyCidrs.isEmpty
+        Text(
+          routes.allowedProxyCidrs.isEmpty
               ? quotaText
               : '$quotaText · 允许 ${routes.allowedProxyCidrs.join(', ')}',
-          trailing: loading
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: FCircularProgress(size: .sm),
-                )
-              : null,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF64748B),
+          ),
         ),
-        if (error != null) ...[
+        const SizedBox(height: 12),
+        if (loading) ...[
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox.square(
+              dimension: 16,
+              child: FCircularProgress(size: .sm),
+            ),
+          ),
           const SizedBox(height: 12),
+        ],
+        if (error != null) ...[
           _NetworkDetailNotice(message: error!),
           const SizedBox(height: 12),
           Align(
@@ -636,8 +666,8 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
               child: const Text('重试'),
             ),
           ),
+          const SizedBox(height: 12),
         ],
-        const SizedBox(height: 12),
         if (routes.routes.isEmpty)
           const SizedBox(
             height: 180,
@@ -864,19 +894,17 @@ class _LocalNetworkSettingsPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _NetworkDetailInfoPanel(
-          icon: Icons.computer_outlined,
-          title: node.displayLabel,
-          subtitle: '${network.name} · $ipv4',
-          trailing: loading
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: FCircularProgress(size: .sm),
-                )
-              : null,
-        ),
-        if (error != null) ...[
+        if (loading) ...[
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox.square(
+              dimension: 16,
+              child: FCircularProgress(size: .sm),
+            ),
+          ),
           const SizedBox(height: 12),
+        ],
+        if (error != null) ...[
           _NetworkDetailNotice(message: error!),
           const SizedBox(height: 12),
           Align(
@@ -888,8 +916,8 @@ class _LocalNetworkSettingsPanel extends StatelessWidget {
               child: const Text('重试'),
             ),
           ),
+          const SizedBox(height: 12),
         ],
-        const SizedBox(height: 12),
         _NetworkDetailCard(
           title: '身份',
           children: [
@@ -982,66 +1010,6 @@ class _LocalNetworkSettingsPanel extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _NetworkDetailInfoPanel extends StatelessWidget {
-  const _NetworkDetailInfoPanel({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: const Color(0xFF334155)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF0F172A),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[const SizedBox(width: 10), trailing!],
-          ],
-        ),
-      ),
     );
   }
 }
