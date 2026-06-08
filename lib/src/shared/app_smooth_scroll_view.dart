@@ -5,8 +5,14 @@ import 'package:flutter/material.dart';
 
 import 'app_motion.dart';
 
+enum AppScrollDeltaSource { pointerSignal, userDrag }
+
 typedef AppScrollDeltaCoordinator =
-    double Function(double delta, ScrollMetrics metrics);
+    double Function(
+      double delta,
+      ScrollMetrics metrics, {
+      AppScrollDeltaSource source,
+    });
 
 class AppSmoothScrollView extends StatefulWidget {
   const AppSmoothScrollView({
@@ -128,7 +134,11 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
       return;
     }
 
-    final remainingDelta = coordinator(event.scrollDelta.dy, position);
+    final remainingDelta = coordinator(
+      event.scrollDelta.dy,
+      position,
+      source: AppScrollDeltaSource.pointerSignal,
+    );
     if (remainingDelta == event.scrollDelta.dy) {
       return;
     }
@@ -208,6 +218,7 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
     if (delta.abs() < _precisionScrollThreshold) {
       final remainingDelta = _coordinateScrollDelta(
         delta * _precisionScrollScale,
+        source: AppScrollDeltaSource.pointerSignal,
       );
       _targetPixels = null;
       _lastWheelDirection = 0;
@@ -217,7 +228,10 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
       return;
     }
 
-    final remainingDelta = _coordinateScrollDelta(delta);
+    final remainingDelta = _coordinateScrollDelta(
+      delta,
+      source: AppScrollDeltaSource.pointerSignal,
+    );
     if (remainingDelta == 0) {
       _targetPixels = _clampToExtents(pixels);
       _lastWheelDirection = 0;
@@ -242,6 +256,7 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
       _coordinateScrollDelta(
         rawTarget - minScrollExtent,
         metrics: copyWith(pixels: minScrollExtent),
+        source: AppScrollDeltaSource.pointerSignal,
       );
     }
 
@@ -265,19 +280,26 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
   @override
   void applyUserOffset(double delta) {
     final scrollDelta = -delta;
-    final remainingScrollDelta = _coordinateScrollDelta(scrollDelta);
+    final remainingScrollDelta = _coordinateScrollDelta(
+      scrollDelta,
+      source: AppScrollDeltaSource.userDrag,
+    );
     if (remainingScrollDelta == 0) {
       return;
     }
     super.applyUserOffset(-remainingScrollDelta);
   }
 
-  double _coordinateScrollDelta(double delta, {ScrollMetrics? metrics}) {
+  double _coordinateScrollDelta(
+    double delta, {
+    ScrollMetrics? metrics,
+    required AppScrollDeltaSource source,
+  }) {
     final coordinator = scrollDeltaCoordinatorProvider();
     if (coordinator == null || delta == 0) {
       return delta;
     }
-    return coordinator(delta, metrics ?? this);
+    return coordinator(delta, metrics ?? this, source: source);
   }
 
   bool _canMove(double delta) {

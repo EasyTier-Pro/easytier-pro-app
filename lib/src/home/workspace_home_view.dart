@@ -87,6 +87,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   _DashboardView _activeView = _DashboardView.overview;
   _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
   double _networkDetailHeaderCollapseOffset = 0;
+  final _networkDetailHeaderCollapse =
+      ValueNotifier<_NetworkDetailHeaderCollapse>(
+        const _NetworkDetailHeaderCollapse(progress: 0, animate: false),
+      );
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
   final TextEditingController _newNetworkNameController = TextEditingController(
@@ -178,8 +182,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   double _coordinateNetworkDetailScrollDelta(
     double delta,
-    ScrollMetrics metrics,
-  ) {
+    ScrollMetrics metrics, {
+    AppScrollDeltaSource source = AppScrollDeltaSource.pointerSignal,
+  }) {
     if (delta == 0) {
       return 0;
     }
@@ -201,29 +206,46 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       remainingDelta += consumed;
     }
 
-    _setNetworkDetailHeaderCollapseOffset(nextOffset);
+    _setNetworkDetailHeaderCollapseOffset(
+      nextOffset,
+      animate: source == AppScrollDeltaSource.pointerSignal,
+    );
     return remainingDelta;
   }
 
-  void _setNetworkDetailHeaderCollapseOffset(double offset) {
+  void _setNetworkDetailHeaderCollapseOffset(
+    double offset, {
+    required bool animate,
+  }) {
     final nextOffset = offset
         .clamp(0.0, _networkDetailHeaderCollapseDistance)
         .toDouble();
     if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.5) {
       return;
     }
-    setState(() => _networkDetailHeaderCollapseOffset = nextOffset);
+    _networkDetailHeaderCollapseOffset = nextOffset;
+    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+      progress: _networkDetailHeaderCollapseProgress,
+      animate: animate,
+    );
   }
 
-  void _resetNetworkDetailScrollOffset() {
+  void _resetNetworkDetailScrollOffset({bool animate = false}) {
+    if (_networkDetailHeaderCollapseOffset == 0) {
+      return;
+    }
     _networkDetailHeaderCollapseOffset = 0;
+    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+      progress: 0,
+      animate: animate,
+    );
   }
 
   void _handleNetworkDetailStaticViewportShown() {
     if (_networkDetailHeaderCollapseOffset == 0) {
       return;
     }
-    setState(_resetNetworkDetailScrollOffset);
+    _resetNetworkDetailScrollOffset();
   }
 
   void _updateState(VoidCallback fn) {
@@ -358,6 +380,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _peerPollTimer?.cancel();
     _newNetworkNameController.dispose();
     _newNetworkIPv4CidrController.dispose();
+    _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     widget.traySupport.setConnectionAction(null);
     super.dispose();
