@@ -167,17 +167,19 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
     }
 
     final position = scrollController.position;
-    if (position.maxScrollExtent > position.minScrollExtent + 0.5 ||
-        position.pixels > position.minScrollExtent + 0.5 ||
-        event.delta.dy == 0) {
+    final scrollDelta = -event.delta.dy;
+    if (scrollDelta == 0) {
       return;
     }
 
-    coordinator(
-      -event.delta.dy,
-      position,
-      source: AppScrollDeltaSource.userDrag,
-    );
+    final cannotScroll =
+        position.maxScrollExtent <= position.minScrollExtent + 0.5;
+    final atTrailingEdge = position.pixels >= position.maxScrollExtent - 0.5;
+    if (!cannotScroll && !(scrollDelta > 0 && atTrailingEdge)) {
+      return;
+    }
+
+    coordinator(scrollDelta, position, source: AppScrollDeltaSource.userDrag);
   }
 }
 
