@@ -1024,6 +1024,7 @@ void main() {
     await tester.pump();
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
+    await _pumpAppMotionFrames(tester);
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
     expect(controller.offset, controller.position.minScrollExtent);
@@ -1060,7 +1061,7 @@ void main() {
     );
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, -240)));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
+    await _pumpAppMotionFrames(tester);
 
     expect(controller.offset, controller.position.minScrollExtent);
     expect(
@@ -1146,6 +1147,7 @@ void main() {
     await tester.pump();
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
+    await _pumpAppMotionFrames(tester);
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
     expect(controller.offset, controller.position.minScrollExtent);
@@ -1218,6 +1220,7 @@ void main() {
     await tester.pump();
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
+    await _pumpAppMotionFrames(tester);
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
     expect(controller.offset, controller.position.minScrollExtent);
