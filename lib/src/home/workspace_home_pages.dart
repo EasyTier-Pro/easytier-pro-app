@@ -171,9 +171,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Color(0xFFE5E7EB)),
-            ),
+            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,8 +200,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                           size: .sm,
                           onPress: deleting
                               ? null
-                              : () =>
-                                    unawaited(_refreshNetworkNodes(network)),
+                              : () => unawaited(_refreshNetworkNodes(network)),
                           mainAxisSize: MainAxisSize.min,
                           child: const Icon(Icons.refresh, size: 16),
                         ),
@@ -420,38 +417,43 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 520;
-          return Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
+          return FTabs(
+            control: FTabControl.lifted(
+              index: selected.index,
+              onChange: (index) =>
+                  onChanged(_NetworkDetailSection.values[index]),
             ),
-            child: Wrap(
-              spacing: 0,
-              runSpacing: 0,
-              children: [
-                _NetworkDetailSectionButton(
+            style: const FTabsStyleDelta.delta(height: 32, spacing: 0),
+            contentPhysics: const NeverScrollableScrollPhysics(),
+            scrollable: compact,
+            children: [
+              FTabEntry(
+                label: _NetworkDetailSectionTabLabel(
                   selected: selected == _NetworkDetailSection.nodes,
                   icon: Icons.devices_other_outlined,
                   label: compact ? '节点' : '节点 $nodeCount',
-                  onPressed: () => onChanged(_NetworkDetailSection.nodes),
                 ),
-                _NetworkDetailSectionButton(
+                child: const SizedBox.shrink(),
+              ),
+              FTabEntry(
+                label: _NetworkDetailSectionTabLabel(
                   selected: selected == _NetworkDetailSection.subnets,
                   icon: Icons.alt_route_outlined,
                   label: subnetCount == null || compact
                       ? '子网'
                       : '子网 $subnetCount',
-                  onPressed: () => onChanged(_NetworkDetailSection.subnets),
                 ),
-                _NetworkDetailSectionButton(
+                child: const SizedBox.shrink(),
+              ),
+              FTabEntry(
+                label: _NetworkDetailSectionTabLabel(
                   selected: selected == _NetworkDetailSection.local,
                   icon: Icons.computer_outlined,
                   label: hasLocalNode && !compact ? '本机已加入' : '本机',
-                  onPressed: () => onChanged(_NetworkDetailSection.local),
                 ),
-              ],
-            ),
+                child: const SizedBox.shrink(),
+              ),
+            ],
           );
         },
       ),
@@ -459,66 +461,30 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
   }
 }
 
-class _NetworkDetailSectionButton extends StatelessWidget {
-  const _NetworkDetailSectionButton({
+class _NetworkDetailSectionTabLabel extends StatelessWidget {
+  const _NetworkDetailSectionTabLabel({
     required this.selected,
     required this.icon,
     required this.label,
-    required this.onPressed,
   });
 
   final bool selected;
   final IconData icon;
   final String label;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final button = FButton(
-      variant: .ghost,
-      size: .sm,
-      onPress: onPressed,
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: selected
-                ? const Color(0xFF0F172A)
-                : const Color(0xFF64748B),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected
-                  ? const Color(0xFF0F172A)
-                  : const Color(0xFF64748B),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (!selected) return button;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF000000).withAlpha(8),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: button,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: selected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+        ),
+        const SizedBox(width: 5),
+        Text(label),
+      ],
     );
   }
 }

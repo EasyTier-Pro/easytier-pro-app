@@ -1166,7 +1166,7 @@ void main() {
     expect(cardRect.right, lessThanOrEqualTo(listRect.right + 0.1));
     expect(find.byTooltip('刷新节点'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FButton, '子网'));
+    await tester.tap(find.text('子网'));
     await _pumpAppMotionFrames(tester);
 
     expect(tester.takeException(), isNull);
@@ -1653,7 +1653,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.tap(find.widgetWithText(FButton, '子网 1'));
+    await tester.tap(find.text('子网 1'));
     await _pumpAppMotionFrames(tester);
 
     expect(
@@ -1716,7 +1716,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.tap(find.widgetWithText(FButton, '子网 0'));
+    await tester.tap(find.text('子网 0'));
     await _pumpAppMotionFrames(tester);
 
     expect(find.textContaining('还没有配置子网路由'), findsOneWidget);
@@ -1767,7 +1767,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.tap(find.widgetWithText(FButton, '子网'));
+    await tester.tap(find.text('子网'));
     await _pumpAppMotionFrames(tester);
 
     expect(find.textContaining('temporary route failure'), findsOneWidget);
@@ -1776,7 +1776,6 @@ void main() {
 
     expect(find.textContaining('temporary route failure'), findsNothing);
     expect(find.text('192.168.50.0/24'), findsOneWidget);
-
   });
 
   testWidgets('network detail local segment shows local node config', (
@@ -1860,7 +1859,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, 'office-network');
-    await tester.tap(find.widgetWithText(FButton, '本机已加入'));
+    await tester.tap(find.text('本机已加入'));
     await _pumpAppMotionFrames(tester);
 
     expect(find.text('10.144.0.2'), findsOneWidget);
@@ -1918,7 +1917,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _selectNetworkFromHeader(tester, '办公网');
-    await tester.tap(find.widgetWithText(FButton, '本机'));
+    await tester.tap(find.text('本机'));
     await _pumpAppMotionFrames(tester);
 
     expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
