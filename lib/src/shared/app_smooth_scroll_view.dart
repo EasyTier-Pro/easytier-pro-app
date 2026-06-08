@@ -234,7 +234,17 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
     final baseOffset = direction == _lastWheelDirection
         ? _targetPixels ?? pixels
         : pixels;
-    final target = _clampToExtents(baseOffset + remainingDelta);
+    final rawTarget = baseOffset + remainingDelta;
+    final target = _clampToExtents(rawTarget);
+    if (direction < 0 && rawTarget < minScrollExtent) {
+      // Let coordinated headers react as soon as the smooth-scroll target
+      // reaches the leading edge, even while the visible pixels are animating.
+      _coordinateScrollDelta(
+        rawTarget - minScrollExtent,
+        metrics: copyWith(pixels: minScrollExtent),
+      );
+    }
+
     if ((target - pixels).abs() < _edgeTolerance) {
       _targetPixels = target;
       _lastWheelDirection = direction;
@@ -262,12 +272,12 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
     super.applyUserOffset(-remainingScrollDelta);
   }
 
-  double _coordinateScrollDelta(double delta) {
+  double _coordinateScrollDelta(double delta, {ScrollMetrics? metrics}) {
     final coordinator = scrollDeltaCoordinatorProvider();
     if (coordinator == null || delta == 0) {
       return delta;
     }
-    return coordinator(delta, this);
+    return coordinator(delta, metrics ?? this);
   }
 
   bool _canMove(double delta) {

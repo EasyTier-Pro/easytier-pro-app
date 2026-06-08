@@ -1054,7 +1054,7 @@ void main() {
 
     expect(controller.offset, greaterThan(beforePrecisionOffset + 8));
 
-    controller.jumpTo(controller.position.minScrollExtent);
+    controller.jumpTo(80);
     await tester.pump();
     await tester.sendEventToBinding(
       mouse.hover(tester.getCenter(scrollFinder)),
