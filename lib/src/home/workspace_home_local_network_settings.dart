@@ -10,7 +10,8 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
     required this.error,
     required this.joinState,
     required this.onRetry,
-    this.onScrollOffsetChanged,
+    this.scrollDeltaCoordinator,
+    this.onStaticContentShown,
   });
 
   final ConsoleNetwork network;
@@ -20,26 +21,27 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
   final String? error;
   final _JoinNetworkState joinState;
   final VoidCallback onRetry;
-  final ValueChanged<double>? onScrollOffsetChanged;
+  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
+  final VoidCallback? onStaticContentShown;
 
   @override
   Widget build(BuildContext context) {
     final localNode = node;
     if (localNode == null) {
       return _NetworkDetailStaticViewport(
-        onScrollOffsetChanged: onScrollOffsetChanged,
+        onShown: onStaticContentShown,
         child: const _StateMessage(message: '本机尚未加入此网络。'),
       );
     }
     if (loading && config == null) {
       return _NetworkDetailStaticViewport(
-        onScrollOffsetChanged: onScrollOffsetChanged,
+        onShown: onStaticContentShown,
         child: const Center(child: FCircularProgress()),
       );
     }
     if (error != null && config == null) {
       return _NetworkDetailStaticViewport(
-        onScrollOffsetChanged: onScrollOffsetChanged,
+        onShown: onStaticContentShown,
         child: _StateMessage(
           message: error!,
           action: FButton(
@@ -54,13 +56,13 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
     final view = config;
     if (view == null) {
       return _NetworkDetailStaticViewport(
-        onScrollOffsetChanged: onScrollOffsetChanged,
+        onShown: onStaticContentShown,
         child: const _StateMessage(message: '正在读取本机设置...'),
       );
     }
 
     return _NetworkDetailScrollViewport(
-      onScrollOffsetChanged: onScrollOffsetChanged,
+      scrollDeltaCoordinator: scrollDeltaCoordinator,
       child: _LocalNetworkSettingsPanel(
         network: network,
         node: localNode,

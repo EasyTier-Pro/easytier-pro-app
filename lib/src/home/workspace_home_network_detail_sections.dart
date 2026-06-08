@@ -106,11 +106,11 @@ class _NetworkDetailSectionTabLabel extends StatelessWidget {
 class _NetworkDetailScrollViewport extends StatefulWidget {
   const _NetworkDetailScrollViewport({
     required this.child,
-    this.onScrollOffsetChanged,
+    this.scrollDeltaCoordinator,
   });
 
   final Widget child;
-  final ValueChanged<double>? onScrollOffsetChanged;
+  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
 
   @override
   State<_NetworkDetailScrollViewport> createState() =>
@@ -122,41 +122,9 @@ class _NetworkDetailScrollViewportState
   final ScrollController _scrollController = ScrollController();
 
   @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_handleScrollOffsetChanged);
-    _scheduleScrollOffsetSync();
-  }
-
-  @override
-  void didUpdateWidget(covariant _NetworkDetailScrollViewport oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.onScrollOffsetChanged != widget.onScrollOffsetChanged) {
-      _scheduleScrollOffsetSync();
-    }
-  }
-
-  @override
   void dispose() {
-    _scrollController.removeListener(_handleScrollOffsetChanged);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _handleScrollOffsetChanged() {
-    widget.onScrollOffsetChanged?.call(_scrollController.offset);
-  }
-
-  void _scheduleScrollOffsetSync() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      final offset = _scrollController.hasClients
-          ? _scrollController.offset
-          : 0.0;
-      widget.onScrollOffsetChanged?.call(offset);
-    });
   }
 
   @override
@@ -167,6 +135,7 @@ class _NetworkDetailScrollViewportState
       child: AppSmoothScrollView(
         controller: _scrollController,
         primary: false,
+        scrollDeltaCoordinator: widget.scrollDeltaCoordinator,
         child: widget.child,
       ),
     );
@@ -174,13 +143,10 @@ class _NetworkDetailScrollViewportState
 }
 
 class _NetworkDetailStaticViewport extends StatefulWidget {
-  const _NetworkDetailStaticViewport({
-    required this.child,
-    this.onScrollOffsetChanged,
-  });
+  const _NetworkDetailStaticViewport({required this.child, this.onShown});
 
   final Widget child;
-  final ValueChanged<double>? onScrollOffsetChanged;
+  final VoidCallback? onShown;
 
   @override
   State<_NetworkDetailStaticViewport> createState() =>
@@ -198,7 +164,7 @@ class _NetworkDetailStaticViewportState
   @override
   void didUpdateWidget(covariant _NetworkDetailStaticViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.onScrollOffsetChanged != widget.onScrollOffsetChanged ||
+    if (oldWidget.onShown != widget.onShown ||
         oldWidget.child.key != widget.child.key) {
       _scheduleReset();
     }
@@ -209,7 +175,7 @@ class _NetworkDetailStaticViewportState
       if (!mounted) {
         return;
       }
-      widget.onScrollOffsetChanged?.call(0);
+      widget.onShown?.call();
     });
   }
 

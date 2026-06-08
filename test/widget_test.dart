@@ -1014,20 +1014,6 @@ void main() {
       const ValueKey<String>('network-detail-header'),
     );
     final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    controller.jumpTo(96);
-    await tester.pump();
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-
-    controller.jumpTo(controller.position.minScrollExtent);
-    await tester.pump();
-
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(expandedHeaderHeight, 0.1),
-    );
-
-    final beforeWheelOffset = controller.offset;
     final scrollFinder = find.byKey(
       const ValueKey<String>('network-node-list-scroll'),
     );
@@ -1036,7 +1022,14 @@ void main() {
       mouse.hover(tester.getCenter(scrollFinder)),
     );
     await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 240)));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
+    await tester.pump();
+
+    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+    expect(controller.offset, controller.position.minScrollExtent);
+
+    final beforeWheelOffset = controller.offset;
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
 
@@ -1063,6 +1056,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(controller.offset, controller.position.minScrollExtent);
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(expandedHeaderHeight, 0.1),
+    );
 
     controller.jumpTo(controller.position.maxScrollExtent);
     await tester.pump();
@@ -1135,10 +1132,22 @@ void main() {
     final controller = scrollView.controller!;
     expect(controller.position.maxScrollExtent, greaterThan(0));
 
-    controller.jumpTo(96);
+    final mouse = TestPointer(2, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(subnetScrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+    expect(controller.offset, controller.position.minScrollExtent);
+
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(controller.offset, greaterThan(controller.position.minScrollExtent));
   });
 
   testWidgets('network detail resets collapsed header for empty node lists', (
@@ -1192,10 +1201,19 @@ void main() {
     final controller = scrollView.controller!;
     expect(controller.position.maxScrollExtent, greaterThan(0));
 
-    controller.jumpTo(96);
+    final scrollFinder = find.byKey(
+      const ValueKey<String>('network-node-list-scroll'),
+    );
+    final mouse = TestPointer(3, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(scrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
     await tester.pump();
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+    expect(controller.offset, controller.position.minScrollExtent);
 
     await _selectNetworkFromHeader(tester, '空网络');
 

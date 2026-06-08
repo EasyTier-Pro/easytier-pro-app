@@ -208,7 +208,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 nodes: devices,
                 peerStatusesByIpv4: peerStatuses,
                 runtimeError: peerStatusError,
-                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
+                scrollDeltaCoordinator: _coordinateNetworkDetailScrollDelta,
+                onStaticContentShown: _handleNetworkDetailStaticViewportShown,
               ),
               _NetworkDetailSection.subnets => _NetworkSubnetRouteViewport(
                 key: const ValueKey<String>('network-detail-section-subnets'),
@@ -216,7 +217,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 loading: subnetRoutesLoading,
                 error: subnetRouteError,
                 onRetry: () => unawaited(_loadNetworkSubnetRoutes(network.id)),
-                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
+                scrollDeltaCoordinator: _coordinateNetworkDetailScrollDelta,
+                onStaticContentShown: _handleNetworkDetailStaticViewportShown,
               ),
               _NetworkDetailSection.local => _LocalNetworkSettingsViewport(
                 key: const ValueKey<String>('network-detail-section-local'),
@@ -228,7 +230,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 joinState: state,
                 onRetry: () =>
                     unawaited(_loadLocalNodeConfigForNetworkId(network.id)),
-                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
+                scrollDeltaCoordinator: _coordinateNetworkDetailScrollDelta,
+                onStaticContentShown: _handleNetworkDetailStaticViewportShown,
               ),
             },
           ),

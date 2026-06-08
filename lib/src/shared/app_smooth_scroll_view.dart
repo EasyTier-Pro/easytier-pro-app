@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 
 import 'app_motion.dart';
 
+typedef AppScrollDeltaCoordinator =
+    double Function(double delta, ScrollMetrics metrics);
+
 class AppSmoothScrollView extends StatefulWidget {
   const AppSmoothScrollView({
     super.key,
@@ -19,6 +22,7 @@ class AppSmoothScrollView extends StatefulWidget {
     this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
     this.restorationId,
     this.clipBehavior = Clip.hardEdge,
+    this.scrollDeltaCoordinator,
     this.child,
   });
 
@@ -33,6 +37,7 @@ class AppSmoothScrollView extends StatefulWidget {
   final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
   final String? restorationId;
   final Clip clipBehavior;
+  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
   final Widget? child;
 
   @override
@@ -78,27 +83,61 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
   @override
   Widget build(BuildContext context) {
     final scrollController = _effectiveScrollController;
+    scrollController.scrollDeltaCoordinator = widget.scrollDeltaCoordinator;
 
     return NotificationListener<OverscrollIndicatorNotification>(
       onNotification: (notification) {
         notification.disallowIndicator();
         return false;
       },
-      child: SingleChildScrollView(
-        key: widget.scrollViewKey,
-        controller: scrollController,
-        primary: widget.primary,
-        scrollDirection: widget.scrollDirection,
-        reverse: widget.reverse,
-        padding: widget.padding,
-        physics: widget.physics,
-        dragStartBehavior: widget.dragStartBehavior,
-        keyboardDismissBehavior: widget.keyboardDismissBehavior,
-        restorationId: widget.restorationId,
-        clipBehavior: widget.clipBehavior,
-        child: widget.child,
+      child: Listener(
+        onPointerSignal: (event) =>
+            _handlePointerSignal(event, scrollController),
+        child: SingleChildScrollView(
+          key: widget.scrollViewKey,
+          controller: scrollController,
+          primary: widget.primary,
+          scrollDirection: widget.scrollDirection,
+          reverse: widget.reverse,
+          padding: widget.padding,
+          physics: widget.physics,
+          dragStartBehavior: widget.dragStartBehavior,
+          keyboardDismissBehavior: widget.keyboardDismissBehavior,
+          restorationId: widget.restorationId,
+          clipBehavior: widget.clipBehavior,
+          child: widget.child,
+        ),
       ),
     );
+  }
+
+  void _handlePointerSignal(
+    PointerSignalEvent event,
+    _AppSmoothScrollController scrollController,
+  ) {
+    final coordinator = widget.scrollDeltaCoordinator;
+    if (coordinator == null ||
+        event is! PointerScrollEvent ||
+        !scrollController.hasClients ||
+        event.scrollDelta.dy >= 0) {
+      return;
+    }
+
+    final position = scrollController.position;
+    if (position.pixels > position.minScrollExtent + 0.5) {
+      return;
+    }
+
+    final remainingDelta = coordinator(event.scrollDelta.dy, position);
+    if (remainingDelta == event.scrollDelta.dy) {
+      return;
+    }
+
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (remainingDelta != 0 && scrollController.hasClients) {
+        scrollController.position.pointerScroll(remainingDelta);
+      }
+    });
   }
 }
 
@@ -110,6 +149,7 @@ class _AppSmoothScrollController extends ScrollController {
       );
 
   final ScrollController clientController;
+  AppScrollDeltaCoordinator? scrollDeltaCoordinator;
 
   @override
   ScrollPosition createScrollPosition(
@@ -122,6 +162,7 @@ class _AppSmoothScrollController extends ScrollController {
       context: context,
       oldPosition: oldPosition,
       initialPixels: initialScrollOffset,
+      scrollDeltaCoordinatorProvider: () => scrollDeltaCoordinator,
     );
   }
 
@@ -148,8 +189,10 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
     required super.context,
     super.oldPosition,
     required double super.initialPixels,
+    required this.scrollDeltaCoordinatorProvider,
   });
 
+  final AppScrollDeltaCoordinator? Function() scrollDeltaCoordinatorProvider;
   static const double _edgeTolerance = 0.5;
   static const double _precisionScrollThreshold = 16;
   static const double _precisionScrollScale = 2.5;
@@ -163,23 +206,35 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
     }
 
     if (delta.abs() < _precisionScrollThreshold) {
+      final remainingDelta = _coordinateScrollDelta(
+        delta * _precisionScrollScale,
+      );
       _targetPixels = null;
       _lastWheelDirection = 0;
-      super.pointerScroll(delta * _precisionScrollScale);
+      if (remainingDelta != 0) {
+        super.pointerScroll(remainingDelta);
+      }
       return;
     }
 
-    if (!_canMove(delta)) {
+    final remainingDelta = _coordinateScrollDelta(delta);
+    if (remainingDelta == 0) {
       _targetPixels = _clampToExtents(pixels);
-      _lastWheelDirection = delta.sign.toInt();
+      _lastWheelDirection = 0;
       return;
     }
 
-    final direction = delta.sign.toInt();
+    if (!_canMove(remainingDelta)) {
+      _targetPixels = _clampToExtents(pixels);
+      _lastWheelDirection = remainingDelta.sign.toInt();
+      return;
+    }
+
+    final direction = remainingDelta.sign.toInt();
     final baseOffset = direction == _lastWheelDirection
         ? _targetPixels ?? pixels
         : pixels;
-    final target = _clampToExtents(baseOffset + delta);
+    final target = _clampToExtents(baseOffset + remainingDelta);
     if ((target - pixels).abs() < _edgeTolerance) {
       _targetPixels = target;
       _lastWheelDirection = direction;
@@ -195,6 +250,24 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
         curve: appMotionCurve,
       ),
     );
+  }
+
+  @override
+  void applyUserOffset(double delta) {
+    final scrollDelta = -delta;
+    final remainingScrollDelta = _coordinateScrollDelta(scrollDelta);
+    if (remainingScrollDelta == 0) {
+      return;
+    }
+    super.applyUserOffset(-remainingScrollDelta);
+  }
+
+  double _coordinateScrollDelta(double delta) {
+    final coordinator = scrollDeltaCoordinatorProvider();
+    if (coordinator == null || delta == 0) {
+      return delta;
+    }
+    return coordinator(delta, this);
   }
 
   bool _canMove(double delta) {

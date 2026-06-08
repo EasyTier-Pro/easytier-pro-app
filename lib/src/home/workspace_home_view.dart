@@ -86,7 +86,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Set<String> _deletingNetworkIds = const <String>{};
   _DashboardView _activeView = _DashboardView.overview;
   _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
-  double _networkDetailScrollOffset = 0;
+  double _networkDetailHeaderCollapseOffset = 0;
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
   final TextEditingController _newNetworkNameController = TextEditingController(
@@ -171,20 +171,59 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   }
 
   double get _networkDetailHeaderCollapseProgress =>
-      (_networkDetailScrollOffset / _networkDetailHeaderCollapseDistance)
+      (_networkDetailHeaderCollapseOffset /
+              _networkDetailHeaderCollapseDistance)
           .clamp(0.0, 1.0)
           .toDouble();
 
-  void _handleNetworkDetailScrollOffsetChanged(double offset) {
-    final nextOffset = math.max(0.0, offset);
-    if ((_networkDetailScrollOffset - nextOffset).abs() < 0.5) {
+  double _coordinateNetworkDetailScrollDelta(
+    double delta,
+    ScrollMetrics metrics,
+  ) {
+    if (delta == 0) {
+      return 0;
+    }
+
+    var nextOffset = _networkDetailHeaderCollapseOffset;
+    var remainingDelta = delta;
+    final remainingCollapse =
+        _networkDetailHeaderCollapseDistance -
+        _networkDetailHeaderCollapseOffset;
+    if (delta > 0 && remainingCollapse > 0) {
+      final consumed = math.min(delta, remainingCollapse);
+      nextOffset += consumed;
+      remainingDelta -= consumed;
+    } else if (delta < 0 &&
+        _networkDetailHeaderCollapseOffset > 0 &&
+        metrics.pixels <= metrics.minScrollExtent + 0.5) {
+      final consumed = math.min(-delta, _networkDetailHeaderCollapseOffset);
+      nextOffset -= consumed;
+      remainingDelta += consumed;
+    }
+
+    _setNetworkDetailHeaderCollapseOffset(nextOffset);
+    return remainingDelta;
+  }
+
+  void _setNetworkDetailHeaderCollapseOffset(double offset) {
+    final nextOffset = offset
+        .clamp(0.0, _networkDetailHeaderCollapseDistance)
+        .toDouble();
+    if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.5) {
       return;
     }
-    setState(() => _networkDetailScrollOffset = nextOffset);
+    setState(() => _networkDetailHeaderCollapseOffset = nextOffset);
   }
 
   void _resetNetworkDetailScrollOffset() {
-    _networkDetailScrollOffset = 0;
+    _networkDetailHeaderCollapseOffset = 0;
+  }
+
+  void _handleNetworkDetailStaticViewportShown() {
+    if (_networkDetailHeaderCollapseOffset == 0) {
+      return;
+    }
+    setState(_resetNetworkDetailScrollOffset);
   }
 
   void _updateState(VoidCallback fn) {
