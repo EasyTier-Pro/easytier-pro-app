@@ -1440,6 +1440,94 @@ void main() {
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
   });
 
+  testWidgets('network detail keeps collapsed header when switching tabs', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final networkDevices = List<NetworkDevice>.generate(18, (index) {
+      final number = index + 1;
+      return NetworkDevice(
+        id: 'node-$number',
+        name: 'desktop-$number',
+        online: true,
+        ipv4: '10.144.0.${number + 1}',
+        deviceId: 'device-$number',
+        machineId: 'machine-$number',
+      );
+    });
+    final subnetRoutes = NetworkSubnetRouteList(
+      routes: List<NetworkSubnetRoute>.generate(18, (index) {
+        final number = index + 1;
+        return NetworkSubnetRoute(
+          id: 'route-$number',
+          cidr: '192.168.$number.0/24',
+          mappedCidr: '10.$number.0.0/24',
+        );
+      }),
+      allowedProxyCidrs: const <String>[],
+      quotaLimit: 20,
+      quotaUsed: 18,
+    );
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
+      ],
+      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
+      subnetRoutes: <String, NetworkSubnetRouteList>{'net-1': subnetRoutes},
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, 'office-net');
+
+    final headerFinder = find.byKey(
+      const ValueKey<String>('network-detail-header'),
+    );
+    final expandedHeaderHeight = tester.getSize(headerFinder).height;
+    final nodeScrollFinder = find.byKey(
+      const ValueKey<String>('network-node-list-scroll'),
+    );
+
+    final mouse = TestPointer(5, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(nodeScrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
+    await tester.pump();
+    await _pumpAppMotionFrames(tester);
+
+    final collapsedHeaderHeight = tester.getSize(headerFinder).height;
+    expect(collapsedHeaderHeight, lessThan(expandedHeaderHeight));
+
+    final subnetTab = find.descendant(
+      of: find.byKey(const ValueKey<String>('network-detail-section-tabs')),
+      matching: find.byIcon(Icons.alt_route_outlined),
+    );
+    await tester.tap(subnetTab);
+    await _pumpAppMotionFrames(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('network-detail-section-subnets')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(collapsedHeaderHeight, 0.1),
+    );
+  });
+
   testWidgets('network detail subnets collapse header while scrolling', (
     WidgetTester tester,
   ) async {

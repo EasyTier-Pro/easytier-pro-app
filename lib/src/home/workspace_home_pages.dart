@@ -190,10 +190,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           nodeCount: devices.length,
           subnetCount: subnetRoutes?.routes.length,
           hasLocalNode: localNode != null,
-          onChanged: (section) => _updateState(() {
-            _networkDetailSection = section;
-            _resetNetworkDetailScrollOffset();
-          }),
+          onChanged: (section) =>
+              _updateState(() => _networkDetailSection = section),
         ),
         const SizedBox(height: 8),
         Expanded(
