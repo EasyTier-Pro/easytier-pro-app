@@ -701,6 +701,36 @@ class _LifecycleAuthService implements AuthService {
   }
 
   @override
+  Future<NetworkSubnetRouteList> fetchNetworkSubnetRoutes({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    return const NetworkSubnetRouteList(
+      routes: <NetworkSubnetRoute>[],
+      allowedProxyCidrs: <String>[],
+      quotaLimit: 0,
+      quotaUsed: 0,
+    );
+  }
+
+  @override
+  Future<NodeInstanceConfigView> fetchNodeConfig({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    return const NodeInstanceConfigView(
+      defaults: NodeInstanceConfigSettings(),
+      overrides: NodeInstanceConfigSettings(),
+      effective: NodeInstanceConfigSettings(),
+      configScope: '',
+      applyStatus: '',
+      driftStatus: '',
+    );
+  }
+
+  @override
   Future<List<ManagedDevice>> fetchManagedDevices({
     required String accessToken,
     required String workspaceId,

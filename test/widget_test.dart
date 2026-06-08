@@ -1090,6 +1090,38 @@ void main() {
           ),
         ],
       },
+      subnetRoutes: const <String, NetworkSubnetRouteList>{
+        'net-1': NetworkSubnetRouteList(
+          routes: <NetworkSubnetRoute>[
+            NetworkSubnetRoute(
+              id: 'route-1',
+              cidr: '192.168.50.0/24',
+              mappedCidr: '10.50.0.0/24',
+              nodes: <SubnetRouteNodeSummary>[
+                SubnetRouteNodeSummary(
+                  id: 'node-1',
+                  hostname: 'desktop-1',
+                  machineId: 'machine-1',
+                  status: 'online',
+                  provisioningState: 'ready',
+                ),
+              ],
+              manualRouteNodes: <SubnetRouteNodeSummary>[
+                SubnetRouteNodeSummary(
+                  id: 'node-1',
+                  hostname: 'desktop-1',
+                  machineId: 'machine-1',
+                  status: 'online',
+                  provisioningState: 'ready',
+                ),
+              ],
+            ),
+          ],
+          allowedProxyCidrs: <String>['192.168.0.0/16'],
+          quotaLimit: 8,
+          quotaUsed: 1,
+        ),
+      },
     );
 
     await tester.pumpWidget(
@@ -1134,6 +1166,25 @@ void main() {
     expect(cardRect.left, greaterThanOrEqualTo(listRect.left - 0.1));
     expect(cardRect.right, lessThanOrEqualTo(listRect.right + 0.1));
     expect(find.byTooltip('刷新节点'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '子网'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('192.168.50.0/24'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('network-detail-section-subnets'),
+        ),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal,
+        ),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('network detail remains stable before narrow width', (
@@ -1321,13 +1372,28 @@ void main() {
 
     expect(find.text('desktop-1'), findsOneWidget);
     final p2pMeta = tester.widget<Text>(
-      find.textContaining('10.144.0.2').first,
+      find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('network-node-node-1')),
+            matching: find.textContaining('10.144.0.2'),
+          )
+          .first,
     );
     final numericCostMeta = tester.widget<Text>(
-      find.textContaining('10.144.0.3').first,
+      find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('network-node-node-2')),
+            matching: find.textContaining('10.144.0.3'),
+          )
+          .first,
     );
     final relayMeta = tester.widget<Text>(
-      find.textContaining('10.144.0.4').first,
+      find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('network-node-node-3')),
+            matching: find.textContaining('10.144.0.4'),
+          )
+          .first,
     );
     expect(p2pMeta.data, contains('P2P'));
     expect(p2pMeta.data, contains('UDP'));
@@ -1494,6 +1560,372 @@ void main() {
     expect(find.text('desktop-1'), findsOneWidget);
     expect(find.textContaining('运行态暂不可用'), findsOneWidget);
     expect(find.textContaining('运行态未知'), findsOneWidget);
+  });
+
+  testWidgets('network detail subnet segment shows route summaries', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+          NetworkDevice(
+            id: 'node-router',
+            name: 'edge-router',
+            online: true,
+            ipv4: '10.144.0.3',
+            deviceId: 'device-router',
+            machineId: 'machine-router',
+          ),
+        ],
+      },
+      subnetRoutes: const <String, NetworkSubnetRouteList>{
+        'net-1': NetworkSubnetRouteList(
+          routes: <NetworkSubnetRoute>[
+            NetworkSubnetRoute(
+              id: 'route-1',
+              cidr: '192.168.50.0/24',
+              mappedCidr: '10.50.0.0/24',
+              nodeIds: <String>['node-router'],
+              nodes: <SubnetRouteNodeSummary>[
+                SubnetRouteNodeSummary(
+                  id: 'node-router',
+                  hostname: 'edge-router',
+                  machineId: 'machine-router',
+                  status: 'online',
+                  provisioningState: 'ready',
+                ),
+              ],
+              manualRouteNodeIds: <String>['node-1'],
+              manualRouteNodes: <SubnetRouteNodeSummary>[
+                SubnetRouteNodeSummary(
+                  id: 'node-1',
+                  hostname: 'desktop-1',
+                  machineId: 'machine-1',
+                  status: 'online',
+                  provisioningState: 'ready',
+                ),
+              ],
+            ),
+          ],
+          allowedProxyCidrs: <String>['192.168.0.0/16'],
+          quotaLimit: 8,
+          quotaUsed: 1,
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.tap(find.widgetWithText(FButton, '子网 1'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+      findsNothing,
+    );
+    expect(find.text('192.168.50.0/24'), findsOneWidget);
+    expect(find.text('映射为 10.50.0.0/24'), findsOneWidget);
+    expect(find.textContaining('配额 1 / 8'), findsOneWidget);
+    expect(find.textContaining('允许 192.168.0.0/16'), findsOneWidget);
+    expect(find.textContaining('1 个 · 1 在线'), findsWidgets);
+    expect(find.textContaining('edge-router'), findsOneWidget);
+    expect(find.textContaining('desktop-1'), findsOneWidget);
+  });
+
+  testWidgets('network detail subnet segment shows empty state', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.tap(find.widgetWithText(FButton, '子网 0'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.textContaining('还没有配置子网路由'), findsOneWidget);
+  });
+
+  testWidgets('network detail subnet segment retries failed route load', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      subnetRouteFailures: <String, List<Object>>{
+        'net-1': <Object>[
+          const AuthException('temporary route failure'),
+          const AuthException('temporary route failure'),
+        ],
+      },
+      subnetRoutes: const <String, NetworkSubnetRouteList>{
+        'net-1': NetworkSubnetRouteList(
+          routes: <NetworkSubnetRoute>[
+            NetworkSubnetRoute(id: 'route-1', cidr: '192.168.50.0/24'),
+          ],
+          allowedProxyCidrs: <String>[],
+          quotaLimit: 8,
+          quotaUsed: 1,
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.tap(find.widgetWithText(FButton, '子网'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.textContaining('temporary route failure'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FButton, '重试'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.textContaining('temporary route failure'), findsNothing);
+    expect(find.text('192.168.50.0/24'), findsOneWidget);
+    expect(find.textContaining('配额 1 / 8'), findsOneWidget);
+  });
+
+  testWidgets('network detail local segment shows local node config', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: 'office-network',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+          ipv4Cidr: '10.144.0.0/16',
+        ),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'desktop-1',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+      nodeConfigs: const <String, NodeInstanceConfigView>{
+        'node-1': NodeInstanceConfigView(
+          defaults: NodeInstanceConfigSettings(),
+          overrides: NodeInstanceConfigSettings(p2pMode: 'p2p_only'),
+          effective: NodeInstanceConfigSettings(
+            ipv4: '10.144.0.2',
+            hostname: 'desktop-1',
+            p2pMode: 'p2p_only',
+            listenerProtocols: <String>['tcp', 'udp'],
+            magicDnsEnabled: true,
+            noTun: false,
+            proxyForwardBySystem: true,
+            userspaceStack: false,
+          ),
+          configScope: 'customized',
+          applyStatus: 'applied',
+          driftStatus: 'in_sync',
+          assignedSubnetRoutes: <AssignedSubnetRoute>[
+            AssignedSubnetRoute(
+              id: 'route-1',
+              cidr: '192.168.50.0/24',
+              mappedCidr: '10.50.0.0/24',
+            ),
+          ],
+          manualSubnetRoutes: <AssignedSubnetRoute>[
+            AssignedSubnetRoute(id: 'route-2', cidr: '172.16.8.0/24'),
+          ],
+          manualRoutesEnabled: true,
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, 'office-network');
+    await tester.tap(find.widgetWithText(FButton, '本机已加入'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.text('10.144.0.2'), findsOneWidget);
+    expect(find.text('desktop-1'), findsWidgets);
+    expect(find.text('本机覆盖'), findsOneWidget);
+    expect(find.text('已应用'), findsOneWidget);
+    expect(find.text('一致'), findsOneWidget);
+    expect(find.text('仅 P2P'), findsOneWidget);
+    expect(find.text('TCP, UDP'), findsOneWidget);
+    expect(find.text('Magic DNS 启用'), findsOneWidget);
+    expect(find.text('No-TUN 关闭'), findsOneWidget);
+    expect(find.text('系统转发 启用'), findsOneWidget);
+    expect(find.text('用户态协议栈 关闭'), findsOneWidget);
+    expect(find.text('192.168.50.0/24 -> 10.50.0.0/24'), findsOneWidget);
+    expect(find.text('172.16.8.0/24'), findsOneWidget);
+  });
+
+  testWidgets('network detail local segment handles missing local node', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(
+          id: 'net-1',
+          name: '办公网',
+          regions: ['ap-east'],
+          runtimeNetworkName: 'nt-office',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'desktop-1',
+            online: true,
+            ipv4: '10.144.0.2',
+            machineId: 'machine-1',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-other',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.tap(find.widgetWithText(FButton, '本机'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
   });
 
   testWidgets('refresh nodes reloads console nodes and peer status', (
@@ -2836,6 +3268,129 @@ void main() {
     expect(nodes.single.hostname, 'desktop-1');
   });
 
+  test('console service parses subnet routes and node config views', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/networks/net-1/subnet-routes') {
+          return _jsonResponse({
+            'routes': [
+              {
+                'id': 'route-1',
+                'cidr': '192.168.50.0/24',
+                'mapped_cidr': '10.50.0.0/24',
+                'node_ids': ['node-router'],
+                'nodes': [
+                  {
+                    'id': 'node-router',
+                    'hostname': 'edge-router',
+                    'machine_id': 'machine-router',
+                    'status': 'online',
+                    'provisioning_state': 'ready',
+                  },
+                ],
+                'manual_route_node_ids': ['node-1'],
+                'manual_route_nodes': [
+                  {
+                    'id': 'node-1',
+                    'hostname': 'desktop-1',
+                    'machine_id': 'machine-1',
+                    'status': 'offline',
+                    'provisioning_state': 'ready',
+                  },
+                ],
+              },
+            ],
+            'allowed_proxy_cidrs': ['192.168.0.0/16'],
+            'quota_limit': 8,
+            'quota_used': 1,
+          });
+        }
+        if (request.url.path ==
+            '/api/v1/tenants/tenant-1/nodes/node-1/config') {
+          return _jsonResponse({
+            'defaults': {
+              'p2p_mode': 'automatic',
+              'listener_protocols': ['tcp'],
+            },
+            'override': {'p2p_mode': 'p2p_only'},
+            'effective': {
+              'ipv4': '10.144.0.2',
+              'hostname': 'desktop-1',
+              'p2p_mode': 'p2p_only',
+              'listener_protocols': ['tcp', 'udp'],
+              'magic_dns_enabled': true,
+              'no_tun': false,
+              'proxy_forward_by_system': true,
+              'userspace_stack': false,
+            },
+            'config_scope': 'customized',
+            'apply_status': 'applied',
+            'drift_status': 'in_sync',
+            'assigned_subnet_routes': [
+              {
+                'id': 'route-1',
+                'cidr': '192.168.50.0/24',
+                'mapped_cidr': '10.50.0.0/24',
+              },
+            ],
+            'manual_subnet_routes': [
+              {'id': 'route-2', 'cidr': '172.16.8.0/24'},
+            ],
+            'manual_routes_enabled': true,
+          });
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+
+    final routes = await service.fetchNetworkSubnetRoutes(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      networkId: 'net-1',
+    );
+    final config = await service.fetchNodeConfig(
+      accessToken: 'token',
+      workspaceId: 'tenant-1',
+      nodeId: 'node-1',
+    );
+
+    expect(requests[0].method, 'GET');
+    expect(
+      requests[0].url.path,
+      '/api/v1/tenants/tenant-1/networks/net-1/subnet-routes',
+    );
+    expect(requests[1].method, 'GET');
+    expect(
+      requests[1].url.path,
+      '/api/v1/tenants/tenant-1/nodes/node-1/config',
+    );
+    expect(routes.quotaLimit, 8);
+    expect(routes.quotaUsed, 1);
+    expect(routes.allowedProxyCidrs, <String>['192.168.0.0/16']);
+    expect(routes.routes.single.cidr, '192.168.50.0/24');
+    expect(routes.routes.single.mappedCidr, '10.50.0.0/24');
+    expect(routes.routes.single.nodes.single.displayLabel, 'edge-router');
+    expect(routes.routes.single.manualRouteNodes.single.status, 'offline');
+    expect(config.defaults.p2pMode, 'automatic');
+    expect(config.overrides.p2pMode, 'p2p_only');
+    expect(config.effective.ipv4, '10.144.0.2');
+    expect(config.effective.listenerProtocols, <String>['tcp', 'udp']);
+    expect(config.effective.magicDnsEnabled, isTrue);
+    expect(config.configScope, 'customized');
+    expect(config.applyStatus, 'applied');
+    expect(config.driftStatus, 'in_sync');
+    expect(config.assignedSubnetRoutes.single.mappedCidr, '10.50.0.0/24');
+    expect(config.manualSubnetRoutes.single.cidr, '172.16.8.0/24');
+    expect(config.manualRoutesEnabled, isTrue);
+  });
+
   test(
     'console service prefers per-network node status over device status',
     () async {
@@ -3558,6 +4113,29 @@ class _LoginFlowAuthService implements AuthService {
   }
 
   @override
+  Future<NetworkSubnetRouteList> fetchNetworkSubnetRoutes({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    return const NetworkSubnetRouteList(
+      routes: <NetworkSubnetRoute>[],
+      allowedProxyCidrs: <String>[],
+      quotaLimit: 0,
+      quotaUsed: 0,
+    );
+  }
+
+  @override
+  Future<NodeInstanceConfigView> fetchNodeConfig({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    return _emptyNodeConfigView();
+  }
+
+  @override
   Future<AttachNetworkResult> attachDeviceToNetwork({
     required String accessToken,
     required String workspaceId,
@@ -3589,20 +4167,45 @@ class _LoginFlowAuthService implements AuthService {
   }
 }
 
+NodeInstanceConfigView _emptyNodeConfigView() {
+  return const NodeInstanceConfigView(
+    defaults: NodeInstanceConfigSettings(),
+    overrides: NodeInstanceConfigSettings(),
+    effective: NodeInstanceConfigSettings(),
+    configScope: '',
+    applyStatus: '',
+    driftStatus: '',
+  );
+}
+
 class _FakeAuthService implements AuthService {
   _FakeAuthService({
     List<ConsoleNetwork> networks = const <ConsoleNetwork>[],
     this.managedDevices = const <ManagedDevice>[],
     Map<String, List<NetworkDevice>> networkDevices =
         const <String, List<NetworkDevice>>{},
+    Map<String, NetworkSubnetRouteList> subnetRoutes =
+        const <String, NetworkSubnetRouteList>{},
+    Map<String, List<Object>> subnetRouteFailures =
+        const <String, List<Object>>{},
+    Map<String, NodeInstanceConfigView> nodeConfigs =
+        const <String, NodeInstanceConfigView>{},
     this.attachDeviceDelay,
     this.removeNetworkNodeDelay,
   }) : networks = List<ConsoleNetwork>.of(networks),
-       networkDevices = Map<String, List<NetworkDevice>>.from(networkDevices);
+       networkDevices = Map<String, List<NetworkDevice>>.from(networkDevices),
+       subnetRoutes = Map<String, NetworkSubnetRouteList>.from(subnetRoutes),
+       subnetRouteFailures = subnetRouteFailures.map(
+         (key, value) => MapEntry(key, List<Object>.of(value)),
+       ),
+       nodeConfigs = Map<String, NodeInstanceConfigView>.from(nodeConfigs);
 
   final List<ConsoleNetwork> networks;
   final List<ManagedDevice> managedDevices;
   final Map<String, List<NetworkDevice>> networkDevices;
+  final Map<String, NetworkSubnetRouteList> subnetRoutes;
+  final Map<String, List<Object>> subnetRouteFailures;
+  final Map<String, NodeInstanceConfigView> nodeConfigs;
   final Future<void>? attachDeviceDelay;
   final Future<void>? removeNetworkNodeDelay;
   final List<String> attachedNetworkIds = <String>[];
@@ -3684,6 +4287,12 @@ class _FakeAuthService implements AuthService {
     );
     networks.add(network);
     networkDevices[network.id] = const <NetworkDevice>[];
+    subnetRoutes[network.id] = const NetworkSubnetRouteList(
+      routes: <NetworkSubnetRoute>[],
+      allowedProxyCidrs: <String>[],
+      quotaLimit: 0,
+      quotaUsed: 0,
+    );
     return network;
   }
 
@@ -3696,6 +4305,7 @@ class _FakeAuthService implements AuthService {
     deletedNetworkIds.add(networkId);
     networks.removeWhere((network) => network.id == networkId);
     networkDevices.remove(networkId);
+    subnetRoutes.remove(networkId);
   }
 
   @override
@@ -3708,6 +4318,34 @@ class _FakeAuthService implements AuthService {
     return List<NetworkDevice>.unmodifiable(
       networkDevices[networkId] ?? const <NetworkDevice>[],
     );
+  }
+
+  @override
+  Future<NetworkSubnetRouteList> fetchNetworkSubnetRoutes({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    final failures = subnetRouteFailures[networkId];
+    if (failures != null && failures.isNotEmpty) {
+      throw failures.removeAt(0);
+    }
+    return subnetRoutes[networkId] ??
+        const NetworkSubnetRouteList(
+          routes: <NetworkSubnetRoute>[],
+          allowedProxyCidrs: <String>[],
+          quotaLimit: 0,
+          quotaUsed: 0,
+        );
+  }
+
+  @override
+  Future<NodeInstanceConfigView> fetchNodeConfig({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    return nodeConfigs[nodeId] ?? _emptyNodeConfigView();
   }
 
   @override

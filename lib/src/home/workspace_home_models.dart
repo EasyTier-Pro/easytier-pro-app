@@ -2,6 +2,8 @@ part of 'workspace_home_view.dart';
 
 enum _DashboardView { overview, network, devices, settings }
 
+enum _NetworkDetailSection { nodes, subnets, local }
+
 const List<_DashboardView> _mobileDashboardViewOrder = <_DashboardView>[
   _DashboardView.overview,
   _DashboardView.network,

@@ -290,6 +290,49 @@ class ConsoleAuthService implements AuthService {
     return '';
   }
 
+  static List<String> _readStringList(Object? value) {
+    if (value is List<dynamic>) {
+      return value
+          .map((item) => item?.toString().trim() ?? '')
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    return const <String>[];
+  }
+
+  static String? _nullableTrimmedString(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static int? _readIntValue(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      return null;
+    }
+    return int.tryParse(text);
+  }
+
+  static bool? _readBool(Object? value) {
+    if (value is bool) {
+      return value;
+    }
+    final text = value?.toString().trim().toLowerCase() ?? '';
+    if (text == 'true') {
+      return true;
+    }
+    if (text == 'false') {
+      return false;
+    }
+    return null;
+  }
+
   @override
   Future<List<ManagedDevice>> fetchManagedDevices({
     required String accessToken,
@@ -444,6 +487,191 @@ class ConsoleAuthService implements AuthService {
         })
         .whereType<NetworkDevice>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<NetworkSubnetRouteList> fetchNetworkSubnetRoutes({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  }) async {
+    final response = await _get(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/networks/$networkId/subnet-routes',
+      ),
+      operation: 'fetchNetworkSubnetRoutes',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw _authAwareException(response, '读取子网路由列表失败');
+    }
+
+    return _subnetRouteListFromJson(_decodeObject(response.body));
+  }
+
+  @override
+  Future<NodeInstanceConfigView> fetchNodeConfig({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  }) async {
+    final response = await _get(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$workspaceId/nodes/$nodeId/config',
+      ),
+      operation: 'fetchNodeConfig',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw _authAwareException(response, '读取本机网络设置失败');
+    }
+
+    return _nodeConfigFromJson(_decodeObject(response.body));
+  }
+
+  static NetworkSubnetRouteList _subnetRouteListFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final rawRoutes = json['routes'];
+    final routes = rawRoutes is List<dynamic>
+        ? rawRoutes
+              .whereType<Map<String, dynamic>>()
+              .map(_subnetRouteFromJson)
+              .whereType<NetworkSubnetRoute>()
+              .toList(growable: false)
+        : const <NetworkSubnetRoute>[];
+
+    return NetworkSubnetRouteList(
+      routes: routes,
+      allowedProxyCidrs: _readStringList(json['allowed_proxy_cidrs']),
+      quotaLimit: _readIntValue(json['quota_limit']) ?? 0,
+      quotaUsed: _readIntValue(json['quota_used']) ?? 0,
+    );
+  }
+
+  static NetworkSubnetRoute? _subnetRouteFromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
+    final cidr = json['cidr']?.toString() ?? '';
+    if (id.isEmpty || cidr.isEmpty) {
+      return null;
+    }
+
+    final rawNodes = json['nodes'];
+    final rawManualNodes = json['manual_route_nodes'];
+    return NetworkSubnetRoute(
+      id: id,
+      cidr: cidr,
+      mappedCidr: _nullableTrimmedString(json['mapped_cidr']),
+      nodeIds: _readStringList(json['node_ids']),
+      nodes: rawNodes is List<dynamic>
+          ? rawNodes
+                .whereType<Map<String, dynamic>>()
+                .map(_subnetRouteNodeSummaryFromJson)
+                .whereType<SubnetRouteNodeSummary>()
+                .toList(growable: false)
+          : const <SubnetRouteNodeSummary>[],
+      manualRouteNodeIds: _readStringList(json['manual_route_node_ids']),
+      manualRouteNodes: rawManualNodes is List<dynamic>
+          ? rawManualNodes
+                .whereType<Map<String, dynamic>>()
+                .map(_subnetRouteNodeSummaryFromJson)
+                .whereType<SubnetRouteNodeSummary>()
+                .toList(growable: false)
+          : const <SubnetRouteNodeSummary>[],
+    );
+  }
+
+  static SubnetRouteNodeSummary? _subnetRouteNodeSummaryFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final id = json['id']?.toString() ?? '';
+    if (id.isEmpty) {
+      return null;
+    }
+
+    return SubnetRouteNodeSummary(
+      id: id,
+      hostname: json['hostname']?.toString() ?? '',
+      machineId: json['machine_id']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      provisioningState: json['provisioning_state']?.toString() ?? '',
+    );
+  }
+
+  static NodeInstanceConfigView _nodeConfigFromJson(Map<String, dynamic> json) {
+    final rawAssigned = json['assigned_subnet_routes'];
+    final rawManual = json['manual_subnet_routes'];
+    return NodeInstanceConfigView(
+      defaults: _nodeConfigSettingsFromJson(json['defaults']),
+      overrides: _nodeConfigSettingsFromJson(json['override']),
+      effective: _nodeConfigSettingsFromJson(json['effective']),
+      configScope: json['config_scope']?.toString() ?? '',
+      applyStatus: json['apply_status']?.toString() ?? '',
+      driftStatus: json['drift_status']?.toString() ?? '',
+      lastAppliedAt: _nullableTrimmedString(json['last_applied_at']),
+      lastApplyError: _nullableTrimmedString(json['last_apply_error']),
+      assignedSubnetRoutes: rawAssigned is List<dynamic>
+          ? rawAssigned
+                .whereType<Map<String, dynamic>>()
+                .map(_assignedSubnetRouteFromJson)
+                .whereType<AssignedSubnetRoute>()
+                .toList(growable: false)
+          : const <AssignedSubnetRoute>[],
+      manualSubnetRoutes: rawManual is List<dynamic>
+          ? rawManual
+                .whereType<Map<String, dynamic>>()
+                .map(_assignedSubnetRouteFromJson)
+                .whereType<AssignedSubnetRoute>()
+                .toList(growable: false)
+          : const <AssignedSubnetRoute>[],
+      manualRoutesEnabled: _readBool(json['manual_routes_enabled']) ?? false,
+    );
+  }
+
+  static NodeInstanceConfigSettings _nodeConfigSettingsFromJson(Object? value) {
+    final json = value is Map<String, dynamic>
+        ? value
+        : value is Map
+        ? Map<String, dynamic>.from(value)
+        : const <String, dynamic>{};
+
+    return NodeInstanceConfigSettings(
+      ipv4: _nullableTrimmedString(json['ipv4']),
+      hostname: _nullableTrimmedString(json['hostname']),
+      kcpProxyEnabled: _readBool(json['kcp_proxy_enabled']),
+      kcpInputEnabled: _readBool(json['kcp_input_enabled']),
+      quicProxyEnabled: _readBool(json['quic_proxy_enabled']),
+      quicInputEnabled: _readBool(json['quic_input_enabled']),
+      noTun: _readBool(json['no_tun']),
+      holePunchUdpEnabled: _readBool(json['hole_punch_udp_enabled']),
+      holePunchTcpEnabled: _readBool(json['hole_punch_tcp_enabled']),
+      disableSymHolePunching: _readBool(json['disable_sym_hole_punching']),
+      p2pMode: _nullableTrimmedString(json['p2p_mode']),
+      proxyForwardBySystem: _readBool(json['proxy_forward_by_system']),
+      lazyP2p: _readBool(json['lazy_p2p']),
+      needP2p: _readBool(json['need_p2p']),
+      magicDnsEnabled: _readBool(json['magic_dns_enabled']),
+      latencyFirst: _readBool(json['latency_first']),
+      userspaceStack: _readBool(json['userspace_stack']),
+      listenerProtocols: _readStringList(json['listener_protocols']),
+    );
+  }
+
+  static AssignedSubnetRoute? _assignedSubnetRouteFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final id = json['id']?.toString() ?? '';
+    final cidr = json['cidr']?.toString() ?? '';
+    if (id.isEmpty || cidr.isEmpty) {
+      return null;
+    }
+    return AssignedSubnetRoute(
+      id: id,
+      cidr: cidr,
+      mappedCidr: _nullableTrimmedString(json['mapped_cidr']),
+    );
   }
 
   @override

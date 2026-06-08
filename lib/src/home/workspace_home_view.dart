@@ -80,6 +80,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   bool _isCreatingNetwork = false;
   Set<String> _deletingNetworkIds = const <String>{};
   _DashboardView _activeView = _DashboardView.overview;
+  _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
   final TextEditingController _newNetworkNameController = TextEditingController(
@@ -110,6 +111,14 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Map<String, Map<String, CorePeerStatus>> _networkPeerStatuses =
       const <String, Map<String, CorePeerStatus>>{};
   Map<String, String> _peerStatusErrors = const <String, String>{};
+  Map<String, NetworkSubnetRouteList> _networkSubnetRoutes =
+      const <String, NetworkSubnetRouteList>{};
+  Map<String, bool> _networkSubnetRoutesLoading = const <String, bool>{};
+  Map<String, String> _networkSubnetRouteErrors = const <String, String>{};
+  Map<String, NodeInstanceConfigView> _nodeConfigs =
+      const <String, NodeInstanceConfigView>{};
+  Map<String, bool> _nodeConfigLoading = const <String, bool>{};
+  Map<String, String> _nodeConfigErrors = const <String, String>{};
   String? _trayConnectionNetworkId;
   String? _trayConnectionLabel;
   String? _trayWorkspaceName;
@@ -299,6 +308,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _syncTrayConnectionAction();
     _refreshTrafficPolling();
     _refreshPeerPolling();
+    final selectedNetworkId = _selectedNetworkId;
+    if (_activeView == _DashboardView.network && selectedNetworkId != null) {
+      unawaited(_loadLocalNodeConfigForNetworkId(selectedNetworkId));
+    }
   }
 
   @override

@@ -59,11 +59,13 @@ class _NetworkSummaryBar extends StatelessWidget {
     required this.totalDevices,
     required this.onlineDevices,
     required this.traffic,
+    this.localIpv4,
   });
 
   final int totalDevices;
   final int onlineDevices;
   final _NetworkTrafficSnapshot? traffic;
+  final String? localIpv4;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +90,14 @@ class _NetworkSummaryBar extends StatelessWidget {
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
         );
         final totalItem = _SummaryItem(text: _formatTotalTraffic(traffic));
+        final localIpv4Text = localIpv4?.trim() ?? '';
+        final localItem = localIpv4Text.isEmpty
+            ? null
+            : _SummaryItem(
+                icon: Icons.computer_outlined,
+                iconColor: const Color(0xFF2563EB),
+                text: '本机 $localIpv4Text',
+              );
 
         if (narrow) {
           return Column(
@@ -97,7 +107,7 @@ class _NetworkSummaryBar extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
-                children: [onlineItem, downloadItem, uploadItem],
+                children: [onlineItem, ?localItem, downloadItem, uploadItem],
               ),
               const SizedBox(height: 4),
               totalItem,
@@ -109,7 +119,13 @@ class _NetworkSummaryBar extends StatelessWidget {
           spacing: 16,
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: [onlineItem, downloadItem, uploadItem, totalItem],
+          children: [
+            onlineItem,
+            ?localItem,
+            downloadItem,
+            uploadItem,
+            totalItem,
+          ],
         );
       },
     );

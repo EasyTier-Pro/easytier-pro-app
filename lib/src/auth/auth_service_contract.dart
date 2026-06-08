@@ -34,6 +34,18 @@ abstract class AuthService {
     required String networkId,
   });
 
+  Future<NetworkSubnetRouteList> fetchNetworkSubnetRoutes({
+    required String accessToken,
+    required String workspaceId,
+    required String networkId,
+  });
+
+  Future<NodeInstanceConfigView> fetchNodeConfig({
+    required String accessToken,
+    required String workspaceId,
+    required String nodeId,
+  });
+
   Future<List<ManagedDevice>> fetchManagedDevices({
     required String accessToken,
     required String workspaceId,

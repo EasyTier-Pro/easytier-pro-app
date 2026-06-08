@@ -11,6 +11,7 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     });
     _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(network.id));
+    unawaited(_loadNetworkDetailData(network.id));
   }
 
   void _showOverview() {
@@ -32,6 +33,7 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     _refreshPeerPolling();
     if (networkId != null) {
       unawaited(_loadSingleNetworkDevices(networkId!));
+      unawaited(_loadNetworkDetailData(networkId!));
     }
   }
 
@@ -42,6 +44,7 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     });
     _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(networkId));
+    unawaited(_loadNetworkDetailData(networkId));
   }
 
   void _showDevices() {

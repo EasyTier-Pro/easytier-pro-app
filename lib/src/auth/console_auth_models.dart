@@ -186,6 +186,147 @@ class NetworkDevice {
   }
 }
 
+class NetworkSubnetRouteList {
+  const NetworkSubnetRouteList({
+    required this.routes,
+    required this.allowedProxyCidrs,
+    required this.quotaLimit,
+    required this.quotaUsed,
+  });
+
+  final List<NetworkSubnetRoute> routes;
+  final List<String> allowedProxyCidrs;
+  final int quotaLimit;
+  final int quotaUsed;
+}
+
+class NetworkSubnetRoute {
+  const NetworkSubnetRoute({
+    required this.id,
+    required this.cidr,
+    this.mappedCidr,
+    this.nodeIds = const <String>[],
+    this.nodes = const <SubnetRouteNodeSummary>[],
+    this.manualRouteNodeIds = const <String>[],
+    this.manualRouteNodes = const <SubnetRouteNodeSummary>[],
+  });
+
+  final String id;
+  final String cidr;
+  final String? mappedCidr;
+  final List<String> nodeIds;
+  final List<SubnetRouteNodeSummary> nodes;
+  final List<String> manualRouteNodeIds;
+  final List<SubnetRouteNodeSummary> manualRouteNodes;
+}
+
+class SubnetRouteNodeSummary {
+  const SubnetRouteNodeSummary({
+    required this.id,
+    required this.hostname,
+    required this.machineId,
+    required this.status,
+    required this.provisioningState,
+  });
+
+  final String id;
+  final String hostname;
+  final String machineId;
+  final String status;
+  final String provisioningState;
+
+  String get displayLabel {
+    final host = hostname.trim();
+    if (host.isNotEmpty) {
+      return host;
+    }
+    final machine = machineId.trim();
+    return machine.isNotEmpty ? machine : id;
+  }
+}
+
+class AssignedSubnetRoute {
+  const AssignedSubnetRoute({
+    required this.id,
+    required this.cidr,
+    this.mappedCidr,
+  });
+
+  final String id;
+  final String cidr;
+  final String? mappedCidr;
+}
+
+class NodeInstanceConfigSettings {
+  const NodeInstanceConfigSettings({
+    this.ipv4,
+    this.hostname,
+    this.kcpProxyEnabled,
+    this.kcpInputEnabled,
+    this.quicProxyEnabled,
+    this.quicInputEnabled,
+    this.noTun,
+    this.holePunchUdpEnabled,
+    this.holePunchTcpEnabled,
+    this.disableSymHolePunching,
+    this.p2pMode,
+    this.proxyForwardBySystem,
+    this.lazyP2p,
+    this.needP2p,
+    this.magicDnsEnabled,
+    this.latencyFirst,
+    this.userspaceStack,
+    this.listenerProtocols = const <String>[],
+  });
+
+  final String? ipv4;
+  final String? hostname;
+  final bool? kcpProxyEnabled;
+  final bool? kcpInputEnabled;
+  final bool? quicProxyEnabled;
+  final bool? quicInputEnabled;
+  final bool? noTun;
+  final bool? holePunchUdpEnabled;
+  final bool? holePunchTcpEnabled;
+  final bool? disableSymHolePunching;
+  final String? p2pMode;
+  final bool? proxyForwardBySystem;
+  final bool? lazyP2p;
+  final bool? needP2p;
+  final bool? magicDnsEnabled;
+  final bool? latencyFirst;
+  final bool? userspaceStack;
+  final List<String> listenerProtocols;
+}
+
+class NodeInstanceConfigView {
+  const NodeInstanceConfigView({
+    required this.defaults,
+    required this.overrides,
+    required this.effective,
+    required this.configScope,
+    required this.applyStatus,
+    required this.driftStatus,
+    this.lastAppliedAt,
+    this.lastApplyError,
+    this.assignedSubnetRoutes = const <AssignedSubnetRoute>[],
+    this.manualSubnetRoutes = const <AssignedSubnetRoute>[],
+    this.manualRoutesEnabled = false,
+  });
+
+  final NodeInstanceConfigSettings defaults;
+  final NodeInstanceConfigSettings overrides;
+  final NodeInstanceConfigSettings effective;
+  final String configScope;
+  final String applyStatus;
+  final String driftStatus;
+  final String? lastAppliedAt;
+  final String? lastApplyError;
+  final List<AssignedSubnetRoute> assignedSubnetRoutes;
+  final List<AssignedSubnetRoute> manualSubnetRoutes;
+  final bool manualRoutesEnabled;
+}
+
 class ManagedDevice {
   const ManagedDevice({
     required this.id,

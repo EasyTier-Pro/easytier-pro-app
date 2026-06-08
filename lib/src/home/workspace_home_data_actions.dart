@@ -85,6 +85,12 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         _selectedNetworkId = null;
         _networkPeerStatuses = const <String, Map<String, CorePeerStatus>>{};
         _peerStatusErrors = const <String, String>{};
+        _networkSubnetRoutes = const <String, NetworkSubnetRouteList>{};
+        _networkSubnetRoutesLoading = const <String, bool>{};
+        _networkSubnetRouteErrors = const <String, String>{};
+        _nodeConfigs = const <String, NodeInstanceConfigView>{};
+        _nodeConfigLoading = const <String, bool>{};
+        _nodeConfigErrors = const <String, String>{};
       });
       _refreshTrafficPolling();
       _refreshPeerPolling();
@@ -120,6 +126,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       });
       _refreshTrafficPolling();
       _refreshPeerPolling();
+      if (selectedId != null) {
+        unawaited(_loadNetworkDetailData(selectedId));
+      }
       unawaited(_loadNetworkDevices(networks));
     } catch (error) {
       if (!mounted || requestId != _networkRequestId) {
@@ -163,6 +172,10 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     _updateState(() {
       _networkDevices = Map<String, List<NetworkDevice>>.fromEntries(results);
     });
+    final selectedNetworkId = _selectedNetworkId;
+    if (selectedNetworkId != null) {
+      unawaited(_loadLocalNodeConfigForNetworkId(selectedNetworkId));
+    }
     _refreshTrafficPolling();
     _refreshPeerPolling();
   }
@@ -183,6 +196,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     _updateState(() {
       _networkDevices = {..._networkDevices, networkId: devices};
     });
+    unawaited(_loadLocalNodeConfigForNetworkId(networkId));
     _refreshTrafficPolling();
     _refreshPeerPolling();
   }
@@ -191,6 +205,129 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     await _loadSingleNetworkDevices(network.id);
     await _refreshNetworkInstanceState(network);
     await _pollNetworkPeers(network);
+    await _loadNetworkSubnetRoutes(network.id);
+    await _loadLocalNodeConfigForNetworkId(network.id);
+  }
+
+  Future<void> _loadNetworkDetailData(String networkId) async {
+    await Future.wait([
+      _loadNetworkSubnetRoutes(networkId),
+      _loadLocalNodeConfigForNetworkId(networkId),
+    ]);
+  }
+
+  Future<void> _loadNetworkSubnetRoutes(String networkId) async {
+    final workspace = _workspace;
+    if (workspace == null || networkId.isEmpty) {
+      return;
+    }
+    if (_networkSubnetRoutesLoading[networkId] == true) {
+      return;
+    }
+
+    _updateState(() {
+      _networkSubnetRoutesLoading = {
+        ..._networkSubnetRoutesLoading,
+        networkId: true,
+      };
+      final nextErrors = Map<String, String>.from(_networkSubnetRouteErrors)
+        ..remove(networkId);
+      _networkSubnetRouteErrors = nextErrors;
+    });
+
+    try {
+      final routes = await widget.authService.fetchNetworkSubnetRoutes(
+        accessToken: widget.session.tokenSet.accessToken,
+        workspaceId: workspace.id,
+        networkId: networkId,
+      );
+      if (!mounted) {
+        return;
+      }
+      _updateState(() {
+        _networkSubnetRoutes = {..._networkSubnetRoutes, networkId: routes};
+        _networkSubnetRoutesLoading = {
+          ..._networkSubnetRoutesLoading,
+          networkId: false,
+        };
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateState(() {
+        _networkSubnetRoutesLoading = {
+          ..._networkSubnetRoutesLoading,
+          networkId: false,
+        };
+        _networkSubnetRouteErrors = {
+          ..._networkSubnetRouteErrors,
+          networkId: _normalizeError(error),
+        };
+      });
+    }
+  }
+
+  Future<void> _loadLocalNodeConfigForNetworkId(String networkId) async {
+    final workspace = _workspace;
+    final node = _localNodeForNetworkId(networkId);
+    if (workspace == null || node == null || node.id.isEmpty) {
+      return;
+    }
+    if (_nodeConfigLoading[node.id] == true) {
+      return;
+    }
+
+    _updateState(() {
+      _nodeConfigLoading = {..._nodeConfigLoading, node.id: true};
+      final nextErrors = Map<String, String>.from(_nodeConfigErrors)
+        ..remove(node.id);
+      _nodeConfigErrors = nextErrors;
+    });
+
+    try {
+      final config = await widget.authService.fetchNodeConfig(
+        accessToken: widget.session.tokenSet.accessToken,
+        workspaceId: workspace.id,
+        nodeId: node.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      _updateState(() {
+        _nodeConfigs = {..._nodeConfigs, node.id: config};
+        _nodeConfigLoading = {..._nodeConfigLoading, node.id: false};
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateState(() {
+        _nodeConfigLoading = {..._nodeConfigLoading, node.id: false};
+        _nodeConfigErrors = {
+          ..._nodeConfigErrors,
+          node.id: _normalizeError(error),
+        };
+      });
+    }
+  }
+
+  NetworkDevice? _localNodeForNetworkId(String networkId) {
+    final machineId =
+        widget.coreLifecycleService.status.value.machineId?.trim() ?? '';
+    if (machineId.isEmpty) {
+      return null;
+    }
+    final devices = _networkDevices[networkId] ?? const <NetworkDevice>[];
+    for (final device in devices) {
+      if (!device.attached) {
+        continue;
+      }
+      if (device.machineId?.trim() == machineId) {
+        return device;
+      }
+    }
+    return null;
   }
 
   Future<void> _createNetwork({
@@ -341,6 +478,10 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
   void _removeDeletedNetworkLocally(ConsoleNetwork network) {
     final networkId = network.id;
     final runtimeNetworkName = network.runtimeNetworkName.trim();
+    final removedNodeIds =
+        (_networkDevices[networkId] ?? const <NetworkDevice>[])
+            .map((node) => node.id)
+            .toSet();
     final selectedRemoved = _selectedNetworkId == networkId;
     final nextNetworks = _networks
         .where((item) => item.id != networkId)
@@ -372,6 +513,21 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       )..remove(networkId);
       _peerStatusErrors = Map<String, String>.from(_peerStatusErrors)
         ..remove(networkId);
+      _networkSubnetRoutes = Map<String, NetworkSubnetRouteList>.from(
+        _networkSubnetRoutes,
+      )..remove(networkId);
+      _networkSubnetRoutesLoading = Map<String, bool>.from(
+        _networkSubnetRoutesLoading,
+      )..remove(networkId);
+      _networkSubnetRouteErrors = Map<String, String>.from(
+        _networkSubnetRouteErrors,
+      )..remove(networkId);
+      _nodeConfigs = Map<String, NodeInstanceConfigView>.from(_nodeConfigs)
+        ..removeWhere((nodeId, _) => removedNodeIds.contains(nodeId));
+      _nodeConfigLoading = Map<String, bool>.from(_nodeConfigLoading)
+        ..removeWhere((nodeId, _) => removedNodeIds.contains(nodeId));
+      _nodeConfigErrors = Map<String, String>.from(_nodeConfigErrors)
+        ..removeWhere((nodeId, _) => removedNodeIds.contains(nodeId));
       _trafficPollNetworkIds = {..._trafficPollNetworkIds}..remove(networkId);
       if (_peerPollNetworkId == networkId) {
         _peerPollNetworkId = null;
