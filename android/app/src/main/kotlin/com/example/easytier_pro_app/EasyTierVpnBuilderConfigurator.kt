@@ -7,6 +7,7 @@ import android.os.Build
 interface EasyTierVpnBuilderOperations {
     fun setSession(session: String)
     fun setBlocking(blocking: Boolean)
+    fun allowBypass()
     fun addDisallowedApplication(packageName: String)
     fun setMtu(mtu: Int)
     fun addAddress(address: String, prefixLength: Int)
@@ -21,6 +22,7 @@ data class AndroidVpnAppliedConfig(
     val dnsServers: List<String>,
     val disallowedApplications: List<String>,
     val ignoredDisallowedApplications: List<String>,
+    val allowBypass: Boolean,
 )
 
 class EasyTierVpnServiceBuilderOperations(
@@ -32,6 +34,10 @@ class EasyTierVpnServiceBuilderOperations(
 
     override fun setBlocking(blocking: Boolean) {
         builder.setBlocking(blocking)
+    }
+
+    override fun allowBypass() {
+        builder.allowBypass()
     }
 
     override fun addDisallowedApplication(packageName: String) {
@@ -64,6 +70,7 @@ object EasyTierVpnBuilderConfigurator {
         builder: EasyTierVpnBuilderOperations,
         config: AndroidVpnStartConfig,
         sdkInt: Int = Build.VERSION.SDK_INT,
+        allowBypass: Boolean = false,
         onUnknownDisallowedApplication: (
             String,
             PackageManager.NameNotFoundException,
@@ -71,6 +78,9 @@ object EasyTierVpnBuilderConfigurator {
     ): AndroidVpnAppliedConfig {
         builder.setSession("EasyTier Pro")
         builder.setBlocking(false)
+        if (allowBypass && sdkInt >= Build.VERSION_CODES.LOLLIPOP) {
+            builder.allowBypass()
+        }
 
         val builderAddresses = mutableListOf<String>()
         val builderRoutes = mutableListOf<String>()
@@ -119,6 +129,7 @@ object EasyTierVpnBuilderConfigurator {
             dnsServers = builderDnsServers,
             disallowedApplications = builderDisallowedApplications,
             ignoredDisallowedApplications = ignoredDisallowedApplications,
+            allowBypass = allowBypass && sdkInt >= Build.VERSION_CODES.LOLLIPOP,
         )
     }
 }

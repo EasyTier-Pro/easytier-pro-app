@@ -4,6 +4,8 @@ param(
     [string[]] $ExpectedRoute = @(),
     [string[]] $ExpectedAddress = @(),
     [string] $PackageName = "net.easytier.pro",
+    [string] $SettingsPackageName = "com.android.settings",
+    [string] $ShellPackageName = "com.android.shell",
     [bool] $RequireConfigServerStarted = $true,
     [switch] $RequireStop,
     [switch] $RequireConfigServerStop,
@@ -279,6 +281,20 @@ $disallowedApplications = Convert-ToStringList (Get-EntryValue $context "disallo
 if ($disallowedApplications -notcontains $PackageName) {
     throw "Android VPN disallowed_applications does not contain $PackageName. Actual: $($disallowedApplications -join ', ')"
 }
+$settingsPackageNameText = $SettingsPackageName.Trim()
+if (
+    $settingsPackageNameText.Length -gt 0 -and
+    $disallowedApplications -notcontains $settingsPackageNameText
+) {
+    throw "Android VPN disallowed_applications does not contain $settingsPackageNameText. Actual: $($disallowedApplications -join ', ')"
+}
+$shellPackageNameText = $ShellPackageName.Trim()
+if (
+    $shellPackageNameText.Length -gt 0 -and
+    $disallowedApplications -notcontains $shellPackageNameText
+) {
+    throw "Android VPN disallowed_applications does not contain $shellPackageNameText. Actual: $($disallowedApplications -join ', ')"
+}
 
 if (-not (Convert-ToBool (Get-EntryValue $context "self_disallowed"))) {
     throw "Android VPN established log does not confirm self_disallowed=true."
@@ -292,6 +308,20 @@ if (
     $builderDisallowedApplications -notcontains $PackageName
 ) {
     throw "Android VPN builder_disallowed_applications does not contain $PackageName. Actual: $($builderDisallowedApplications -join ', ')"
+}
+if (
+    $settingsPackageNameText.Length -gt 0 -and
+    $builderDisallowedApplications.Count -gt 0 -and
+    $builderDisallowedApplications -notcontains $settingsPackageNameText
+) {
+    throw "Android VPN builder_disallowed_applications does not contain $settingsPackageNameText. Actual: $($builderDisallowedApplications -join ', ')"
+}
+if (
+    $shellPackageNameText.Length -gt 0 -and
+    $builderDisallowedApplications.Count -gt 0 -and
+    $builderDisallowedApplications -notcontains $shellPackageNameText
+) {
+    throw "Android VPN builder_disallowed_applications does not contain $shellPackageNameText. Actual: $($builderDisallowedApplications -join ', ')"
 }
 
 $builderSelfDisallowed = Get-EntryValue $context "builder_self_disallowed"

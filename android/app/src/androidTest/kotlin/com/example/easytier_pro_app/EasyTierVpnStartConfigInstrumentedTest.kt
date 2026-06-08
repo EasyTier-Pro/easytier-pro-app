@@ -43,7 +43,15 @@ class EasyTierVpnStartConfigInstrumentedTest {
         assertEquals(listOf("10.10.0.2/24"), config.addresses)
         assertEquals(listOf("10.10.0.0/24", "192.168.50.0/24"), config.routes)
         assertEquals(listOf("10.10.0.53"), config.dnsServers)
-        assertEquals(listOf(context.packageName, "com.example.extra"), config.disallowedApplications)
+        assertEquals(
+            listOf(
+                context.packageName,
+                "com.android.settings",
+                "com.android.shell",
+                "com.example.extra",
+            ),
+            config.disallowedApplications,
+        )
         assertEquals(1280, config.mtu)
     }
 
@@ -111,13 +119,18 @@ class EasyTierVpnStartConfigInstrumentedTest {
         assertEquals(emptyList<String>(), payload["routes"])
         assertEquals(emptyList<String>(), payload["dnsServers"])
         assertEquals(
-            listOf(context.packageName, "com.example.extra"),
+            listOf(
+                context.packageName,
+                "com.android.settings",
+                "com.android.shell",
+                "com.example.extra",
+            ),
             payload["disallowedApplications"],
         )
         assertEquals(context.packageName, payload["packageName"])
         assertEquals(0, payload["addressCount"])
         assertEquals(0, payload["routeCount"])
-        assertEquals(2, payload["disallowedApplicationCount"])
+        assertEquals(4, payload["disallowedApplicationCount"])
         assertEquals(true, payload["selfDisallowed"])
         assertEquals(1280, payload["mtu"])
     }
@@ -171,6 +184,36 @@ class EasyTierVpnStartConfigInstrumentedTest {
                 "addRoute:192.168.2.0/24",
                 "addDnsServer:10.10.0.53",
                 "setMetered:false",
+            ),
+            builder.operations,
+        )
+    }
+
+    @Test
+    fun configuresBypassWhenRequestedForDebugging() {
+        val builder = RecordingVpnBuilderOperations()
+
+        val appliedConfig = EasyTierVpnBuilderConfigurator.configure(
+            builder,
+            AndroidVpnStartConfig(
+                instanceName = "network-a",
+                addresses = listOf("10.10.0.2/24"),
+                routes = emptyList(),
+                dnsServers = emptyList(),
+                disallowedApplications = emptyList(),
+                mtu = 0,
+            ),
+            sdkInt = Build.VERSION_CODES.LOLLIPOP,
+            allowBypass = true,
+        )
+
+        assertEquals(true, appliedConfig.allowBypass)
+        assertEquals(
+            listOf(
+                "setSession:EasyTier Pro",
+                "setBlocking:false",
+                "allowBypass",
+                "addAddress:10.10.0.2/24",
             ),
             builder.operations,
         )
@@ -243,6 +286,10 @@ class EasyTierVpnStartConfigInstrumentedTest {
 
         override fun setBlocking(blocking: Boolean) {
             operations.add("setBlocking:$blocking")
+        }
+
+        override fun allowBypass() {
+            operations.add("allowBypass")
         }
 
         override fun addDisallowedApplication(packageName: String) {

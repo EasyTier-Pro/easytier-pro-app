@@ -14,6 +14,14 @@ data class AndroidVpnStartConfig(
 data class AndroidVpnCidr(val address: String, val prefixLength: Int)
 
 object EasyTierVpnStartConfigParser {
+    // Keep Android debugging on the physical network view: Settings controls
+    // the wireless debugging UI, while com.android.shell covers adbd/shell UID
+    // traffic on builds where wireless ADB is associated with the shell UID.
+    private val defaultDisallowedApplications = listOf(
+        "com.android.settings",
+        "com.android.shell",
+    )
+
     fun fromIntent(intent: Intent, packageName: String): AndroidVpnStartConfig {
         val instanceName = intent.getStringExtra(EasyTierVpnService.extraInstanceName)
             ?.trim()
@@ -37,7 +45,7 @@ object EasyTierVpnStartConfigParser {
     }
 
     fun disallowedApplications(packageName: String, extraPackages: List<String>): List<String> {
-        return (listOf(packageName) + extraPackages)
+        return (listOf(packageName) + defaultDisallowedApplications + extraPackages)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()

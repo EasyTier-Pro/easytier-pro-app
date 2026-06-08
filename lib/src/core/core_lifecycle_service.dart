@@ -1025,6 +1025,11 @@ cd /d "$installerDir"
               payload['builderSelfDisallowed'] ??
               payload['builder_self_disallowed'] ??
               '',
+          'allow_bypass': payload['allowBypass'] ?? payload['allow_bypass'] ?? '',
+          'builder_allow_bypass':
+              payload['builderAllowBypass'] ??
+              payload['builder_allow_bypass'] ??
+              '',
         },
       );
       _restoreRunningStatusAfterVpnRecovery();

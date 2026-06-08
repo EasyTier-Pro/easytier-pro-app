@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -211,6 +212,7 @@ class EasyTierVpnService : VpnService() {
     private fun startVpn(intent: Intent) {
         explicitStopSelfRequested = false
         val config = EasyTierVpnStartConfigParser.fromIntent(intent, packageName)
+        val allowDebugBypass = isDebuggableBuild()
 
         stopVpn(stopService = false)
         Log.i(
@@ -225,6 +227,7 @@ class EasyTierVpnService : VpnService() {
             EasyTierVpnServiceBuilderOperations(builder),
             config,
             sdkInt = Build.VERSION.SDK_INT,
+            allowBypass = allowDebugBypass,
         ) { application, error ->
             Log.w(logTag, "Ignoring unknown disallowed application=$application", error)
         }
@@ -252,6 +255,8 @@ class EasyTierVpnService : VpnService() {
                 "builderDnsServers" to builderConfig.dnsServers,
                 "builderDisallowedApplications" to builderConfig.disallowedApplications,
                 "ignoredDisallowedApplications" to builderConfig.ignoredDisallowedApplications,
+                "allowBypass" to allowDebugBypass,
+                "builderAllowBypass" to builderConfig.allowBypass,
                 "packageName" to packageName,
                 "addressCount" to config.addresses.size,
                 "routeCount" to config.routes.size,
@@ -266,6 +271,10 @@ class EasyTierVpnService : VpnService() {
                     builderConfig.disallowedApplications.contains(packageName),
             ),
         )
+    }
+
+    private fun isDebuggableBuild(): Boolean {
+        return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
     private fun stopVpn(

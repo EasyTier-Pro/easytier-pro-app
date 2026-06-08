@@ -767,6 +767,12 @@ $diagnosticsSelfDisallowed = Convert-ToBool (
 $diagnosticsBuilderSelfDisallowed = Convert-ToBool (
     Get-ObjectValue $latestVpnContext "builder_self_disallowed"
 )
+$diagnosticsAllowBypass = Convert-ToBool (
+    Get-ObjectValue $latestVpnContext "allow_bypass"
+)
+$diagnosticsBuilderAllowBypass = Convert-ToBool (
+    Get-ObjectValue $latestVpnContext "builder_allow_bypass"
+)
 
 $requiredFailures = New-Object System.Collections.Generic.List[string]
 if ($diagnosticsVerificationFailure.Length -gt 0) {
@@ -883,6 +889,8 @@ $summary = [ordered] @{
     diagnostics_builder_disallowed_applications = @($diagnosticsBuilderDisallowedApplications)
     diagnostics_self_disallowed = [bool] $diagnosticsSelfDisallowed
     diagnostics_builder_self_disallowed = [bool] $diagnosticsBuilderSelfDisallowed
+    diagnostics_allow_bypass = [bool] $diagnosticsAllowBypass
+    diagnostics_builder_allow_bypass = [bool] $diagnosticsBuilderAllowBypass
     expected_routes = @($nonEmptyExpectedRoutes)
     expected_addresses = @($ExpectedAddress)
     expected_route_devices = @($expectedRouteDevices)
