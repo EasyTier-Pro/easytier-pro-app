@@ -89,26 +89,12 @@ class _NetworkSummaryBar extends StatelessWidget {
           iconColor: const Color(0xFF2563EB),
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
         );
-        final localIpv4Text = localIpv4?.trim() ?? '';
-        final localItem = localIpv4Text.isEmpty
-            ? null
-            : _SummaryItem(
-                icon: Icons.computer_outlined,
-                iconColor: const Color(0xFF2563EB),
-                text: '本机 $localIpv4Text',
-              );
-
         if (narrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [onlineItem, ?localItem, downloadItem, uploadItem],
-              ),
-            ],
+          return Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [onlineItem, downloadItem, uploadItem],
           );
         }
 
@@ -118,7 +104,6 @@ class _NetworkSummaryBar extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             onlineItem,
-            ?localItem,
             downloadItem,
             uploadItem,
           ],
