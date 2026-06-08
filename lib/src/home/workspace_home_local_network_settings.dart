@@ -28,8 +28,20 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
   Widget build(BuildContext context) {
     final localNode = node;
     if (localNode == null) {
-      return _NetworkDetailStaticViewport(
-        child: const _StateMessage(message: '本机尚未加入此网络。'),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return _NetworkDetailScrollViewport(
+            scrollDeltaCoordinator: scrollDeltaCoordinator,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.hasBoundedHeight
+                    ? constraints.maxHeight
+                    : 0,
+              ),
+              child: const _StateMessage(message: '本机尚未加入此网络。'),
+            ),
+          );
+        },
       );
     }
     if (loading && config == null) {

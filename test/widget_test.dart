@@ -2619,6 +2619,42 @@ void main() {
       tester.getSize(headerFinder).height,
       closeTo(collapsedHeaderHeight, 0.1),
     );
+
+    final localScrollFinder = find.descendant(
+      of: find.byKey(const ValueKey<String>('network-detail-section-local')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.vertical,
+      ),
+    );
+    expect(localScrollFinder, findsOneWidget);
+
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(localScrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -96)));
+    await tester.pump();
+    await _pumpAppMotionFrames(tester);
+
+    expect(
+      tester.getSize(headerFinder).height,
+      greaterThan(collapsedHeaderHeight),
+    );
+
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(localScrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
+    await tester.pump();
+    await _pumpAppMotionFrames(tester);
+
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(collapsedHeaderHeight, 0.1),
+    );
   });
 
   testWidgets('refresh nodes reloads console nodes and peer status', (
