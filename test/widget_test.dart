@@ -1662,8 +1662,6 @@ void main() {
     );
     expect(find.text('192.168.50.0/24'), findsOneWidget);
     expect(find.text('映射为 10.50.0.0/24'), findsOneWidget);
-    expect(find.textContaining('配额 1 / 8'), findsOneWidget);
-    expect(find.textContaining('允许 192.168.0.0/16'), findsOneWidget);
     expect(find.textContaining('1 个 · 1 在线'), findsWidgets);
     expect(find.textContaining('edge-router'), findsOneWidget);
     expect(find.textContaining('desktop-1'), findsOneWidget);
@@ -1779,7 +1777,7 @@ void main() {
 
     expect(find.textContaining('temporary route failure'), findsNothing);
     expect(find.text('192.168.50.0/24'), findsOneWidget);
-    expect(find.textContaining('配额 1 / 8'), findsOneWidget);
+
   });
 
   testWidgets('network detail local segment shows local node config', (

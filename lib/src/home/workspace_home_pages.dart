@@ -627,20 +627,9 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final quotaText = '配额 ${routes.quotaUsed} / ${routes.quotaLimit}';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          routes.allowedProxyCidrs.isEmpty
-              ? quotaText
-              : '$quotaText · 允许 ${routes.allowedProxyCidrs.join(', ')}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: const Color(0xFF64748B),
-          ),
-        ),
-        const SizedBox(height: 12),
         if (loading) ...[
           const Align(
             alignment: Alignment.centerLeft,
