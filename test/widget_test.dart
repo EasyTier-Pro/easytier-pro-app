@@ -2447,6 +2447,50 @@ void main() {
     expect(find.text('办公网'), findsNothing);
   });
 
+  testWidgets('opens network detail when tapping network list name', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'Office', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: 'Research', regions: ['ap-east']),
+      ],
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final officeTitle = find.descendant(
+      of: find.byKey(const ValueKey<String>('network-switch-net-1')),
+      matching: find.text('Office'),
+    );
+
+    expect(officeTitle, findsOneWidget);
+    expect(_hasSelectionAreaAncestor(tester, officeTitle), isFalse);
+    expect(
+      find.byKey(const ValueKey<String>('network-detail-header')),
+      findsNothing,
+    );
+
+    await tester.tap(officeTitle);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('network-detail-header')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('navigation and dropdown labels are not selectable', (
     WidgetTester tester,
   ) async {

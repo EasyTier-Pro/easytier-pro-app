@@ -316,22 +316,20 @@ class _NetworkSwitchTile extends StatelessWidget {
                                       Expanded(
                                         child: Align(
                                           alignment: Alignment.centerLeft,
-                                          child: SelectableTextHitBoundary(
-                                            child: Text(
-                                              network.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodyMedium
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w700,
-                                                    color: const Color(
-                                                      0xFF0F172A,
-                                                    ),
-                                                    fontSize: 14,
+                                          child: Text(
+                                            network.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(
+                                                    0xFF0F172A,
                                                   ),
-                                            ),
+                                                  fontSize: 14,
+                                                ),
                                           ),
                                         ),
                                       ),
