@@ -47,6 +47,101 @@ void main() {
     });
   });
 
+  group('CoreLifecycleService elevation repair', () {
+    test('supports desktop elevation on Windows and macOS', () {
+      expect(
+        CoreLifecycleService.supportsDesktopElevationRepairForPlatform(
+          isWindows: true,
+          isMacOS: false,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.supportsDesktopElevationRepairForPlatform(
+          isWindows: false,
+          isMacOS: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.supportsDesktopElevationRepairForPlatform(
+          isWindows: false,
+          isMacOS: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('detects desktop elevation errors', () {
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(740, ''),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'elevation required',
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'install failed: Permission denied',
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'install failed: Permission denied',
+          includeUnixPermissionErrors: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'Operation not permitted',
+          includeUnixPermissionErrors: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'desktop install must be run as root',
+          includeUnixPermissionErrors: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'failed to read bootstrap config',
+        ),
+        isFalse,
+      );
+    });
+
+    test('falls back to force repair when runtime cannot elevate', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.repairWithElevation();
+
+      expect(runtime.ensureRunningCount, 2);
+      expect(runtime.forceReinstallValues, [false, true]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
+  });
+
   group('CoreLifecycleService auth invalidation', () {
     test('stops runtime when local token has expired', () async {
       final authService = _LifecycleAuthService();

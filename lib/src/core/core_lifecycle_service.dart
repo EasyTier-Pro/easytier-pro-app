@@ -153,26 +153,27 @@ class CoreLifecycleService {
       );
       _logger.info('core', 'Elevation repair requested');
 
+      File? inputFile;
+      File? outputFile;
+      File? errorFile;
+      File? commandFile;
+      Directory? elevationTempDir;
       try {
         final bootstrap = await authService.prepareCoreBootstrap(
           accessToken: session.tokenSet.accessToken,
           workspaceId: workspace.id,
         );
 
-        final tempDir = Directory.systemTemp;
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final inputFile = File(
-          '${tempDir.path}${Platform.pathSeparator}et_bootstrap_$timestamp.json',
+        elevationTempDir = await Directory.systemTemp.createTemp(
+          'easytier_pro_elevated_',
         );
-        final outputFile = File(
-          '${tempDir.path}${Platform.pathSeparator}et_output_$timestamp.json',
+        await _restrictOwnerOnlyPermissions(
+          elevationTempDir,
+          ownerExecutable: true,
         );
-        final errorFile = File(
-          '${tempDir.path}${Platform.pathSeparator}et_error_$timestamp.json',
-        );
-        final batFile = File(
-          '${tempDir.path}${Platform.pathSeparator}et_elevated_$timestamp.bat',
-        );
+        inputFile = File(_joinPath(elevationTempDir.path, 'bootstrap.json'));
+        outputFile = File(_joinPath(elevationTempDir.path, 'output.json'));
+        errorFile = File(_joinPath(elevationTempDir.path, 'error.json'));
 
         final request = {
           'bootstrap_token': bootstrap.bootstrapToken,
@@ -180,29 +181,33 @@ class CoreLifecycleService {
           'config_server': bootstrap.configServer,
         };
         await inputFile.writeAsString(jsonEncode(request), encoding: utf8);
+        await _restrictOwnerOnlyPermissions(inputFile);
 
         final installerPath = _resolveInstallerExecutable();
-        final installerDir = File(installerPath).parent.path;
-        final batContent =
-            '''@echo off
-chcp 65001 >nul
-cd /d "$installerDir"
-"$installerPath" desktop install --json < "${inputFile.path}" > "${outputFile.path}" 2> "${errorFile.path}"
-''';
-        await batFile.writeAsString(batContent, encoding: utf8);
+        commandFile = await _writeElevatedInstallCommandFile(
+          tempDir: elevationTempDir,
+          installerPath: installerPath,
+          inputFile: inputFile,
+          outputFile: outputFile,
+          errorFile: errorFile,
+        );
 
         _logger.info(
           'core.desktop',
-          'Launching elevated installer via PowerShell',
-          context: {'bat_file': batFile.path, 'installer': installerPath},
+          'Launching elevated installer',
+          context: {
+            'command_file': commandFile.path,
+            'installer': installerPath,
+            'platform': Platform.operatingSystem,
+          },
         );
 
-        final powershellResult = await _runElevatedWithPowerShell(batFile.path);
+        final elevationResult = await _runElevatedInstaller(commandFile.path);
         _logger.info(
           'core.desktop',
           'Elevated installer process completed',
           context: {
-            'exit_code': powershellResult,
+            'exit_code': elevationResult,
             'output_exists': outputFile.existsSync(),
             'error_exists': errorFile.existsSync(),
           },
@@ -235,7 +240,15 @@ cd /d "$installerDir"
             if (errorEvent.isNotEmpty) {
               final data =
                   errorEvent['data'] as Map<String, dynamic>? ?? const {};
-              throw StateError(data['message']?.toString() ?? '提权安装返回错误');
+              final message = data['message']?.toString() ?? '提权安装返回错误';
+              if (_isElevationRequired(
+                0,
+                message,
+                includeUnixPermissionErrors: true,
+              )) {
+                throw _ElevationRequiredException(message);
+              }
+              throw StateError(message);
             }
 
             for (var index = events.length - 1; index >= 0; index--) {
@@ -256,12 +269,6 @@ cd /d "$installerDir"
                   machineId: machineId,
                   details: 'EasyTier ${bootstrap.version}',
                 );
-                await _cleanupElevationTempFiles([
-                  inputFile,
-                  outputFile,
-                  errorFile,
-                  batFile,
-                ]);
                 return;
               }
             }
@@ -282,10 +289,10 @@ cd /d "$installerDir"
           context: {'error': error.toString()},
         );
         if (error is _ElevationRequiredException) {
-          status.value = const CoreRunStatus(
+          status.value = CoreRunStatus(
             phase: CoreRunPhase.needsElevation,
             message: '需要管理员权限以安装连接引擎',
-            lastError: '创建虚拟网卡需要提升权限',
+            lastError: _elevationLastError(error),
           );
           return;
         }
@@ -294,8 +301,68 @@ cd /d "$installerDir"
           message: '连接引擎启动失败',
           lastError: _normalizeError(error),
         );
+      } finally {
+        await _cleanupElevationTempFiles([
+          if (inputFile != null) inputFile,
+          if (outputFile != null) outputFile,
+          if (errorFile != null) errorFile,
+          if (commandFile != null) commandFile,
+        ]);
+        await _cleanupElevationTempDirectory(elevationTempDir);
       }
     });
+  }
+
+  Future<File> _writeElevatedInstallCommandFile({
+    required Directory tempDir,
+    required String installerPath,
+    required File inputFile,
+    required File outputFile,
+    required File errorFile,
+  }) async {
+    if (Platform.isWindows) {
+      final batFile = File(_joinPath(tempDir.path, 'elevated.bat'));
+      final installerDir = File(installerPath).parent.path;
+      final batContent =
+          '''@echo off
+chcp 65001 >nul
+cd /d "$installerDir"
+"$installerPath" desktop install --json < "${inputFile.path}" > "${outputFile.path}" 2> "${errorFile.path}"
+''';
+      await batFile.writeAsString(batContent, encoding: utf8);
+      return batFile;
+    }
+
+    if (Platform.isMacOS) {
+      final scriptFile = File(_joinPath(tempDir.path, 'elevated.sh'));
+      await outputFile.writeAsString('', encoding: utf8);
+      await _restrictOwnerOnlyPermissions(outputFile);
+      await errorFile.writeAsString('', encoding: utf8);
+      await _restrictOwnerOnlyPermissions(errorFile);
+
+      final installerDir = File(installerPath).parent.path;
+      final scriptContent =
+          '''#!/bin/sh
+set -eu
+cd ${_quotePosixShellArgument(installerDir)}
+${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosixShellArgument(inputFile.path)} > ${_quotePosixShellArgument(outputFile.path)} 2> ${_quotePosixShellArgument(errorFile.path)}
+''';
+      await scriptFile.writeAsString(scriptContent, encoding: utf8);
+      await _restrictOwnerOnlyPermissions(scriptFile);
+      return scriptFile;
+    }
+
+    throw StateError('当前平台不支持提权安装');
+  }
+
+  Future<int> _runElevatedInstaller(String commandPath) {
+    if (Platform.isWindows) {
+      return _runElevatedWithPowerShell(commandPath);
+    }
+    if (Platform.isMacOS) {
+      return _runElevatedWithAppleScript(commandPath);
+    }
+    throw StateError('当前平台不支持提权安装');
   }
 
   Future<int> _runElevatedWithPowerShell(String batPath) async {
@@ -332,6 +399,37 @@ cd /d "$installerDir"
     throw StateError('找不到可用的 PowerShell 来执行提权操作');
   }
 
+  Future<int> _runElevatedWithAppleScript(String scriptPath) async {
+    final appleScript =
+        'do shell script ("/bin/sh " & quoted form of ${_quoteAppleScriptString(scriptPath)}) with administrator privileges';
+    try {
+      final result = await Process.run('/usr/bin/osascript', [
+        '-e',
+        appleScript,
+      ]);
+      final stderr = result.stderr.toString().trim();
+      final stdout = result.stdout.toString().trim();
+      _logger.debug(
+        'core.desktop',
+        'AppleScript elevation attempt',
+        context: {
+          'exit_code': result.exitCode,
+          'stdout': stdout,
+          'stderr': stderr,
+        },
+      );
+      if (result.exitCode != 0) {
+        final message = stderr.isEmpty ? stdout : stderr;
+        if (_isMacOsAuthorizationCanceled(message)) {
+          throw const _ElevationRequiredException('用户取消了管理员授权');
+        }
+      }
+      return result.exitCode;
+    } on ProcessException catch (e) {
+      throw StateError('找不到 osascript 来执行 macOS 提权操作: ${e.message}');
+    }
+  }
+
   Future<void> _cleanupElevationTempFiles(List<File> files) async {
     for (final file in files) {
       try {
@@ -341,6 +439,51 @@ cd /d "$installerDir"
       } catch (_) {
         // ignore cleanup errors
       }
+    }
+  }
+
+  Future<void> _cleanupElevationTempDirectory(Directory? directory) async {
+    if (directory == null) {
+      return;
+    }
+    try {
+      if (directory.existsSync()) {
+        await directory.delete(recursive: true);
+      }
+    } catch (_) {
+      // ignore cleanup errors
+    }
+  }
+
+  Future<void> _restrictOwnerOnlyPermissions(
+    FileSystemEntity entity, {
+    bool ownerExecutable = false,
+  }) async {
+    if (Platform.isWindows) {
+      return;
+    }
+    try {
+      final result = await Process.run('/bin/chmod', [
+        ownerExecutable ? '700' : '600',
+        entity.path,
+      ]);
+      if (result.exitCode != 0) {
+        _logger.warn(
+          'core.desktop',
+          'Failed to restrict elevation temp permissions',
+          context: {
+            'path': entity.path,
+            'exit_code': result.exitCode,
+            'stderr': result.stderr.toString().trim(),
+          },
+        );
+      }
+    } on ProcessException catch (error) {
+      _logger.warn(
+        'core.desktop',
+        'chmod unavailable for elevation temp permissions',
+        context: {'path': entity.path, 'error': error.toString()},
+      );
     }
   }
 
@@ -465,10 +608,10 @@ cd /d "$installerDir"
         return;
       }
       if (error is _ElevationRequiredException) {
-        status.value = const CoreRunStatus(
+        status.value = CoreRunStatus(
           phase: CoreRunPhase.needsElevation,
           message: '需要管理员权限以安装连接引擎',
-          lastError: '创建虚拟网卡需要提升权限',
+          lastError: _elevationLastError(error),
         );
         return;
       }
@@ -633,12 +776,22 @@ cd /d "$installerDir"
       );
       if (errorEvent.isNotEmpty) {
         final data = errorEvent['data'] as Map<String, dynamic>? ?? const {};
+        final message = data['message']?.toString() ?? 'desktop 命令执行失败';
         _logger.error(
           'core.desktop',
           'Desktop command returned error event',
           context: {'command': command, 'event': data},
         );
-        throw StateError(data['message']?.toString() ?? 'desktop 命令执行失败');
+        if (_isElevationRequired(
+          0,
+          message,
+          includeUnixPermissionErrors: _shouldTreatUnixPermissionAsElevation(
+            command,
+          ),
+        )) {
+          throw _ElevationRequiredException(message);
+        }
+        throw StateError(message);
       }
     }
 
@@ -653,7 +806,13 @@ cd /d "$installerDir"
           'stderr': stderrText,
         },
       );
-      if (_isElevationRequired(exitCode, stderrText)) {
+      if (_isElevationRequired(
+        exitCode,
+        stderrText,
+        includeUnixPermissionErrors: _shouldTreatUnixPermissionAsElevation(
+          command,
+        ),
+      )) {
         throw _ElevationRequiredException(stderrText);
       }
       throw StateError(
@@ -696,6 +855,26 @@ cd /d "$installerDir"
     }
     final cliPath = data['cli_path']?.toString().trim() ?? '';
     return cliPath.isEmpty ? null : cliPath;
+  }
+
+  static bool supportsDesktopElevationRepairForPlatform({
+    required bool isWindows,
+    required bool isMacOS,
+  }) {
+    return isWindows || isMacOS;
+  }
+
+  @visibleForTesting
+  static bool isElevationRequiredForDesktopCommand(
+    int exitCode,
+    String stderrText,
+    {bool includeUnixPermissionErrors = false},
+  ) {
+    return _isElevationRequired(
+      exitCode,
+      stderrText,
+      includeUnixPermissionErrors: includeUnixPermissionErrors,
+    );
   }
 
   @visibleForTesting
@@ -937,14 +1116,61 @@ cd /d "$installerDir"
     return buffer.toString();
   }
 
-  static bool _isElevationRequired(int exitCode, String stderrText) {
+  static bool _isElevationRequired(
+    int exitCode,
+    String stderrText, {
+    bool includeUnixPermissionErrors = false,
+  }) {
     if (exitCode == 740) {
       return true;
     }
     final text = stderrText.toLowerCase();
-    return text.contains('请求的操作需要提升') ||
+    if (text.contains('请求的操作需要提升') ||
         text.contains('elevation required') ||
-        text.contains('requires elevation');
+        text.contains('requires elevation')) {
+      return true;
+    }
+    if (!includeUnixPermissionErrors) {
+      return false;
+    }
+    return text.contains('must be run as root') ||
+        text.contains('requires root') ||
+        text.contains('administrator privileges') ||
+        text.contains('permission denied') ||
+        text.contains('operation not permitted');
+  }
+
+  static bool _shouldTreatUnixPermissionAsElevation(String command) {
+    if (!Platform.isMacOS) {
+      return false;
+    }
+    return command == 'install' || command == 'uninstall';
+  }
+
+  static bool _isMacOsAuthorizationCanceled(String message) {
+    final text = message.toLowerCase();
+    return text.contains('(-128)') ||
+        text.contains('user canceled') ||
+        text.contains('user cancelled') ||
+        text.contains('用户取消') ||
+        text.contains('用户已取消');
+  }
+
+  static String _elevationLastError(_ElevationRequiredException error) {
+    final message = error.message.trim();
+    return message.isEmpty ? '创建虚拟网卡需要提升权限' : message;
+  }
+
+  static String _quoteAppleScriptString(String value) {
+    final escaped = value.replaceAll('\\', r'\\').replaceAll('"', r'\"');
+    return '"$escaped"';
+  }
+
+  static String _quotePosixShellArgument(String value) {
+    if (value.isEmpty) {
+      return "''";
+    }
+    return "'${value.replaceAll("'", "'\"'\"'")}'";
   }
 
   String _normalizeError(Object error) {

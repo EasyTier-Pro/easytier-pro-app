@@ -6,7 +6,11 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
   final CoreLifecycleService _owner;
 
   @override
-  bool get supportsElevationRepair => Platform.isWindows;
+  bool get supportsElevationRepair =>
+      CoreLifecycleService.supportsDesktopElevationRepairForPlatform(
+        isWindows: Platform.isWindows,
+        isMacOS: Platform.isMacOS,
+      );
 
   @override
   Future<CoreRuntimeStartResult?> readStatus(
@@ -36,6 +40,9 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
       try {
         await _owner._desktopCommand('uninstall', const {'purge': false});
       } catch (error) {
+        if (error is _ElevationRequiredException) {
+          rethrow;
+        }
         _owner._logger.warn(
           'core',
           'Forced reinstall pre-uninstall failed, continuing install',
