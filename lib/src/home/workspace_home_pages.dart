@@ -270,17 +270,17 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 traffic: _networkTraffic[network.id],
                 localIpv4: localIpv4,
               ),
-              const SizedBox(height: 12),
-              _NetworkDetailSectionSelector(
-                selected: _networkDetailSection,
-                nodeCount: devices.length,
-                subnetCount: subnetRoutes?.routes.length,
-                hasLocalNode: localNode != null,
-                onChanged: (section) =>
-                    _updateState(() => _networkDetailSection = section),
-              ),
             ],
           ),
+        ),
+        const SizedBox(height: 12),
+        _NetworkDetailSectionSelector(
+          selected: _networkDetailSection,
+          nodeCount: devices.length,
+          subnetCount: subnetRoutes?.routes.length,
+          hasLocalNode: localNode != null,
+          onChanged: (section) =>
+              _updateState(() => _networkDetailSection = section),
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -439,31 +439,38 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 520;
-          return Wrap(
-            spacing: 0,
-            runSpacing: 0,
-            children: [
-              _NetworkDetailSectionButton(
-                selected: selected == _NetworkDetailSection.nodes,
-                icon: Icons.devices_other_outlined,
-                label: compact ? '节点' : '节点 $nodeCount',
-                onPressed: () => onChanged(_NetworkDetailSection.nodes),
-              ),
-              _NetworkDetailSectionButton(
-                selected: selected == _NetworkDetailSection.subnets,
-                icon: Icons.alt_route_outlined,
-                label: subnetCount == null || compact
-                    ? '子网'
-                    : '子网 $subnetCount',
-                onPressed: () => onChanged(_NetworkDetailSection.subnets),
-              ),
-              _NetworkDetailSectionButton(
-                selected: selected == _NetworkDetailSection.local,
-                icon: Icons.computer_outlined,
-                label: hasLocalNode && !compact ? '本机已加入' : '本机',
-                onPressed: () => onChanged(_NetworkDetailSection.local),
-              ),
-            ],
+          return Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Wrap(
+              spacing: 0,
+              runSpacing: 0,
+              children: [
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.nodes,
+                  icon: Icons.devices_other_outlined,
+                  label: compact ? '节点' : '节点 $nodeCount',
+                  onPressed: () => onChanged(_NetworkDetailSection.nodes),
+                ),
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.subnets,
+                  icon: Icons.alt_route_outlined,
+                  label: subnetCount == null || compact
+                      ? '子网'
+                      : '子网 $subnetCount',
+                  onPressed: () => onChanged(_NetworkDetailSection.subnets),
+                ),
+                _NetworkDetailSectionButton(
+                  selected: selected == _NetworkDetailSection.local,
+                  icon: Icons.computer_outlined,
+                  label: hasLocalNode && !compact ? '本机已加入' : '本机',
+                  onPressed: () => onChanged(_NetworkDetailSection.local),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -487,42 +494,50 @@ class _NetworkDetailSectionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        border: selected
-            ? const Border(
-                bottom: BorderSide(color: Color(0xFF0F172A), width: 2),
-              )
-            : null,
-      ),
-      child: FButton(
-        variant: .ghost,
-        size: .sm,
-        onPress: onPressed,
+    final button = FButton(
+      variant: .ghost,
+      size: .sm,
+      onPress: onPressed,
+      mainAxisSize: MainAxisSize.min,
+      child: Row(
         mainAxisSize: MainAxisSize.min,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 14,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: selected
+                ? const Color(0xFF0F172A)
+                : const Color(0xFF64748B),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               color: selected
                   ? const Color(0xFF0F172A)
                   : const Color(0xFF64748B),
             ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+
+    if (!selected) return button;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF000000).withAlpha(8),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: button,
     );
   }
 }
