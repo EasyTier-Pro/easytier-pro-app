@@ -1004,10 +1004,10 @@ void main() {
 
     await _selectNetworkFromHeader(tester, '办公网');
 
-    final controller = _scrollControllerFor(
-      tester,
+    final scrollView = tester.widget<SingleChildScrollView>(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
+    final controller = scrollView.controller!;
     expect(controller.position.maxScrollExtent, greaterThan(0));
 
     final headerFinder = find.byKey(
@@ -1204,10 +1204,10 @@ void main() {
       const ValueKey<String>('network-detail-header'),
     );
     final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final controller = _scrollControllerFor(
-      tester,
+    final scrollView = tester.widget<SingleChildScrollView>(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
+    final controller = scrollView.controller!;
     expect(controller.position.maxScrollExtent, greaterThan(0));
 
     final scrollFinder = find.byKey(
@@ -4155,15 +4155,6 @@ Future<void> _pumpAppMotionFrames(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 100));
   }
   await tester.pump();
-}
-
-ScrollController _scrollControllerFor(WidgetTester tester, Finder finder) {
-  final widget = tester.widget(finder);
-  return switch (widget) {
-    SingleChildScrollView(:final controller) => controller!,
-    ScrollView(:final controller) => controller!,
-    _ => throw StateError('Widget does not expose a ScrollController: $widget'),
-  };
 }
 
 http.Response _jsonResponse(Object body, [int statusCode = 200]) {

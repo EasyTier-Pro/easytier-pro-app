@@ -70,45 +70,27 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
 
   @override
   Widget build(BuildContext context) {
-    final sortedNodes = _sortNodes(widget.nodes);
-    final runtimeError = widget.runtimeError;
-    final noticeItemCount = runtimeError == null ? 0 : 1;
     final content = widget.nodes.isEmpty
         ? NetworkNodeListPanel(
             key: const ValueKey<String>('network-node-list-empty'),
             nodes: widget.nodes,
             peerStatusesByIpv4: widget.peerStatusesByIpv4,
-            runtimeError: runtimeError,
+            runtimeError: widget.runtimeError,
           )
         : Scrollbar(
             key: const ValueKey<String>('network-node-list-scrollbar'),
             controller: _scrollController,
             thumbVisibility: false,
-            child: AppSmoothScrollView.builder(
+            child: AppSmoothScrollView(
               scrollViewKey: const ValueKey<String>('network-node-list-scroll'),
               controller: _scrollController,
               primary: false,
-              padding: EdgeInsets.zero,
               scrollDeltaCoordinator: widget.scrollDeltaCoordinator,
-              itemCount: sortedNodes.length + noticeItemCount,
-              itemBuilder: (context, index) {
-                if (runtimeError != null && index == 0) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _RuntimeStatusNotice(message: runtimeError),
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                }
-
-                final node = sortedNodes[index - noticeItemCount];
-                return _NodeCard(
-                  key: ValueKey<String>('network-node-${node.id}'),
-                  node: node,
-                  peer: _peerFor(node),
-                );
-              },
+              child: NetworkNodeListPanel(
+                nodes: widget.nodes,
+                peerStatusesByIpv4: widget.peerStatusesByIpv4,
+                runtimeError: widget.runtimeError,
+              ),
             ),
           );
 
@@ -126,30 +108,6 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
         child: content,
       ),
     );
-  }
-
-  List<NetworkDevice> _sortNodes(List<NetworkDevice> source) {
-    return List<NetworkDevice>.of(source)..sort((a, b) {
-      if (a.online && !b.online) return -1;
-      if (!a.online && b.online) return 1;
-
-      final aPeer = _peerFor(a);
-      final bPeer = _peerFor(b);
-      final aLocal = aPeer?.isLocal ?? false;
-      final bLocal = bPeer?.isLocal ?? false;
-      if (aLocal && !bLocal) return -1;
-      if (!aLocal && bLocal) return 1;
-
-      return a.displayLabel.compareTo(b.displayLabel);
-    });
-  }
-
-  CorePeerStatus? _peerFor(NetworkDevice node) {
-    final ipv4 = normalizeCorePeerIpv4(node.ipv4 ?? '');
-    if (ipv4.isEmpty) {
-      return null;
-    }
-    return widget.peerStatusesByIpv4[ipv4];
   }
 }
 

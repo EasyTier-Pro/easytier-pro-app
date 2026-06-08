@@ -114,7 +114,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       <String, List<_TrafficHistoryPoint>>{};
   static const int _maxNetworkTrafficHistoryPoints = 1800;
   static const double _networkDetailHeaderCollapseDistance = 96;
-  static const double _networkDetailHeaderDragVisualStep = 4;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, bool> _networkInstanceReady = const <String, bool>{};
@@ -221,14 +220,10 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final nextOffset = offset
         .clamp(0.0, _networkDetailHeaderCollapseDistance)
         .toDouble();
-    final previousOffset = _networkDetailHeaderCollapseOffset;
-    final visualStep = animate ? 0.5 : _networkDetailHeaderDragVisualStep;
-    final atBoundary =
-        nextOffset == 0 || nextOffset == _networkDetailHeaderCollapseDistance;
-    _networkDetailHeaderCollapseOffset = nextOffset;
-    if ((previousOffset - nextOffset).abs() < visualStep && !atBoundary) {
+    if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.5) {
       return;
     }
+    _networkDetailHeaderCollapseOffset = nextOffset;
     _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
       progress: _networkDetailHeaderCollapseProgress,
       animate: animate,
