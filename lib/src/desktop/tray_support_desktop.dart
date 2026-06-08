@@ -13,7 +13,9 @@ class _DesktopTraySupport extends TraySupport
   _DesktopTraySupport();
 
   static const String _trayTooltip = 'EasyTier Pro';
-  static const String _trayIconPath = 'windows/runner/resources/tray_icon.ico';
+  static const String _windowsTrayIconPath =
+      'windows/runner/resources/tray_icon.ico';
+  static const String _macOSTrayIconPath = 'assets/images/tray_icon_macos.png';
   static const String _trayIconPathFallback = 'web/favicon.png';
 
   bool _initialized = false;
@@ -39,7 +41,7 @@ class _DesktopTraySupport extends TraySupport
     trayManager.addListener(this);
     windowManager.addListener(this);
     await windowManager.setPreventClose(true);
-    await trayManager.setIcon(_trayIconForCurrentPlatform());
+    await _setTrayIcon();
     await trayManager.setToolTip(_trayTooltip);
     await _refreshContextMenu();
 
@@ -127,9 +129,13 @@ class _DesktopTraySupport extends TraySupport
 
     _trayMenuVisible = true;
     try {
-      // Windows tray menus are more reliable when the host app is brought forward.
-      // ignore: deprecated_member_use
-      await trayManager.popUpContextMenu(bringAppToFront: true);
+      if (defaultTargetPlatform == TargetPlatform.windows) {
+        // Windows tray menus are more reliable when the host app is brought forward.
+        // ignore: deprecated_member_use
+        await trayManager.popUpContextMenu(bringAppToFront: true);
+      } else {
+        await trayManager.popUpContextMenu();
+      }
     } finally {
       _trayMenuVisible = false;
     }
@@ -202,12 +208,25 @@ class _DesktopTraySupport extends TraySupport
     unawaited(windowManager.hide());
   }
 
-  String _trayIconForCurrentPlatform() {
+  Future<void> _setTrayIcon() async {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return _trayIconPathFallback;
+      await trayManager.setIcon(
+        _macOSTrayIconPath,
+        isTemplate: true,
+        iconSize: 18,
+      );
+      return;
     }
 
-    return _trayIconPath;
+    await trayManager.setIcon(_trayIconForCurrentPlatform());
+  }
+
+  String _trayIconForCurrentPlatform() {
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return _windowsTrayIconPath;
+    }
+
+    return _trayIconPathFallback;
   }
 }
 

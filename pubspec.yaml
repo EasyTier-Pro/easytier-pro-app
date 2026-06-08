@@ -72,6 +72,7 @@ flutter:
   assets:
     - assets/images/easytier.png
     - assets/images/easytier_header.png
+    - assets/images/tray_icon_macos.png
     - windows/runner/resources/app_icon.ico
     - windows/runner/resources/tray_icon.ico
     - web/favicon.png
