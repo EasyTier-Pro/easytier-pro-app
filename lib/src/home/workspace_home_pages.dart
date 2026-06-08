@@ -158,6 +158,12 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
         ? null
         : _nodeConfigErrors[localNode.id];
     final localIpv4 = state.localIpv4 ?? localNode?.ipv4 ?? '';
+    final regionText = network.regions.isEmpty
+        ? '-'
+        : network.regions.join(', ');
+    final cidrText = network.ipv4Cidr.trim().isEmpty
+        ? '-'
+        : network.ipv4Cidr.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,6 +244,13 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                     ],
                   );
                 },
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$regionText · $cidrText',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
               ),
               const SizedBox(height: 12),
               _NetworkSummaryBar(
