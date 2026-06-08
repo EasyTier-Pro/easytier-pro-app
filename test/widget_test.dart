@@ -166,7 +166,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
-    expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+    _expectAndroidSingleNetworkLimitToastOnly();
   });
 
   testWidgets(
@@ -215,7 +215,7 @@ void main() {
       await tester.pump();
 
       expect(authService.attachedNetworkIds, isEmpty);
-      expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+      _expectAndroidSingleNetworkLimitToastOnly();
 
       attachGate.complete();
       await tester.pumpAndSettle();
@@ -280,7 +280,7 @@ void main() {
       await tester.pump();
 
       expect(authService.attachedNetworkIds, isEmpty);
-      expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsWidgets);
+      _expectAndroidSingleNetworkLimitToastOnly();
 
       removeGate.complete();
       await tester.pumpAndSettle();
@@ -4586,6 +4586,18 @@ void _useDesktopViewport(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+}
+
+void _expectAndroidSingleNetworkLimitToastOnly() {
+  final messageFinder = find.textContaining('Android 当前仅支持一个活跃 VPN 网络');
+  expect(messageFinder, findsOneWidget);
+  expect(
+    find.descendant(
+      of: find.byKey(const ValueKey<String>('network-switch-net-2')),
+      matching: messageFinder,
+    ),
+    findsNothing,
+  );
 }
 
 void _expectTrafficSparklineWindow(

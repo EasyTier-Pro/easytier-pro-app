@@ -18,7 +18,6 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
     if (joinedAndroidNetwork != null) {
       final message =
           'Android 当前仅支持一个活跃 VPN 网络，请先断开「${joinedAndroidNetwork.name}」后再加入此网络。';
-      _setJoinError(network.id, message);
       _showNetworkActionToast(message, destructive: true);
       return;
     }
