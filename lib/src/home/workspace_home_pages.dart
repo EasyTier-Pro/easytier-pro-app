@@ -168,88 +168,21 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 520;
-
-                  final title = Text(
-                    network.name,
-                    style: compact
-                        ? Theme.of(context).textTheme.titleLarge
-                        : Theme.of(context).textTheme.headlineSmall,
-                    overflow: TextOverflow.ellipsis,
-                  );
-                  final actions = Wrap(
-                    spacing: compact ? 6 : 8,
-                    runSpacing: compact ? 6 : 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Tooltip(
-                        message: '刷新节点',
-                        excludeFromSemantics: true,
-                        child: FButton(
-                          variant: .ghost,
-                          size: .sm,
-                          onPress: deleting
-                              ? null
-                              : () => unawaited(_refreshNetworkNodes(network)),
-                          mainAxisSize: MainAxisSize.min,
-                          child: const Icon(Icons.refresh, size: 16),
-                        ),
-                      ),
-                      if (!joined)
-                        FButton(
-                          size: compact ? .sm : .md,
-                          onPress: deleting
-                              ? null
-                              : () => unawaited(_joinNetwork(network)),
-                          mainAxisSize: MainAxisSize.min,
-                          child: const Text('加入网络'),
-                        ),
-                      _NetworkMoreMenu(
-                        enabled: !deleting,
-                        joined: joined,
-                        onLeave: () => unawaited(_leaveNetwork(network)),
-                        onDelete: () =>
-                            unawaited(_showDeleteNetworkDialog(network)),
-                      ),
-                    ],
-                  );
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(child: title),
-                      const SizedBox(width: 12),
-                      _ControlSelectionBoundary(child: actions),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$regionText · $cidrText',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
-              ),
-              const SizedBox(height: 12),
-              _NetworkSummaryBar(
-                totalDevices: devices.length,
-                onlineDevices: onlineCount,
-                traffic: _networkTraffic[network.id],
-                localIpv4: localIpv4,
-              ),
-            ],
-          ),
+        _NetworkDetailHeader(
+          network: network,
+          regionText: regionText,
+          cidrText: cidrText,
+          totalDevices: devices.length,
+          onlineDevices: onlineCount,
+          traffic: _networkTraffic[network.id],
+          localIpv4: localIpv4,
+          joined: joined,
+          deleting: deleting,
+          collapseProgress: _networkDetailHeaderCollapseProgress,
+          onRefresh: () => unawaited(_refreshNetworkNodes(network)),
+          onJoin: () => unawaited(_joinNetwork(network)),
+          onLeave: () => unawaited(_leaveNetwork(network)),
+          onDelete: () => unawaited(_showDeleteNetworkDialog(network)),
         ),
         const SizedBox(height: 12),
         _NetworkDetailSectionSelector(
@@ -257,8 +190,10 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           nodeCount: devices.length,
           subnetCount: subnetRoutes?.routes.length,
           hasLocalNode: localNode != null,
-          onChanged: (section) =>
-              _updateState(() => _networkDetailSection = section),
+          onChanged: (section) => _updateState(() {
+            _networkDetailSection = section;
+            _resetNetworkDetailScrollOffset();
+          }),
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -273,6 +208,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 nodes: devices,
                 peerStatusesByIpv4: peerStatuses,
                 runtimeError: peerStatusError,
+                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
               ),
               _NetworkDetailSection.subnets => _NetworkSubnetRouteViewport(
                 key: const ValueKey<String>('network-detail-section-subnets'),
@@ -280,6 +216,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 loading: subnetRoutesLoading,
                 error: subnetRouteError,
                 onRetry: () => unawaited(_loadNetworkSubnetRoutes(network.id)),
+                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
               ),
               _NetworkDetailSection.local => _LocalNetworkSettingsViewport(
                 key: const ValueKey<String>('network-detail-section-local'),
@@ -291,6 +228,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 joinState: state,
                 onRetry: () =>
                     unawaited(_loadLocalNodeConfigForNetworkId(network.id)),
+                onScrollOffsetChanged: _handleNetworkDetailScrollOffsetChanged,
               ),
             },
           ),
@@ -394,4 +332,182 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
     ];
     return parts.join(' · ');
   }
+}
+
+class _NetworkDetailHeader extends StatelessWidget {
+  const _NetworkDetailHeader({
+    required this.network,
+    required this.regionText,
+    required this.cidrText,
+    required this.totalDevices,
+    required this.onlineDevices,
+    required this.traffic,
+    required this.localIpv4,
+    required this.joined,
+    required this.deleting,
+    required this.collapseProgress,
+    required this.onRefresh,
+    required this.onJoin,
+    required this.onLeave,
+    required this.onDelete,
+  });
+
+  final ConsoleNetwork network;
+  final String regionText;
+  final String cidrText;
+  final int totalDevices;
+  final int onlineDevices;
+  final _NetworkTrafficSnapshot? traffic;
+  final String localIpv4;
+  final bool joined;
+  final bool deleting;
+  final double collapseProgress;
+  final VoidCallback onRefresh;
+  final VoidCallback onJoin;
+  final VoidCallback onLeave;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = collapseProgress.clamp(0.0, 1.0).toDouble();
+    final verticalPadding = _networkDetailLerp(12, 8, progress);
+
+    return Container(
+      key: const ValueKey<String>('network-detail-header'),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: verticalPadding),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              final textTheme = Theme.of(context).textTheme;
+              final expandedTitleStyle = compact
+                  ? textTheme.titleLarge
+                  : textTheme.headlineSmall;
+              final collapsedTitleStyle = compact
+                  ? textTheme.titleMedium
+                  : textTheme.titleLarge;
+
+              final title = Text(
+                network.name,
+                style: TextStyle.lerp(
+                  expandedTitleStyle,
+                  collapsedTitleStyle,
+                  progress,
+                ),
+                overflow: TextOverflow.ellipsis,
+              );
+              final actions = Wrap(
+                spacing: compact ? 6 : 8,
+                runSpacing: compact ? 6 : 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Tooltip(
+                    message: '刷新节点',
+                    excludeFromSemantics: true,
+                    child: FButton(
+                      variant: .ghost,
+                      size: .sm,
+                      onPress: deleting ? null : onRefresh,
+                      mainAxisSize: MainAxisSize.min,
+                      child: const Icon(Icons.refresh, size: 16),
+                    ),
+                  ),
+                  if (!joined)
+                    FButton(
+                      size: compact ? .sm : .md,
+                      onPress: deleting ? null : onJoin,
+                      mainAxisSize: MainAxisSize.min,
+                      child: const Text('加入网络'),
+                    ),
+                  _NetworkMoreMenu(
+                    enabled: !deleting,
+                    joined: joined,
+                    onLeave: onLeave,
+                    onDelete: onDelete,
+                  ),
+                ],
+              );
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 12),
+                  _ControlSelectionBoundary(child: actions),
+                ],
+              );
+            },
+          ),
+          _NetworkDetailCollapsibleGap(height: 4, progress: progress),
+          _NetworkDetailCollapsible(
+            progress: progress,
+            child: Text(
+              '$regionText · $cidrText',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
+            ),
+          ),
+          _NetworkDetailCollapsibleGap(height: 12, progress: progress),
+          _NetworkDetailCollapsible(
+            progress: progress,
+            child: _NetworkSummaryBar(
+              totalDevices: totalDevices,
+              onlineDevices: onlineDevices,
+              traffic: traffic,
+              localIpv4: localIpv4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NetworkDetailCollapsible extends StatelessWidget {
+  const _NetworkDetailCollapsible({
+    required this.progress,
+    required this.child,
+  });
+
+  final double progress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = (1 - progress).clamp(0.0, 1.0).toDouble();
+
+    return ClipRect(
+      child: Align(
+        alignment: Alignment.topLeft,
+        heightFactor: visible,
+        child: Opacity(opacity: visible, child: child),
+      ),
+    );
+  }
+}
+
+class _NetworkDetailCollapsibleGap extends StatelessWidget {
+  const _NetworkDetailCollapsibleGap({
+    required this.height,
+    required this.progress,
+  });
+
+  final double height;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = (1 - progress).clamp(0.0, 1.0).toDouble();
+    return SizedBox(height: height * visible);
+  }
+}
+
+double _networkDetailLerp(double start, double end, double progress) {
+  return start + (end - start) * progress;
 }

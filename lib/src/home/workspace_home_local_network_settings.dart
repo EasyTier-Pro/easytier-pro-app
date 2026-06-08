@@ -10,6 +10,7 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
     required this.error,
     required this.joinState,
     required this.onRetry,
+    this.onScrollOffsetChanged,
   });
 
   final ConsoleNetwork network;
@@ -19,33 +20,47 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
   final String? error;
   final _JoinNetworkState joinState;
   final VoidCallback onRetry;
+  final ValueChanged<double>? onScrollOffsetChanged;
 
   @override
   Widget build(BuildContext context) {
     final localNode = node;
     if (localNode == null) {
-      return const _StateMessage(message: '本机尚未加入此网络。');
+      return _NetworkDetailStaticViewport(
+        onScrollOffsetChanged: onScrollOffsetChanged,
+        child: const _StateMessage(message: '本机尚未加入此网络。'),
+      );
     }
     if (loading && config == null) {
-      return const Center(child: FCircularProgress());
+      return _NetworkDetailStaticViewport(
+        onScrollOffsetChanged: onScrollOffsetChanged,
+        child: const Center(child: FCircularProgress()),
+      );
     }
     if (error != null && config == null) {
-      return _StateMessage(
-        message: error!,
-        action: FButton(
-          variant: .outline,
-          size: .sm,
-          onPress: onRetry,
-          child: const Text('重试'),
+      return _NetworkDetailStaticViewport(
+        onScrollOffsetChanged: onScrollOffsetChanged,
+        child: _StateMessage(
+          message: error!,
+          action: FButton(
+            variant: .outline,
+            size: .sm,
+            onPress: onRetry,
+            child: const Text('重试'),
+          ),
         ),
       );
     }
     final view = config;
     if (view == null) {
-      return const _StateMessage(message: '正在读取本机设置...');
+      return _NetworkDetailStaticViewport(
+        onScrollOffsetChanged: onScrollOffsetChanged,
+        child: const _StateMessage(message: '正在读取本机设置...'),
+      );
     }
 
     return _NetworkDetailScrollViewport(
+      onScrollOffsetChanged: onScrollOffsetChanged,
       child: _LocalNetworkSettingsPanel(
         network: network,
         node: localNode,

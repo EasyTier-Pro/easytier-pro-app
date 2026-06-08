@@ -17,11 +17,13 @@ class NetworkNodeListViewport extends StatefulWidget {
     required this.nodes,
     required this.peerStatusesByIpv4,
     this.runtimeError,
+    this.onScrollOffsetChanged,
   });
 
   final List<NetworkDevice> nodes;
   final Map<String, CorePeerStatus> peerStatusesByIpv4;
   final String? runtimeError;
+  final ValueChanged<double>? onScrollOffsetChanged;
 
   @override
   State<NetworkNodeListViewport> createState() =>
@@ -32,9 +34,42 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScrollOffsetChanged);
+    _scheduleScrollOffsetSync();
+  }
+
+  @override
+  void didUpdateWidget(covariant NetworkNodeListViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onScrollOffsetChanged != widget.onScrollOffsetChanged ||
+        oldWidget.nodes.isEmpty != widget.nodes.isEmpty) {
+      _scheduleScrollOffsetSync();
+    }
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_handleScrollOffsetChanged);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleScrollOffsetChanged() {
+    widget.onScrollOffsetChanged?.call(_scrollController.offset);
+  }
+
+  void _scheduleScrollOffsetSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final offset = _scrollController.hasClients
+          ? _scrollController.offset
+          : 0.0;
+      widget.onScrollOffsetChanged?.call(offset);
+    });
   }
 
   @override

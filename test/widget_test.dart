@@ -1010,6 +1010,23 @@ void main() {
     final controller = scrollView.controller!;
     expect(controller.position.maxScrollExtent, greaterThan(0));
 
+    final headerFinder = find.byKey(
+      const ValueKey<String>('network-detail-header'),
+    );
+    final expandedHeaderHeight = tester.getSize(headerFinder).height;
+    controller.jumpTo(96);
+    await tester.pump();
+
+    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+
+    controller.jumpTo(controller.position.minScrollExtent);
+    await tester.pump();
+
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(expandedHeaderHeight, 0.1),
+    );
+
     final beforeWheelOffset = controller.offset;
     final scrollFinder = find.byKey(
       const ValueKey<String>('network-node-list-scroll'),
@@ -1057,6 +1074,139 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(controller.offset, controller.position.maxScrollExtent);
+  });
+
+  testWidgets('network detail subnets collapse header while scrolling', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final subnetRoutes = NetworkSubnetRouteList(
+      routes: List<NetworkSubnetRoute>.generate(18, (index) {
+        final number = index + 1;
+        return NetworkSubnetRoute(
+          id: 'route-$number',
+          cidr: '192.168.$number.0/24',
+          mappedCidr: '10.$number.0.0/24',
+        );
+      }),
+      allowedProxyCidrs: const <String>[],
+      quotaLimit: 20,
+      quotaUsed: 18,
+    );
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+      ],
+      subnetRoutes: <String, NetworkSubnetRouteList>{'net-1': subnetRoutes},
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+    await tester.tap(find.text('子网 18'));
+    await _pumpAppMotionFrames(tester);
+
+    final headerFinder = find.byKey(
+      const ValueKey<String>('network-detail-header'),
+    );
+    final expandedHeaderHeight = tester.getSize(headerFinder).height;
+    final subnetScrollFinder = find.descendant(
+      of: find.byKey(const ValueKey<String>('network-detail-section-subnets')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.vertical,
+      ),
+    );
+    expect(subnetScrollFinder, findsOneWidget);
+
+    final scrollView = tester.widget<SingleChildScrollView>(subnetScrollFinder);
+    final controller = scrollView.controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0));
+
+    controller.jumpTo(96);
+    await tester.pump();
+
+    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+  });
+
+  testWidgets('network detail resets collapsed header for empty node lists', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final networkDevices = List<NetworkDevice>.generate(18, (index) {
+      final number = index + 1;
+      return NetworkDevice(
+        id: 'node-$number',
+        name: 'desktop-$number',
+        online: true,
+        ipv4: '10.144.0.${number + 1}',
+        deviceId: 'device-$number',
+        machineId: 'machine-$number',
+      );
+    });
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '空网络', regions: ['ap-east']),
+      ],
+      networkDevices: <String, List<NetworkDevice>>{
+        'net-1': networkDevices,
+        'net-2': const <NetworkDevice>[],
+      },
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, '办公网');
+
+    final headerFinder = find.byKey(
+      const ValueKey<String>('network-detail-header'),
+    );
+    final expandedHeaderHeight = tester.getSize(headerFinder).height;
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey<String>('network-node-list-scroll')),
+    );
+    final controller = scrollView.controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0));
+
+    controller.jumpTo(96);
+    await tester.pump();
+
+    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
+
+    await _selectNetworkFromHeader(tester, '空网络');
+
+    expect(
+      find.byKey(const ValueKey<String>('network-node-list-empty')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(expandedHeaderHeight, 0.1),
+    );
   });
 
   testWidgets('network detail stacks safely in narrow windows', (

@@ -86,6 +86,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Set<String> _deletingNetworkIds = const <String>{};
   _DashboardView _activeView = _DashboardView.overview;
   _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
+  double _networkDetailScrollOffset = 0;
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
   final TextEditingController _newNetworkNameController = TextEditingController(
@@ -108,6 +109,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   final Map<String, List<_TrafficHistoryPoint>> _networkTrafficHistories =
       <String, List<_TrafficHistoryPoint>>{};
   static const int _maxNetworkTrafficHistoryPoints = 1800;
+  static const double _networkDetailHeaderCollapseDistance = 96;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, bool> _networkInstanceReady = const <String, bool>{};
@@ -166,6 +168,23 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   List<ManagedDevice> _visibleManagedDevices(Iterable<ManagedDevice> devices) {
     return devices.where((device) => !device.removed).toList(growable: false);
+  }
+
+  double get _networkDetailHeaderCollapseProgress =>
+      (_networkDetailScrollOffset / _networkDetailHeaderCollapseDistance)
+          .clamp(0.0, 1.0)
+          .toDouble();
+
+  void _handleNetworkDetailScrollOffsetChanged(double offset) {
+    final nextOffset = math.max(0.0, offset);
+    if ((_networkDetailScrollOffset - nextOffset).abs() < 0.5) {
+      return;
+    }
+    setState(() => _networkDetailScrollOffset = nextOffset);
+  }
+
+  void _resetNetworkDetailScrollOffset() {
+    _networkDetailScrollOffset = 0;
   }
 
   void _updateState(VoidCallback fn) {

@@ -104,9 +104,13 @@ class _NetworkDetailSectionTabLabel extends StatelessWidget {
 }
 
 class _NetworkDetailScrollViewport extends StatefulWidget {
-  const _NetworkDetailScrollViewport({required this.child});
+  const _NetworkDetailScrollViewport({
+    required this.child,
+    this.onScrollOffsetChanged,
+  });
 
   final Widget child;
+  final ValueChanged<double>? onScrollOffsetChanged;
 
   @override
   State<_NetworkDetailScrollViewport> createState() =>
@@ -118,9 +122,41 @@ class _NetworkDetailScrollViewportState
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScrollOffsetChanged);
+    _scheduleScrollOffsetSync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NetworkDetailScrollViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onScrollOffsetChanged != widget.onScrollOffsetChanged) {
+      _scheduleScrollOffsetSync();
+    }
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_handleScrollOffsetChanged);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleScrollOffsetChanged() {
+    widget.onScrollOffsetChanged?.call(_scrollController.offset);
+  }
+
+  void _scheduleScrollOffsetSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final offset = _scrollController.hasClients
+          ? _scrollController.offset
+          : 0.0;
+      widget.onScrollOffsetChanged?.call(offset);
+    });
   }
 
   @override
@@ -134,5 +170,51 @@ class _NetworkDetailScrollViewportState
         child: widget.child,
       ),
     );
+  }
+}
+
+class _NetworkDetailStaticViewport extends StatefulWidget {
+  const _NetworkDetailStaticViewport({
+    required this.child,
+    this.onScrollOffsetChanged,
+  });
+
+  final Widget child;
+  final ValueChanged<double>? onScrollOffsetChanged;
+
+  @override
+  State<_NetworkDetailStaticViewport> createState() =>
+      _NetworkDetailStaticViewportState();
+}
+
+class _NetworkDetailStaticViewportState
+    extends State<_NetworkDetailStaticViewport> {
+  @override
+  void initState() {
+    super.initState();
+    _scheduleReset();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NetworkDetailStaticViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onScrollOffsetChanged != widget.onScrollOffsetChanged ||
+        oldWidget.child.key != widget.child.key) {
+      _scheduleReset();
+    }
+  }
+
+  void _scheduleReset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      widget.onScrollOffsetChanged?.call(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
