@@ -1,12 +1,5 @@
 part of 'workspace_home_view.dart';
 
-String _formatTotalTraffic(_NetworkTrafficSnapshot? traffic) {
-  if (traffic == null) {
-    return '流量统计暂不可用';
-  }
-  return '下载 ${_formatBytes(traffic.downloadBytes)} / 上传 ${_formatBytes(traffic.uploadBytes)}';
-}
-
 String _formatTrafficRate(double? bytesPerSecond) {
   if (bytesPerSecond == null) {
     return '计算中';

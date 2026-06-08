@@ -89,7 +89,6 @@ class _NetworkSummaryBar extends StatelessWidget {
           iconColor: const Color(0xFF2563EB),
           text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
         );
-        final totalItem = _SummaryItem(text: _formatTotalTraffic(traffic));
         final localIpv4Text = localIpv4?.trim() ?? '';
         final localItem = localIpv4Text.isEmpty
             ? null
@@ -109,8 +108,6 @@ class _NetworkSummaryBar extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [onlineItem, ?localItem, downloadItem, uploadItem],
               ),
-              const SizedBox(height: 4),
-              totalItem,
             ],
           );
         }
@@ -124,7 +121,6 @@ class _NetworkSummaryBar extends StatelessWidget {
             ?localItem,
             downloadItem,
             uploadItem,
-            totalItem,
           ],
         );
       },

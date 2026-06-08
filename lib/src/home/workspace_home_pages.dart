@@ -170,11 +170,11 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FB),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+          padding: const EdgeInsets.all(12),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Color(0xFFE5E7EB)),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,30 +195,20 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                     runSpacing: compact ? 6 : 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      if (compact)
-                        Tooltip(
-                          message: '刷新节点',
-                          excludeFromSemantics: true,
-                          child: FButton(
-                            variant: .ghost,
-                            size: .sm,
-                            onPress: deleting
-                                ? null
-                                : () =>
-                                      unawaited(_refreshNetworkNodes(network)),
-                            mainAxisSize: MainAxisSize.min,
-                            child: const Icon(Icons.refresh, size: 16),
-                          ),
-                        )
-                      else
-                        FButton(
-                          variant: .outline,
+                      Tooltip(
+                        message: '刷新节点',
+                        excludeFromSemantics: true,
+                        child: FButton(
+                          variant: .ghost,
+                          size: .sm,
                           onPress: deleting
                               ? null
-                              : () => unawaited(_refreshNetworkNodes(network)),
+                              : () =>
+                                    unawaited(_refreshNetworkNodes(network)),
                           mainAxisSize: MainAxisSize.min,
-                          child: const Text('刷新节点'),
+                          child: const Icon(Icons.refresh, size: 16),
                         ),
+                      ),
                       if (joined)
                         FButton(
                           variant: .outline,

@@ -368,7 +368,6 @@ void main() {
     );
     expect(find.textContaining('1.00 KiB/s'), findsOneWidget);
     expect(find.textContaining('2.00 KiB/s'), findsOneWidget);
-    expect(find.textContaining('下载 3.00 KiB / 上传 6.00 KiB'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -2003,7 +2002,7 @@ void main() {
     final nodeFetchCount = authService.networkDeviceFetchCount;
     final peerReadCount = coreLifecycleService.peerReadCount;
 
-    await tester.tap(find.widgetWithText(FButton, '刷新节点'));
+    await tester.tap(find.byTooltip('刷新节点'));
     await _pumpAppMotionFrames(tester);
 
     expect(authService.networkDeviceFetchCount, greaterThan(nodeFetchCount));
