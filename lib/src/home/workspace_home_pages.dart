@@ -270,17 +270,17 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                 traffic: _networkTraffic[network.id],
                 localIpv4: localIpv4,
               ),
+              const SizedBox(height: 12),
+              _NetworkDetailSectionSelector(
+                selected: _networkDetailSection,
+                nodeCount: devices.length,
+                subnetCount: subnetRoutes?.routes.length,
+                hasLocalNode: localNode != null,
+                onChanged: (section) =>
+                    _updateState(() => _networkDetailSection = section),
+              ),
             ],
           ),
-        ),
-        const SizedBox(height: 12),
-        _NetworkDetailSectionSelector(
-          selected: _networkDetailSection,
-          nodeCount: devices.length,
-          subnetCount: subnetRoutes?.routes.length,
-          hasLocalNode: localNode != null,
-          onChanged: (section) =>
-              _updateState(() => _networkDetailSection = section),
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -439,38 +439,31 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 520;
-          return Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+          return Wrap(
+            spacing: 0,
+            runSpacing: 0,
+            children: [
+              _NetworkDetailSectionButton(
+                selected: selected == _NetworkDetailSection.nodes,
+                icon: Icons.devices_other_outlined,
+                label: compact ? '节点' : '节点 $nodeCount',
+                onPressed: () => onChanged(_NetworkDetailSection.nodes),
               ),
-            ),
-            child: Wrap(
-              spacing: 0,
-              runSpacing: 0,
-              children: [
-                _NetworkDetailSectionButton(
-                  selected: selected == _NetworkDetailSection.nodes,
-                  icon: Icons.devices_other_outlined,
-                  label: compact ? '节点' : '节点 $nodeCount',
-                  onPressed: () => onChanged(_NetworkDetailSection.nodes),
-                ),
-                _NetworkDetailSectionButton(
-                  selected: selected == _NetworkDetailSection.subnets,
-                  icon: Icons.alt_route_outlined,
-                  label: subnetCount == null || compact
-                      ? '子网'
-                      : '子网 $subnetCount',
-                  onPressed: () => onChanged(_NetworkDetailSection.subnets),
-                ),
-                _NetworkDetailSectionButton(
-                  selected: selected == _NetworkDetailSection.local,
-                  icon: Icons.computer_outlined,
-                  label: hasLocalNode && !compact ? '本机已加入' : '本机',
-                  onPressed: () => onChanged(_NetworkDetailSection.local),
-                ),
-              ],
-            ),
+              _NetworkDetailSectionButton(
+                selected: selected == _NetworkDetailSection.subnets,
+                icon: Icons.alt_route_outlined,
+                label: subnetCount == null || compact
+                    ? '子网'
+                    : '子网 $subnetCount',
+                onPressed: () => onChanged(_NetworkDetailSection.subnets),
+              ),
+              _NetworkDetailSectionButton(
+                selected: selected == _NetworkDetailSection.local,
+                icon: Icons.computer_outlined,
+                label: hasLocalNode && !compact ? '本机已加入' : '本机',
+                onPressed: () => onChanged(_NetworkDetailSection.local),
+              ),
+            ],
           );
         },
       ),
@@ -512,7 +505,7 @@ class _NetworkDetailSectionButton extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 15,
+              size: 14,
               color: selected
                   ? const Color(0xFF0F172A)
                   : const Color(0xFF64748B),
@@ -521,7 +514,7 @@ class _NetworkDetailSectionButton extends StatelessWidget {
             Text(
               label,
               style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected
                     ? const Color(0xFF0F172A)
                     : const Color(0xFF64748B),
