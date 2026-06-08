@@ -49,6 +49,12 @@ jobs:
         shell: pwsh
         run: sdkmanager "ndk;$env:ANDROID_NDK_VERSION"
 
+      - name: Install Protocol Buffers compiler
+        shell: pwsh
+        run: |
+          choco install protoc --no-progress --yes
+          protoc --version
+
       - name: Install Flutter dependencies
         run: flutter pub get
 
