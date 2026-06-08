@@ -372,26 +372,6 @@ class _NetworkDetailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<_NetworkDetailHeaderCollapse>(
-      valueListenable: collapse,
-      builder: (context, value, child) {
-        final targetProgress = value.progress.clamp(0.0, 1.0).toDouble();
-        if (!value.animate) {
-          return _buildHeader(context, targetProgress);
-        }
-
-        return TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: targetProgress),
-          duration: appMotionShort,
-          curve: appMotionCurve,
-          builder: (context, progress, child) =>
-              _buildHeader(context, progress),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, double progress) {
     return Container(
       key: const ValueKey<String>('network-detail-header'),
       decoration: const BoxDecoration(
@@ -400,89 +380,169 @@ class _NetworkDetailHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 520;
-              final textTheme = Theme.of(context).textTheme;
-              final expandedTitleStyle = compact
-                  ? textTheme.titleLarge
-                  : textTheme.headlineSmall;
-              final collapsedTitleStyle = compact
-                  ? textTheme.titleMedium
-                  : textTheme.titleLarge;
-
-              final title = Text(
-                network.name,
-                style: TextStyle.lerp(
-                  expandedTitleStyle,
-                  collapsedTitleStyle,
-                  progress,
-                ),
-                overflow: TextOverflow.ellipsis,
-              );
-              final actions = Wrap(
-                spacing: compact ? 6 : 8,
-                runSpacing: compact ? 6 : 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Tooltip(
-                    message: '刷新节点',
-                    excludeFromSemantics: true,
-                    child: FButton(
-                      variant: .ghost,
-                      size: .sm,
-                      onPress: deleting ? null : onRefresh,
-                      mainAxisSize: MainAxisSize.min,
-                      child: const Icon(Icons.refresh, size: 16),
-                    ),
-                  ),
-                  if (!joined)
-                    FButton(
-                      size: .sm,
-                      onPress: deleting ? null : onJoin,
-                      mainAxisSize: MainAxisSize.min,
-                      child: const Text('加入网络'),
-                    ),
-                  _NetworkMoreMenu(
-                    enabled: !deleting,
-                    joined: joined,
-                    onLeave: onLeave,
-                    onDelete: onDelete,
-                  ),
-                ],
-              );
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: title),
-                  const SizedBox(width: 12),
-                  _ControlSelectionBoundary(child: actions),
-                ],
-              );
-            },
+          _NetworkDetailTitleBar(
+            network: network,
+            joined: joined,
+            deleting: deleting,
+            onRefresh: onRefresh,
+            onJoin: onJoin,
+            onLeave: onLeave,
+            onDelete: onDelete,
           ),
-          _NetworkDetailCollapsibleGap(height: 4, progress: progress),
-          _NetworkDetailCollapsible(
-            progress: progress,
-            child: Text(
-              '$regionText · $cidrText',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
-            ),
-          ),
-          _NetworkDetailCollapsibleGap(height: 12, progress: progress),
-          _NetworkDetailCollapsible(
-            progress: progress,
-            child: _NetworkSummaryBar(
+          ValueListenableBuilder<_NetworkDetailHeaderCollapse>(
+            valueListenable: collapse,
+            child: _NetworkDetailExpandedSummary(
+              regionText: regionText,
+              cidrText: cidrText,
               totalDevices: totalDevices,
               onlineDevices: onlineDevices,
               traffic: traffic,
               localIpv4: localIpv4,
             ),
+            builder: (context, value, child) {
+              final targetProgress = value.progress.clamp(0.0, 1.0).toDouble();
+              if (!value.animate) {
+                return _NetworkDetailCollapsible(
+                  progress: targetProgress,
+                  child: child!,
+                );
+              }
+
+              return TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: targetProgress),
+                duration: appMotionShort,
+                curve: appMotionCurve,
+                child: child,
+                builder: (context, progress, child) =>
+                    _NetworkDetailCollapsible(
+                      progress: progress,
+                      child: child!,
+                    ),
+              );
+            },
           ),
-          SizedBox(height: 4 * progress),
+        ],
+      ),
+    );
+  }
+}
+
+class _NetworkDetailTitleBar extends StatelessWidget {
+  const _NetworkDetailTitleBar({
+    required this.network,
+    required this.joined,
+    required this.deleting,
+    required this.onRefresh,
+    required this.onJoin,
+    required this.onLeave,
+    required this.onDelete,
+  });
+
+  final ConsoleNetwork network;
+  final bool joined;
+  final bool deleting;
+  final VoidCallback onRefresh;
+  final VoidCallback onJoin;
+  final VoidCallback onLeave;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        final textTheme = Theme.of(context).textTheme;
+        final titleStyle = compact
+            ? textTheme.titleMedium
+            : textTheme.titleLarge;
+        final actions = Wrap(
+          spacing: compact ? 6 : 8,
+          runSpacing: compact ? 6 : 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Tooltip(
+              message: '刷新节点',
+              excludeFromSemantics: true,
+              child: FButton(
+                variant: .ghost,
+                size: .sm,
+                onPress: deleting ? null : onRefresh,
+                mainAxisSize: MainAxisSize.min,
+                child: const Icon(Icons.refresh, size: 16),
+              ),
+            ),
+            if (!joined)
+              FButton(
+                size: .sm,
+                onPress: deleting ? null : onJoin,
+                mainAxisSize: MainAxisSize.min,
+                child: const Text('加入网络'),
+              ),
+            _NetworkMoreMenu(
+              enabled: !deleting,
+              joined: joined,
+              onLeave: onLeave,
+              onDelete: onDelete,
+            ),
+          ],
+        );
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                network.name,
+                style: titleStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 12),
+            _ControlSelectionBoundary(child: actions),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NetworkDetailExpandedSummary extends StatelessWidget {
+  const _NetworkDetailExpandedSummary({
+    required this.regionText,
+    required this.cidrText,
+    required this.totalDevices,
+    required this.onlineDevices,
+    required this.traffic,
+    required this.localIpv4,
+  });
+
+  final String regionText;
+  final String cidrText;
+  final int totalDevices;
+  final int onlineDevices;
+  final _NetworkTrafficSnapshot? traffic;
+  final String localIpv4;
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text(
+            '$regionText · $cidrText',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF94A3B8)),
+          ),
+          const SizedBox(height: 12),
+          _NetworkSummaryBar(
+            totalDevices: totalDevices,
+            onlineDevices: onlineDevices,
+            traffic: traffic,
+            localIpv4: localIpv4,
+          ),
         ],
       ),
     );
@@ -512,28 +572,18 @@ class _NetworkDetailCollapsible extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = (1 - progress).clamp(0.0, 1.0).toDouble();
 
-    return ClipRect(
-      child: Align(
-        alignment: Alignment.topLeft,
-        heightFactor: visible,
-        child: Opacity(opacity: visible, child: child),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRect(
+          child: Align(
+            alignment: Alignment.topLeft,
+            heightFactor: visible,
+            child: child,
+          ),
+        ),
+        SizedBox(height: 4 * progress),
+      ],
     );
-  }
-}
-
-class _NetworkDetailCollapsibleGap extends StatelessWidget {
-  const _NetworkDetailCollapsibleGap({
-    required this.height,
-    required this.progress,
-  });
-
-  final double height;
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = (1 - progress).clamp(0.0, 1.0).toDouble();
-    return SizedBox(height: height * visible);
   }
 }

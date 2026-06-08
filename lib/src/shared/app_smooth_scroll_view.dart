@@ -30,7 +30,26 @@ class AppSmoothScrollView extends StatefulWidget {
     this.clipBehavior = Clip.hardEdge,
     this.scrollDeltaCoordinator,
     this.child,
-  });
+  }) : itemBuilder = null,
+       itemCount = null;
+
+  const AppSmoothScrollView.builder({
+    super.key,
+    this.scrollViewKey,
+    this.controller,
+    this.primary,
+    this.scrollDirection = Axis.vertical,
+    this.reverse = false,
+    this.padding,
+    this.physics = appSmoothScrollPhysics,
+    this.dragStartBehavior = DragStartBehavior.start,
+    this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
+    this.restorationId,
+    this.clipBehavior = Clip.hardEdge,
+    this.scrollDeltaCoordinator,
+    required this.itemBuilder,
+    required this.itemCount,
+  }) : child = null;
 
   final Key? scrollViewKey;
   final ScrollController? controller;
@@ -45,6 +64,8 @@ class AppSmoothScrollView extends StatefulWidget {
   final Clip clipBehavior;
   final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
   final Widget? child;
+  final IndexedWidgetBuilder? itemBuilder;
+  final int? itemCount;
 
   @override
   State<AppSmoothScrollView> createState() => _AppSmoothScrollViewState();
@@ -91,6 +112,37 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
     final scrollController = _effectiveScrollController;
     scrollController.scrollDeltaCoordinator = widget.scrollDeltaCoordinator;
 
+    final scrollView = widget.itemBuilder == null
+        ? SingleChildScrollView(
+            key: widget.scrollViewKey,
+            controller: scrollController,
+            primary: widget.primary,
+            scrollDirection: widget.scrollDirection,
+            reverse: widget.reverse,
+            padding: widget.padding,
+            physics: widget.physics,
+            dragStartBehavior: widget.dragStartBehavior,
+            keyboardDismissBehavior: widget.keyboardDismissBehavior,
+            restorationId: widget.restorationId,
+            clipBehavior: widget.clipBehavior,
+            child: widget.child,
+          )
+        : ListView.builder(
+            key: widget.scrollViewKey,
+            controller: scrollController,
+            primary: widget.primary,
+            scrollDirection: widget.scrollDirection,
+            reverse: widget.reverse,
+            padding: widget.padding,
+            physics: widget.physics,
+            dragStartBehavior: widget.dragStartBehavior,
+            keyboardDismissBehavior: widget.keyboardDismissBehavior,
+            restorationId: widget.restorationId,
+            clipBehavior: widget.clipBehavior,
+            itemBuilder: widget.itemBuilder!,
+            itemCount: widget.itemCount,
+          );
+
     return NotificationListener<OverscrollIndicatorNotification>(
       onNotification: (notification) {
         notification.disallowIndicator();
@@ -99,20 +151,7 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
       child: Listener(
         onPointerSignal: (event) =>
             _handlePointerSignal(event, scrollController),
-        child: SingleChildScrollView(
-          key: widget.scrollViewKey,
-          controller: scrollController,
-          primary: widget.primary,
-          scrollDirection: widget.scrollDirection,
-          reverse: widget.reverse,
-          padding: widget.padding,
-          physics: widget.physics,
-          dragStartBehavior: widget.dragStartBehavior,
-          keyboardDismissBehavior: widget.keyboardDismissBehavior,
-          restorationId: widget.restorationId,
-          clipBehavior: widget.clipBehavior,
-          child: widget.child,
-        ),
+        child: scrollView,
       ),
     );
   }
