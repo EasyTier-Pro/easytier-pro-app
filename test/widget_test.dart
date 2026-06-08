@@ -996,7 +996,7 @@ void main() {
         traySupport: createTraySupport(),
         coreLifecycleService: _NoopCoreLifecycleService(
           authService: authService,
-          machineId: 'machine-1',
+          machineId: 'local-machine',
         ),
       ),
     );
@@ -1027,6 +1027,13 @@ void main() {
 
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
     expect(controller.offset, controller.position.minScrollExtent);
+    final headerRect = tester.getRect(headerFinder);
+    final joinButtonRect = tester.getRect(
+      find
+          .ancestor(of: find.text('加入网络'), matching: find.byType(FButton))
+          .first,
+    );
+    expect(joinButtonRect.bottom, lessThanOrEqualTo(headerRect.bottom - 3));
 
     final beforeWheelOffset = controller.offset;
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));

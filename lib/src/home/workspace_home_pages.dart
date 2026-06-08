@@ -420,7 +420,7 @@ class _NetworkDetailHeader extends StatelessWidget {
                   ),
                   if (!joined)
                     FButton(
-                      size: compact ? .sm : .md,
+                      size: .sm,
                       onPress: deleting ? null : onJoin,
                       mainAxisSize: MainAxisSize.min,
                       child: const Text('加入网络'),
@@ -464,6 +464,7 @@ class _NetworkDetailHeader extends StatelessWidget {
               localIpv4: localIpv4,
             ),
           ),
+          SizedBox(height: 4 * progress),
         ],
       ),
     );
