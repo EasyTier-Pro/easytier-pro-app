@@ -1146,6 +1146,23 @@ void main() {
         controller.position.maxScrollExtent,
         lessThanOrEqualTo(controller.position.minScrollExtent),
       );
+      final partiallyCollapsedHeaderHeight = tester
+          .getSize(headerFinder)
+          .height;
+
+      final collapseGesture = await tester.startGesture(
+        tester.getCenter(scrollFinder),
+        kind: PointerDeviceKind.touch,
+      );
+      await collapseGesture.moveBy(const Offset(0, -120));
+      await tester.pump();
+      await collapseGesture.up();
+      await tester.pump();
+
+      expect(
+        tester.getSize(headerFinder).height,
+        lessThan(partiallyCollapsedHeaderHeight),
+      );
 
       final gesture = await tester.startGesture(
         tester.getCenter(scrollFinder),

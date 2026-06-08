@@ -126,12 +126,15 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
     if (coordinator == null ||
         event is! PointerScrollEvent ||
         !scrollController.hasClients ||
-        event.scrollDelta.dy >= 0) {
+        event.scrollDelta.dy == 0) {
       return;
     }
 
     final position = scrollController.position;
-    if (position.pixels > position.minScrollExtent + 0.5) {
+    final atLeadingEdge = position.pixels <= position.minScrollExtent + 0.5;
+    final cannotScroll =
+        position.maxScrollExtent <= position.minScrollExtent + 0.5;
+    if (!atLeadingEdge || (event.scrollDelta.dy > 0 && !cannotScroll)) {
       return;
     }
 
@@ -159,14 +162,14 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
     if (coordinator == null ||
         !scrollController.hasClients ||
         widget.scrollDirection != Axis.vertical ||
-        event.delta.dy <= 0 ||
         event.buttons == 0) {
       return;
     }
 
     final position = scrollController.position;
     if (position.maxScrollExtent > position.minScrollExtent + 0.5 ||
-        position.pixels > position.minScrollExtent + 0.5) {
+        position.pixels > position.minScrollExtent + 0.5 ||
+        event.delta.dy == 0) {
       return;
     }
 
