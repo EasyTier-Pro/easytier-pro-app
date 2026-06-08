@@ -99,6 +99,7 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
       child: Listener(
         onPointerSignal: (event) =>
             _handlePointerSignal(event, scrollController),
+        onPointerMove: (event) => _handlePointerMove(event, scrollController),
         child: SingleChildScrollView(
           key: widget.scrollViewKey,
           controller: scrollController,
@@ -148,6 +149,32 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
         scrollController.position.pointerScroll(remainingDelta);
       }
     });
+  }
+
+  void _handlePointerMove(
+    PointerMoveEvent event,
+    _AppSmoothScrollController scrollController,
+  ) {
+    final coordinator = widget.scrollDeltaCoordinator;
+    if (coordinator == null ||
+        !scrollController.hasClients ||
+        widget.scrollDirection != Axis.vertical ||
+        event.delta.dy <= 0 ||
+        event.buttons == 0) {
+      return;
+    }
+
+    final position = scrollController.position;
+    if (position.maxScrollExtent > position.minScrollExtent + 0.5 ||
+        position.pixels > position.minScrollExtent + 0.5) {
+      return;
+    }
+
+    coordinator(
+      -event.delta.dy,
+      position,
+      source: AppScrollDeltaSource.userDrag,
+    );
   }
 }
 
