@@ -29,7 +29,6 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
     final localNode = node;
     if (localNode == null) {
       return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
         child: const _StateMessage(message: '本机尚未加入此网络。'),
       );
     }

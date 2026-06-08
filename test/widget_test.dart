@@ -2554,6 +2554,73 @@ void main() {
     expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
   });
 
+  testWidgets('network detail keeps collapsed header for missing local node', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final networkDevices = List<NetworkDevice>.generate(18, (index) {
+      final number = index + 1;
+      return NetworkDevice(
+        id: 'node-$number',
+        name: 'desktop-$number',
+        online: true,
+        ipv4: '10.144.0.${number + 1}',
+        deviceId: 'device-$number',
+        machineId: 'machine-$number',
+      );
+    });
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
+      ],
+      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-other',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, 'office-net');
+
+    final headerFinder = find.byKey(
+      const ValueKey<String>('network-detail-header'),
+    );
+    final expandedHeaderHeight = tester.getSize(headerFinder).height;
+    final nodeScrollFinder = find.byKey(
+      const ValueKey<String>('network-node-list-scroll'),
+    );
+
+    final mouse = TestPointer(6, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(tester.getCenter(nodeScrollFinder)),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
+    await tester.pump();
+    await _pumpAppMotionFrames(tester);
+
+    final collapsedHeaderHeight = tester.getSize(headerFinder).height;
+    expect(collapsedHeaderHeight, lessThan(expandedHeaderHeight));
+
+    await tester.tap(find.text('本机'));
+    await _pumpAppMotionFrames(tester);
+
+    expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
+    expect(
+      tester.getSize(headerFinder).height,
+      closeTo(collapsedHeaderHeight, 0.1),
+    );
+  });
+
   testWidgets('refresh nodes reloads console nodes and peer status', (
     WidgetTester tester,
   ) async {
