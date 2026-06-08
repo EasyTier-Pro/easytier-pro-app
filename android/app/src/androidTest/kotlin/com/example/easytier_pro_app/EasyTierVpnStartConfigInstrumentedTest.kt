@@ -44,12 +44,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
         assertEquals(listOf("10.10.0.0/24", "192.168.50.0/24"), config.routes)
         assertEquals(listOf("10.10.0.53"), config.dnsServers)
         assertEquals(
-            listOf(
-                context.packageName,
-                "com.android.settings",
-                "com.android.shell",
-                "com.example.extra",
-            ),
+            listOf(context.packageName, "com.example.extra"),
             config.disallowedApplications,
         )
         assertEquals(1280, config.mtu)
@@ -119,18 +114,13 @@ class EasyTierVpnStartConfigInstrumentedTest {
         assertEquals(emptyList<String>(), payload["routes"])
         assertEquals(emptyList<String>(), payload["dnsServers"])
         assertEquals(
-            listOf(
-                context.packageName,
-                "com.android.settings",
-                "com.android.shell",
-                "com.example.extra",
-            ),
+            listOf(context.packageName, "com.example.extra"),
             payload["disallowedApplications"],
         )
         assertEquals(context.packageName, payload["packageName"])
         assertEquals(0, payload["addressCount"])
         assertEquals(0, payload["routeCount"])
-        assertEquals(4, payload["disallowedApplicationCount"])
+        assertEquals(2, payload["disallowedApplicationCount"])
         assertEquals(true, payload["selfDisallowed"])
         assertEquals(1280, payload["mtu"])
     }

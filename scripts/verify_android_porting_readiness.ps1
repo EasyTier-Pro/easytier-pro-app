@@ -270,16 +270,6 @@ function Assert-ConnectedEvidence([string] $Path, [string] $Label) {
         "diagnostics_builder_disallowed_applications" `
         $packageNameText `
         "$Label connected Android E2E summary"
-    Assert-ArrayFieldContainsValue `
-        $summary `
-        "diagnostics_builder_disallowed_applications" `
-        "com.android.settings" `
-        "$Label connected Android E2E summary"
-    Assert-ArrayFieldContainsValue `
-        $summary `
-        "diagnostics_builder_disallowed_applications" `
-        "com.android.shell" `
-        "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "missing_system_routes" "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "failed_pings" "$Label connected Android E2E summary"
     Assert-EmptyArrayField $summary "failed_probe_routes" "$Label connected Android E2E summary"

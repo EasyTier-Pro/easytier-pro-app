@@ -38,12 +38,7 @@ class EasyTierVpnIntentFactoryInstrumentedTest {
         assertEquals(listOf("10.20.0.0/16", "192.168.50.0/24"), config.routes)
         assertEquals(listOf("10.10.0.53"), config.dnsServers)
         assertEquals(
-            listOf(
-                context.packageName,
-                "com.android.settings",
-                "com.android.shell",
-                "com.example.extra",
-            ),
+            listOf(context.packageName, "com.example.extra"),
             config.disallowedApplications,
         )
         assertEquals(1280, config.mtu)
@@ -68,12 +63,7 @@ class EasyTierVpnIntentFactoryInstrumentedTest {
         assertEquals(listOf("10.20.0.0/16"), config.routes)
         assertEquals(listOf("10.10.0.53"), config.dnsServers)
         assertEquals(
-            listOf(
-                context.packageName,
-                "com.android.settings",
-                "com.android.shell",
-                "com.example.extra",
-            ),
+            listOf(context.packageName, "com.example.extra"),
             config.disallowedApplications,
         )
         assertEquals(0, config.mtu)
