@@ -370,7 +370,7 @@ class _NetworkDetailHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = collapseProgress.clamp(0.0, 1.0).toDouble();
-    final verticalPadding = _networkDetailLerp(12, 8, progress);
+    final verticalPadding = _networkDetailLerp(8, 6, progress);
 
     return Container(
       key: const ValueKey<String>('network-detail-header'),

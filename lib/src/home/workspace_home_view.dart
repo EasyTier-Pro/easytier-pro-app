@@ -354,6 +354,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
         builder: (context, constraints) {
           final mobile = constraints.maxWidth < _mobileShellBreakpoint;
           final pagePadding = EdgeInsets.all(mobile ? 16 : 24);
+          final networkPagePadding = pagePadding.copyWith(
+            top: mobile ? 12 : 16,
+          );
 
           return Column(
             children: [
@@ -398,7 +401,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                           key: contentKey,
                           child: _activeView == _DashboardView.network
                               ? Padding(
-                                  padding: pagePadding,
+                                  padding: networkPagePadding,
                                   child: Center(
                                     child: ConstrainedBox(
                                       constraints: const BoxConstraints(
