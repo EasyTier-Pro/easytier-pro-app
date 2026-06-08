@@ -417,43 +417,53 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 520;
-          return FTabs(
-            control: FTabControl.lifted(
-              index: selected.index,
-              onChange: (index) =>
-                  onChanged(_NetworkDetailSection.values[index]),
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            widthFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+              child: IntrinsicWidth(
+                child: FTabs(
+                  key: const ValueKey<String>('network-detail-section-tabs'),
+                  control: FTabControl.lifted(
+                    index: selected.index,
+                    onChange: (index) =>
+                        onChanged(_NetworkDetailSection.values[index]),
+                  ),
+                  style: const FTabsStyleDelta.delta(height: 32, spacing: 0),
+                  contentPhysics: const NeverScrollableScrollPhysics(),
+                  scrollable: true,
+                  children: [
+                    FTabEntry(
+                      label: _NetworkDetailSectionTabLabel(
+                        selected: selected == _NetworkDetailSection.nodes,
+                        icon: Icons.devices_other_outlined,
+                        label: compact ? '节点' : '节点 $nodeCount',
+                      ),
+                      child: const SizedBox.shrink(),
+                    ),
+                    FTabEntry(
+                      label: _NetworkDetailSectionTabLabel(
+                        selected: selected == _NetworkDetailSection.subnets,
+                        icon: Icons.alt_route_outlined,
+                        label: subnetCount == null || compact
+                            ? '子网'
+                            : '子网 $subnetCount',
+                      ),
+                      child: const SizedBox.shrink(),
+                    ),
+                    FTabEntry(
+                      label: _NetworkDetailSectionTabLabel(
+                        selected: selected == _NetworkDetailSection.local,
+                        icon: Icons.computer_outlined,
+                        label: hasLocalNode && !compact ? '本机已加入' : '本机',
+                      ),
+                      child: const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            style: const FTabsStyleDelta.delta(height: 32, spacing: 0),
-            contentPhysics: const NeverScrollableScrollPhysics(),
-            scrollable: compact,
-            children: [
-              FTabEntry(
-                label: _NetworkDetailSectionTabLabel(
-                  selected: selected == _NetworkDetailSection.nodes,
-                  icon: Icons.devices_other_outlined,
-                  label: compact ? '节点' : '节点 $nodeCount',
-                ),
-                child: const SizedBox.shrink(),
-              ),
-              FTabEntry(
-                label: _NetworkDetailSectionTabLabel(
-                  selected: selected == _NetworkDetailSection.subnets,
-                  icon: Icons.alt_route_outlined,
-                  label: subnetCount == null || compact
-                      ? '子网'
-                      : '子网 $subnetCount',
-                ),
-                child: const SizedBox.shrink(),
-              ),
-              FTabEntry(
-                label: _NetworkDetailSectionTabLabel(
-                  selected: selected == _NetworkDetailSection.local,
-                  icon: Icons.computer_outlined,
-                  label: hasLocalNode && !compact ? '本机已加入' : '本机',
-                ),
-                child: const SizedBox.shrink(),
-              ),
-            ],
           );
         },
       ),

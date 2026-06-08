@@ -1141,10 +1141,16 @@ void main() {
     await _pumpAppMotionFrames(tester);
 
     expect(tester.takeException(), isNull);
+    final tabsSize = tester.getSize(
+      find.byKey(const ValueKey<String>('network-detail-section-tabs')),
+    );
+    expect(tabsSize.width, greaterThan(0));
+
     final listSize = tester.getSize(
       find.byKey(const ValueKey<String>('network-node-list-scroll')),
     );
     expect(listSize.width, closeTo(328, 0.1));
+    expect(tabsSize.width, lessThan(listSize.width));
     expect(
       find.descendant(
         of: find.byKey(const ValueKey<String>('network-node-list-scroll')),
