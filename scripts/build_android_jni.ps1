@@ -11,7 +11,44 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$jniOutputRoot = Join-Path $repoRoot "android\app\src\main\jniLibs"
+$jniOutputRoot = Join-Path $repoRoot "android/app/src/main/jniLibs"
+
+function Resolve-NdkHostTag() {
+    if ($PSVersionTable.PSEdition -eq "Desktop" -or $IsWindows) {
+        return "windows-x86_64"
+    }
+    if ($IsLinux) {
+        return "linux-x86_64"
+    }
+    if ($IsMacOS) {
+        return "darwin-x86_64"
+    }
+    throw "Unsupported host OS for Android NDK toolchain."
+}
+
+function Resolve-ToolPath([string] $Directory, [string[]] $Names) {
+    foreach ($name in $Names) {
+        $candidate = Join-Path $Directory $name
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+    throw "Required Android NDK tool was not found in $Directory. Tried: $($Names -join ', ')"
+}
+
+function Resolve-LibclangPath([string[]] $Directories) {
+    foreach ($directory in $Directories) {
+        if (-not (Test-Path $directory)) {
+            continue
+        }
+        $libclang = Get-ChildItem -Path $directory -Filter "libclang*" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($libclang) {
+            return $libclang.DirectoryName
+        }
+    }
+    return ""
+}
 
 function Resolve-FirstPath([string[]] $Candidates) {
     foreach ($candidate in $Candidates) {
@@ -27,7 +64,7 @@ function Resolve-FirstPath([string[]] $Candidates) {
 }
 
 function Read-AndroidSdkFromLocalProperties() {
-    $localProperties = Join-Path $repoRoot "android\local.properties"
+    $localProperties = Join-Path $repoRoot "android/local.properties"
     if (-not (Test-Path $localProperties)) {
         return ""
     }
@@ -42,8 +79,8 @@ function Read-AndroidSdkFromLocalProperties() {
 
 if ([string]::IsNullOrWhiteSpace($EasyTierRoot)) {
     $EasyTierRoot = Resolve-FirstPath @(
-        (Join-Path $PSScriptRoot "..\..\EasyTier-android-jni-c0f42"),
-        (Join-Path $PSScriptRoot "..\..\EasyTier")
+        (Join-Path $PSScriptRoot "../../EasyTier-android-jni-c0f42"),
+        (Join-Path $PSScriptRoot "../../EasyTier")
     )
 }
 
@@ -52,7 +89,7 @@ if ([string]::IsNullOrWhiteSpace($EasyTierRoot)) {
 }
 
 $EasyTierRoot = (Resolve-Path $EasyTierRoot).Path
-$jniCrate = Join-Path $EasyTierRoot "easytier-contrib\easytier-android-jni"
+$jniCrate = Join-Path $EasyTierRoot "easytier-contrib/easytier-android-jni"
 if (-not (Test-Path (Join-Path $jniCrate "Cargo.toml"))) {
     throw "EasyTier Android JNI crate was not found at $jniCrate"
 }
@@ -80,16 +117,19 @@ if ([string]::IsNullOrWhiteSpace($AndroidSdk)) {
 }
 
 $AndroidSdk = (Resolve-Path $AndroidSdk).Path
-$ndkRoot = Join-Path $AndroidSdk "ndk\$NdkVersion"
+$ndkRoot = Join-Path $AndroidSdk "ndk/$NdkVersion"
 if (-not (Test-Path $ndkRoot)) {
     throw "Android NDK $NdkVersion was not found at $ndkRoot"
 }
 
-$toolchainBin = Join-Path $ndkRoot "toolchains\llvm\prebuilt\windows-x86_64\bin"
-$sysroot = Join-Path $ndkRoot "toolchains\llvm\prebuilt\windows-x86_64\sysroot"
-$clang = Join-Path $toolchainBin "clang.exe"
-$llvmAr = Join-Path $toolchainBin "llvm-ar.exe"
-$readElf = Join-Path $toolchainBin "llvm-readelf.exe"
+$ndkHostTag = Resolve-NdkHostTag
+$toolchainRoot = Join-Path $ndkRoot "toolchains/llvm/prebuilt/$ndkHostTag"
+$toolchainBin = Join-Path $toolchainRoot "bin"
+$sysroot = Join-Path $toolchainRoot "sysroot"
+$clang = Resolve-ToolPath $toolchainBin @("clang.exe", "clang")
+$llvmAr = Resolve-ToolPath $toolchainBin @("llvm-ar.exe", "llvm-ar")
+$readElf = Resolve-ToolPath $toolchainBin @("llvm-readelf.exe", "llvm-readelf")
+$libclangPath = Resolve-LibclangPath @($toolchainBin, (Join-Path $toolchainRoot "lib64"))
 
 $targetMap = @{
     "arm64-v8a" = @{
@@ -109,6 +149,9 @@ $env:ANDROID_SDK_ROOT = $AndroidSdk
 $env:ANDROID_NDK_HOME = $ndkRoot
 $env:ANDROID_NDK_ROOT = $ndkRoot
 $env:CLANG_PATH = $clang
+if (-not [string]::IsNullOrWhiteSpace($libclangPath)) {
+    $env:LIBCLANG_PATH = $libclangPath
+}
 
 foreach ($abiName in $Abi) {
     if (-not $targetMap.ContainsKey($abiName)) {
@@ -121,7 +164,7 @@ foreach ($abiName in $Abi) {
     $includeTarget = $target.IncludeTarget
     $envSuffix = $rustTarget -replace "-", "_"
     $cargoTargetEnv = "CARGO_TARGET_$($envSuffix.ToUpperInvariant())_LINKER"
-    $clangCmd = Join-Path $toolchainBin "$clangPrefix-clang.cmd"
+    $clangCmd = Resolve-ToolPath $toolchainBin @("$clangPrefix-clang.cmd", "$clangPrefix-clang")
     $sysrootArg = $sysroot -replace "\\", "/"
     $includeBase = "$sysrootArg/usr/include"
     $includeTargetPath = "$includeBase/$includeTarget"
@@ -151,7 +194,7 @@ foreach ($abiName in $Abi) {
         Pop-Location
     }
 
-    $builtLibrary = Join-Path $EasyTierRoot "target\$rustTarget\release\libeasytier_android_jni.so"
+    $builtLibrary = Join-Path $EasyTierRoot "target/$rustTarget/release/libeasytier_android_jni.so"
     if (-not (Test-Path $builtLibrary)) {
         throw "Expected JNI library was not produced: $builtLibrary"
     }

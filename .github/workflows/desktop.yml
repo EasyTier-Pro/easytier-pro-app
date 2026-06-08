@@ -31,7 +31,15 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Package Windows release
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Package Windows installer
+        shell: pwsh
+        run: ./scripts/package_windows_installer.ps1
+
+      - name: Package Windows portable archive
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
@@ -40,7 +48,14 @@ jobs:
             -DestinationPath dist\easytier-pro-windows-x64.zip `
             -Force
 
-      - name: Upload Windows package
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-windows-x64-installer
+          path: dist/easytier-pro-windows-x64-setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload Windows portable archive
         uses: actions/upload-artifact@v4
         with:
           name: easytier-pro-windows-x64
@@ -75,14 +90,26 @@ jobs:
       - name: Build macOS release
         run: flutter build macos --release
 
-      - name: Package macOS release
+      - name: Package macOS DMG
         run: |
-          mkdir -p dist
+          bash scripts/package_macos_dmg.sh \
+            "build/macos/Build/Products/Release/EasyTier Pro.app" \
+            "dist/easytier-pro-macos-${{ matrix.arch }}.dmg"
+
+      - name: Package macOS zip
+        run: |
           ditto -c -k --keepParent \
             "build/macos/Build/Products/Release/EasyTier Pro.app" \
             "dist/easytier-pro-macos-${{ matrix.arch }}.zip"
 
-      - name: Upload macOS package
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-macos-${{ matrix.arch }}-dmg
+          path: dist/easytier-pro-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+      - name: Upload macOS zip
         uses: actions/upload-artifact@v4
         with:
           name: easytier-pro-macos-${{ matrix.arch }}

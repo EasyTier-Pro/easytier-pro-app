@@ -11,24 +11,18 @@ permissions:
 
 env:
   EASYTIER_COMMIT: c0f42ebe8c0b18e49370ae810b13fba1bdbbb811
+  RUST_TOOLCHAIN_VERSION: "1.95"
   ANDROID_NDK_VERSION: 28.2.13676358
+  JNI_CACHE_VERSION: v1
 
 jobs:
   android-jni:
     name: Android JNI and debug build
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
-
-      - name: Checkout EasyTier core
-        uses: actions/checkout@v4
-        with:
-          repository: EasyTier/EasyTier
-          ref: ${{ env.EASYTIER_COMMIT }}
-          path: EasyTier
-          submodules: recursive
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -36,23 +30,48 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          toolchain: "1.95"
-          targets: aarch64-linux-android,x86_64-linux-android
+          distribution: temurin
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android NDK
-        shell: pwsh
-        run: sdkmanager "ndk;$env:ANDROID_NDK_VERSION"
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Restore EasyTier JNI cache
+        id: easytier-jni-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            android/app/src/main/jniLibs/arm64-v8a/libeasytier_android_jni.so
+            android/app/src/main/jniLibs/x86_64/libeasytier_android_jni.so
+          key: android-jni-${{ runner.os }}-${{ env.EASYTIER_COMMIT }}-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.JNI_CACHE_VERSION }}-${{ hashFiles('scripts/build_android_jni.ps1', 'scripts/verify_android_jni_libs.ps1') }}
+
+      - name: Checkout EasyTier core
+        if: steps.easytier-jni-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: EasyTier/EasyTier
+          ref: ${{ env.EASYTIER_COMMIT }}
+          path: EasyTier
+          submodules: recursive
+
+      - name: Set up Rust
+        if: steps.easytier-jni-cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Install Protocol Buffers compiler
-        shell: pwsh
+        if: steps.easytier-jni-cache.outputs.cache-hit != 'true'
         run: |
-          choco install protoc --no-progress --yes
+          sudo apt-get update
+          sudo apt-get install --yes protobuf-compiler
           protoc --version
 
       - name: Install Flutter dependencies
@@ -65,6 +84,7 @@ jobs:
         run: flutter test
 
       - name: Build EasyTier Android JNI
+        if: steps.easytier-jni-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: >
           ./scripts/build_android_jni.ps1
@@ -77,10 +97,23 @@ jobs:
         shell: pwsh
         run: ./scripts/verify_android_release_inputs.ps1
 
+      - name: Save EasyTier JNI cache
+        if: steps.easytier-jni-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            android/app/src/main/jniLibs/arm64-v8a/libeasytier_android_jni.so
+            android/app/src/main/jniLibs/x86_64/libeasytier_android_jni.so
+          key: ${{ steps.easytier-jni-cache.outputs.cache-primary-key }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.1.0"
+
       - name: Build Android debug APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --target-platform android-arm64,android-x64
 
       - name: Build Android instrumented test APK
-        shell: pwsh
         working-directory: android
-        run: ./gradlew.bat :app:assembleDebugAndroidTest
+        run: gradle :app:assembleDebugAndroidTest --no-daemon

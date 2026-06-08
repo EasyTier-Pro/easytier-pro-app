@@ -6,11 +6,11 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $androidRoot = Join-Path $repoRoot "android"
-$buildGradle = Join-Path $androidRoot "app\build.gradle.kts"
-$mainManifest = Join-Path $androidRoot "app\src\main\AndroidManifest.xml"
-$debugManifest = Join-Path $androidRoot "app\src\debug\AndroidManifest.xml"
-$profileManifest = Join-Path $androidRoot "app\src\profile\AndroidManifest.xml"
-$fileProviderPaths = Join-Path $androidRoot "app\src\main\res\xml\easytier_file_paths.xml"
+$buildGradle = Join-Path $androidRoot "app/build.gradle.kts"
+$mainManifest = Join-Path $androidRoot "app/src/main/AndroidManifest.xml"
+$debugManifest = Join-Path $androidRoot "app/src/debug/AndroidManifest.xml"
+$profileManifest = Join-Path $androidRoot "app/src/profile/AndroidManifest.xml"
+$fileProviderPaths = Join-Path $androidRoot "app/src/main/res/xml/easytier_file_paths.xml"
 $androidGitIgnore = Join-Path $androidRoot ".gitignore"
 $keyProperties = Join-Path $androidRoot "key.properties"
 
@@ -43,11 +43,11 @@ function Read-KeyProperties([string] $Path) {
 
 function Resolve-KeytoolPath {
     if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
-        $candidate = Join-Path $env:JAVA_HOME "bin\keytool.exe"
+        $candidate = Join-Path $env:JAVA_HOME "bin/keytool.exe"
         if (Test-Path $candidate) {
             return (Resolve-Path $candidate).Path
         }
-        $candidate = Join-Path $env:JAVA_HOME "bin\keytool"
+        $candidate = Join-Path $env:JAVA_HOME "bin/keytool"
         if (Test-Path $candidate) {
             return (Resolve-Path $candidate).Path
         }

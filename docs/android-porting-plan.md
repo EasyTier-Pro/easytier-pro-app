@@ -26,8 +26,8 @@
 - `flutter test`
 - `.\scripts\verify_android_release_inputs.ps1`
 - `flutter build apk --debug`
-- `cd android; .\gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin`
-- `cd android; .\gradlew.bat :app:connectedDebugAndroidTest`
+- `cd android; gradle :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --no-daemon`
+- `cd android; gradle :app:connectedDebugAndroidTest --no-daemon`
 
 仍不能视为完成的证据项：
 
