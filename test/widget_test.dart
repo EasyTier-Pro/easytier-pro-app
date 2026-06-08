@@ -1241,6 +1241,94 @@ void main() {
     expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
   });
 
+  testWidgets(
+    'network detail collapses at list bottom for touch move without buttons',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester, size: const Size(1600, 700));
+
+      final networkDevices = List<NetworkDevice>.generate(18, (index) {
+        final number = index + 1;
+        return NetworkDevice(
+          id: 'node-$number',
+          name: 'desktop-$number',
+          online: true,
+          ipv4: '10.144.0.${number + 1}',
+          deviceId: 'device-$number',
+          machineId: 'machine-$number',
+        );
+      });
+      final authService = _FakeAuthService(
+        networks: const <ConsoleNetwork>[
+          ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
+        ],
+        networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _selectNetworkFromHeader(tester, 'office-net');
+
+      final headerFinder = find.byKey(
+        const ValueKey<String>('network-detail-header'),
+      );
+      final expandedHeaderHeight = tester.getSize(headerFinder).height;
+      final scrollFinder = find.byKey(
+        const ValueKey<String>('network-node-list-scroll'),
+      );
+      final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
+      final controller = scrollView.controller!;
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await tester.pump();
+
+      const pointer = 31;
+      final start = tester.getCenter(scrollFinder);
+      final end = start + const Offset(0, -120);
+      await tester.sendEventToBinding(
+        PointerDownEvent(
+          pointer: pointer,
+          kind: PointerDeviceKind.touch,
+          position: start,
+          buttons: 0,
+        ),
+      );
+      await tester.pump();
+      await tester.sendEventToBinding(
+        PointerMoveEvent(
+          pointer: pointer,
+          kind: PointerDeviceKind.touch,
+          position: end,
+          delta: const Offset(0, -120),
+          buttons: 0,
+        ),
+      );
+      await tester.pump();
+      await tester.sendEventToBinding(
+        PointerUpEvent(
+          pointer: pointer,
+          kind: PointerDeviceKind.touch,
+          position: end,
+          buttons: 0,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.getSize(headerFinder).height,
+        lessThan(expandedHeaderHeight),
+      );
+    },
+  );
+
   testWidgets('network detail subnets collapse header while scrolling', (
     WidgetTester tester,
   ) async {

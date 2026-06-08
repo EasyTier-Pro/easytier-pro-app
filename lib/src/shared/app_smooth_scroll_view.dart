@@ -162,7 +162,7 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
     if (coordinator == null ||
         !scrollController.hasClients ||
         widget.scrollDirection != Axis.vertical ||
-        event.buttons == 0) {
+        !event.down) {
       return;
     }
 
