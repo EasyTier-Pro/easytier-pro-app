@@ -208,17 +208,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                           child: const Icon(Icons.refresh, size: 16),
                         ),
                       ),
-                      if (joined)
-                        FButton(
-                          variant: .outline,
-                          size: compact ? .sm : .md,
-                          onPress: deleting
-                              ? null
-                              : () => unawaited(_leaveNetwork(network)),
-                          mainAxisSize: MainAxisSize.min,
-                          child: const Text('退出网络'),
-                        )
-                      else
+                      if (!joined)
                         FButton(
                           size: compact ? .sm : .md,
                           onPress: deleting
@@ -229,6 +219,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
                         ),
                       _NetworkMoreMenu(
                         enabled: !deleting,
+                        joined: joined,
+                        onLeave: () => unawaited(_leaveNetwork(network)),
                         onDelete: () =>
                             unawaited(_showDeleteNetworkDialog(network)),
                       ),
@@ -1479,9 +1471,16 @@ String _managedDeviceMeta(ManagedDevice device) {
 }
 
 class _NetworkMoreMenu extends StatelessWidget {
-  const _NetworkMoreMenu({required this.enabled, required this.onDelete});
+  const _NetworkMoreMenu({
+    required this.enabled,
+    required this.joined,
+    required this.onLeave,
+    required this.onDelete,
+  });
 
   final bool enabled;
+  final bool joined;
+  final VoidCallback onLeave;
   final VoidCallback onDelete;
 
   @override
@@ -1496,6 +1495,25 @@ class _NetworkMoreMenu extends StatelessWidget {
             FItemGroup(
               divider: FItemDivider.none,
               children: [
+                if (joined)
+                  FItem(
+                    key: const ValueKey<String>('network-more-leave'),
+                    prefix: const Icon(
+                      Icons.logout_outlined,
+                      size: 18,
+                      color: Color(0xFF64748B),
+                    ),
+                    title: Text(
+                      '退出网络',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onPress: () {
+                      unawaited(controller.hide());
+                      onLeave();
+                    },
+                  ),
                 FItem(
                   key: const ValueKey<String>('network-more-delete'),
                   prefix: const Icon(
