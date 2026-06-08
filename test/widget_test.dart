@@ -1664,7 +1664,6 @@ void main() {
     expect(find.text('映射为 10.50.0.0/24'), findsOneWidget);
     expect(find.textContaining('1 个 · 1 在线'), findsWidgets);
     expect(find.textContaining('edge-router'), findsOneWidget);
-    expect(find.textContaining('desktop-1'), findsOneWidget);
   });
 
   testWidgets('network detail subnet segment shows empty state', (

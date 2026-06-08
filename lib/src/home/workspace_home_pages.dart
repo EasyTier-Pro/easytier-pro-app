@@ -687,9 +687,6 @@ class _NetworkSubnetRouteCard extends StatelessWidget {
     final routerOnline = route.nodes
         .where((node) => node.status.toLowerCase() == 'online')
         .length;
-    final manualOnline = route.manualRouteNodes
-        .where((node) => node.status.toLowerCase() == 'online')
-        .length;
     final mapped = route.mappedCidr?.trim();
 
     return Padding(
@@ -737,35 +734,14 @@ class _NetworkSubnetRouteCard extends StatelessWidget {
                 ).textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  _NetworkDetailMetricPill(
-                    icon: Icons.router_outlined,
-                    label: '负责节点',
-                    value: '${route.nodes.length} 个 · $routerOnline 在线',
-                  ),
-                  _NetworkDetailMetricPill(
-                    icon: Icons.low_priority_outlined,
-                    label: '手动路由节点',
-                    value: route.manualRouteNodes.isEmpty
-                        ? '仅自动传播'
-                        : '${route.manualRouteNodes.length} 个 · $manualOnline 在线',
-                  ),
-                ],
+              _NetworkDetailMetricPill(
+                icon: Icons.router_outlined,
+                label: '负责节点',
+                value: '${route.nodes.length} 个 · $routerOnline 在线',
               ),
-              if (route.nodes.isNotEmpty ||
-                  route.manualRouteNodes.isNotEmpty) ...[
+              if (route.nodes.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _SubnetRouteNodeLine(label: '路由器', nodes: route.nodes),
-                if (route.manualRouteNodes.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  _SubnetRouteNodeLine(
-                    label: '手动接收',
-                    nodes: route.manualRouteNodes,
-                  ),
-                ],
               ],
             ],
           ),
