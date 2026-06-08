@@ -194,13 +194,15 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     final remainingCollapse =
         _networkDetailHeaderCollapseDistance -
         _networkDetailHeaderCollapseOffset;
+    final cannotScroll =
+        metrics.maxScrollExtent <= metrics.minScrollExtent + 0.5;
     if (delta > 0 && remainingCollapse > 0) {
       final consumed = math.min(delta, remainingCollapse);
       nextOffset += consumed;
       remainingDelta -= consumed;
     } else if (delta < 0 &&
         _networkDetailHeaderCollapseOffset > 0 &&
-        metrics.pixels <= metrics.minScrollExtent + 0.5) {
+        (cannotScroll || metrics.pixels <= metrics.minScrollExtent + 0.5)) {
       final consumed = math.min(-delta, _networkDetailHeaderCollapseOffset);
       nextOffset -= consumed;
       remainingDelta += consumed;

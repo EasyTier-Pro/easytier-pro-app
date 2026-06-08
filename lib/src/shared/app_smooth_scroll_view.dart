@@ -90,6 +90,9 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
   Widget build(BuildContext context) {
     final scrollController = _effectiveScrollController;
     scrollController.scrollDeltaCoordinator = widget.scrollDeltaCoordinator;
+    final physics = widget.scrollDeltaCoordinator == null
+        ? widget.physics
+        : AlwaysScrollableScrollPhysics(parent: widget.physics);
 
     return NotificationListener<OverscrollIndicatorNotification>(
       onNotification: (notification) {
@@ -107,7 +110,7 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
           scrollDirection: widget.scrollDirection,
           reverse: widget.reverse,
           padding: widget.padding,
-          physics: widget.physics,
+          physics: physics,
           dragStartBehavior: widget.dragStartBehavior,
           keyboardDismissBehavior: widget.keyboardDismissBehavior,
           restorationId: widget.restorationId,

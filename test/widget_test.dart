@@ -1329,6 +1329,54 @@ void main() {
     },
   );
 
+  testWidgets('network detail keeps drag enabled when node list fits', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(1600, 700));
+
+    final networkDevices = List<NetworkDevice>.generate(2, (index) {
+      final number = index + 1;
+      return NetworkDevice(
+        id: 'node-$number',
+        name: 'desktop-$number',
+        online: true,
+        ipv4: '10.144.0.${number + 1}',
+        deviceId: 'device-$number',
+        machineId: 'machine-$number',
+      );
+    });
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
+      ],
+      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _selectNetworkFromHeader(tester, 'office-net');
+
+    final scrollFinder = find.byKey(
+      const ValueKey<String>('network-node-list-scroll'),
+    );
+    final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
+    expect(
+      scrollView.controller!.position.maxScrollExtent,
+      lessThanOrEqualTo(scrollView.controller!.position.minScrollExtent),
+    );
+    expect(scrollView.physics, isA<AlwaysScrollableScrollPhysics>());
+  });
+
   testWidgets('network detail accumulates tiny drag deltas at list bottom', (
     WidgetTester tester,
   ) async {
