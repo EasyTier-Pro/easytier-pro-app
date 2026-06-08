@@ -1,10 +1,65 @@
 part of 'workspace_home_view.dart';
 
+final Expando<Map<(String, bool), FToasterEntry>> _workspaceToastEntries =
+    Expando<Map<(String, bool), FToasterEntry>>('workspaceToastEntries');
+
+Duration _workspaceToastDuration({required bool destructive}) =>
+    destructive ? const Duration(seconds: 3) : const Duration(seconds: 2);
+
 FToastAlignment? _workspaceToastAlignment(BuildContext context) {
   if (MediaQuery.sizeOf(context).width < _mobileShellBreakpoint) {
     return FToastAlignment.topCenter;
   }
   return null;
+}
+
+void _showWorkspaceToast(
+  BuildContext context,
+  String message, {
+  bool destructive = false,
+}) {
+  final toaster = context.findAncestorStateOfType<FToasterState>();
+  final variant = destructive
+      ? FToastVariant.destructive
+      : FToastVariant.primary;
+  final alignment = _workspaceToastAlignment(context);
+
+  FToasterEntry showToast({VoidCallback? onDismiss}) => showRawFToast(
+    context: context,
+    variant: variant,
+    alignment: alignment,
+    duration: _workspaceToastDuration(destructive: destructive),
+    onDismiss: onDismiss,
+    builder: (context, entry) => ExcludeSemantics(
+      child: FToast(variant: variant, title: Text(message)),
+    ),
+  );
+
+  if (toaster == null) {
+    showToast();
+    return;
+  }
+
+  final entries = _workspaceToastEntries[toaster] ??=
+      <(String, bool), FToasterEntry>{};
+  final key = (message, destructive);
+  final existing = entries[key];
+  if (existing != null) {
+    if (existing.showing) {
+      return;
+    }
+    entries.remove(key);
+  }
+
+  late final FToasterEntry entry;
+  entry = showToast(
+    onDismiss: () {
+      if (identical(entries[key], entry)) {
+        entries.remove(key);
+      }
+    },
+  );
+  entries[key] = entry;
 }
 
 extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
@@ -550,17 +605,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
   }
 
   void _showNetworkActionToast(String message, {bool destructive = false}) {
-    showRawFToast(
-      context: context,
-      variant: destructive ? .destructive : .primary,
-      alignment: _workspaceToastAlignment(context),
-      builder: (context, entry) => ExcludeSemantics(
-        child: FToast(
-          variant: destructive ? .destructive : .primary,
-          title: Text(message),
-        ),
-      ),
-    );
+    _showWorkspaceToast(context, message, destructive: destructive);
   }
 
   Future<void> _showCreateNetworkDialog() async {

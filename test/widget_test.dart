@@ -167,6 +167,17 @@ void main() {
 
     expect(authService.attachedNetworkIds, <String>['net-1']);
     _expectAndroidSingleNetworkLimitToastOnly();
+
+    await tester.tap(find.byType(FSwitch).at(1));
+    await tester.pumpAndSettle();
+
+    expect(authService.attachedNetworkIds, <String>['net-1']);
+    _expectAndroidSingleNetworkLimitToastOnly();
+
+    await tester.pump(const Duration(milliseconds: 3200));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsNothing);
   });
 
   testWidgets('mobile toast avoids bottom navigation', (

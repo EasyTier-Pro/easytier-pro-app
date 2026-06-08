@@ -27,17 +27,7 @@ class _SettingsPanel extends StatelessWidget {
     String message, {
     bool destructive = false,
   }) {
-    showRawFToast(
-      context: context,
-      variant: destructive ? .destructive : .primary,
-      alignment: _workspaceToastAlignment(context),
-      builder: (context, entry) => ExcludeSemantics(
-        child: FToast(
-          variant: destructive ? .destructive : .primary,
-          title: Text(message),
-        ),
-      ),
-    );
+    _showWorkspaceToast(context, message, destructive: destructive);
   }
 
   Future<void> _exportLogs(BuildContext context) async {
