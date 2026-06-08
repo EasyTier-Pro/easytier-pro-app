@@ -245,6 +245,7 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				63ABAE53A45C1F6C2CE9D7E7 /* [CP] Embed Pods Frameworks */,
+				45A1B2C3D4E5F60718293A4B /* Bundle EasyTier Installer */,
 			);
 			buildRules = (
 			);
@@ -372,6 +373,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\n";
+		};
+		45A1B2C3D4E5F60718293A4B /* Bundle EasyTier Installer */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle EasyTier Installer";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nif [ -z \"${EASYTIER_BUNDLED_INSTALLER:-}\" ]; then\n  echo \"EASYTIER_BUNDLED_INSTALLER is not set; skipping bundled installer.\"\n  exit 0\nfi\nif [ ! -f \"$EASYTIER_BUNDLED_INSTALLER\" ]; then\n  echo \"error: EASYTIER_BUNDLED_INSTALLER was not found: $EASYTIER_BUNDLED_INSTALLER\" >&2\n  exit 1\nfi\nresources_dir=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$resources_dir\"\ninstall -m 0755 \"$EASYTIER_BUNDLED_INSTALLER\" \"$resources_dir/easytier-pro-installer\"\n";
 		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;

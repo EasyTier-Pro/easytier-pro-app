@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+env:
+  INSTALLER_REPOSITORY: EasyTier-Pro/installer
+  INSTALLER_REF: main
+
 jobs:
   windows:
     name: Windows release package
@@ -18,6 +22,79 @@ jobs:
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve installer commit
+        id: installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git ls-remote "https://github.com/${INSTALLER_REPOSITORY}.git" "refs/heads/${INSTALLER_REF}" | awk '{print $1}')"
+          if [ -z "$sha" ]; then
+            echo "Failed to resolve ${INSTALLER_REPOSITORY} ${INSTALLER_REF}" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Resolved installer ${INSTALLER_REF}: $sha"
+
+      - name: Checkout installer
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.INSTALLER_REPOSITORY }}
+          ref: ${{ steps.installer.outputs.sha }}
+          path: .installer-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Rust for installer
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Resolve installer dependency lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f .installer-src/Cargo.lock ]; then
+            cargo fetch --manifest-path .installer-src/Cargo.toml --locked
+          else
+            cargo generate-lockfile --manifest-path .installer-src/Cargo.toml
+          fi
+
+      - name: Restore installer binary cache
+        id: installer-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .installer-cache/x86_64-pc-windows-msvc
+          key: easytier-pro-installer-bin-${{ runner.os }}-x86_64-pc-windows-msvc-${{ steps.installer.outputs.sha }}-${{ hashFiles('.installer-src/Cargo.lock') }}
+
+      - name: Build installer
+        if: steps.installer-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cargo build --locked --manifest-path .installer-src/Cargo.toml --release --target x86_64-pc-windows-msvc
+          New-Item -ItemType Directory -Force .installer-cache/x86_64-pc-windows-msvc | Out-Null
+          Copy-Item `
+            .installer-src/target/x86_64-pc-windows-msvc/release/easytier-pro-installer.exe `
+            .installer-cache/x86_64-pc-windows-msvc/easytier-pro-installer.exe `
+            -Force
+
+      - name: Save installer binary cache
+        if: steps.installer-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: .installer-cache/x86_64-pc-windows-msvc
+          key: ${{ steps.installer-cache.outputs.cache-primary-key }}
+
+      - name: Stage bundled installer
+        shell: pwsh
+        run: |
+          Copy-Item `
+            .installer-cache/x86_64-pc-windows-msvc/easytier-pro-installer.exe `
+            windows/runner/resources/easytier-pro-installer.exe `
+            -Force
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -71,12 +148,77 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
+            installer_target: aarch64-apple-darwin
           - runner: macos-15-intel
             arch: x64
+            installer_target: x86_64-apple-darwin
 
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve installer commit
+        id: installer
+        run: |
+          set -euo pipefail
+          sha="$(git ls-remote "https://github.com/${INSTALLER_REPOSITORY}.git" "refs/heads/${INSTALLER_REF}" | awk '{print $1}')"
+          if [ -z "$sha" ]; then
+            echo "Failed to resolve ${INSTALLER_REPOSITORY} ${INSTALLER_REF}" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Resolved installer ${INSTALLER_REF}: $sha"
+
+      - name: Checkout installer
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.INSTALLER_REPOSITORY }}
+          ref: ${{ steps.installer.outputs.sha }}
+          path: .installer-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Rust for installer
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.installer_target }}
+
+      - name: Resolve installer dependency lock
+        run: |
+          set -euo pipefail
+          if [ -f .installer-src/Cargo.lock ]; then
+            cargo fetch --manifest-path .installer-src/Cargo.toml --locked
+          else
+            cargo generate-lockfile --manifest-path .installer-src/Cargo.toml
+          fi
+
+      - name: Restore installer binary cache
+        id: installer-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .installer-cache/${{ matrix.installer_target }}
+          key: easytier-pro-installer-bin-${{ runner.os }}-${{ matrix.installer_target }}-${{ steps.installer.outputs.sha }}-${{ hashFiles('.installer-src/Cargo.lock') }}
+
+      - name: Build installer
+        if: steps.installer-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cargo build --locked --manifest-path .installer-src/Cargo.toml --release --target "${{ matrix.installer_target }}"
+          mkdir -p ".installer-cache/${{ matrix.installer_target }}"
+          cp \
+            ".installer-src/target/${{ matrix.installer_target }}/release/easytier-pro-installer" \
+            ".installer-cache/${{ matrix.installer_target }}/easytier-pro-installer"
+          chmod +x ".installer-cache/${{ matrix.installer_target }}/easytier-pro-installer"
+
+      - name: Save installer binary cache
+        if: steps.installer-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: .installer-cache/${{ matrix.installer_target }}
+          key: ${{ steps.installer-cache.outputs.cache-primary-key }}
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -88,6 +230,8 @@ jobs:
         run: flutter pub get
 
       - name: Build macOS release
+        env:
+          EASYTIER_BUNDLED_INSTALLER: ${{ github.workspace }}/.installer-cache/${{ matrix.installer_target }}/easytier-pro-installer
         run: flutter build macos --release
 
       - name: Package macOS DMG
