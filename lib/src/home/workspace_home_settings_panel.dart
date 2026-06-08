@@ -30,6 +30,7 @@ class _SettingsPanel extends StatelessWidget {
     showRawFToast(
       context: context,
       variant: destructive ? .destructive : .primary,
+      alignment: _workspaceToastAlignment(context),
       builder: (context, entry) => ExcludeSemantics(
         child: FToast(
           variant: destructive ? .destructive : .primary,

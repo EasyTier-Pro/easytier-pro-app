@@ -1,5 +1,12 @@
 part of 'workspace_home_view.dart';
 
+FToastAlignment? _workspaceToastAlignment(BuildContext context) {
+  if (MediaQuery.sizeOf(context).width < _mobileShellBreakpoint) {
+    return FToastAlignment.topCenter;
+  }
+  return null;
+}
+
 extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
   Future<void> _loadInitialData() async {
     await Future.wait([_loadRegions(), _loadNetworks(), _loadManagedDevices()]);
@@ -546,6 +553,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     showRawFToast(
       context: context,
       variant: destructive ? .destructive : .primary,
+      alignment: _workspaceToastAlignment(context),
       builder: (context, entry) => ExcludeSemantics(
         child: FToast(
           variant: destructive ? .destructive : .primary,

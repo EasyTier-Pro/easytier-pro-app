@@ -169,6 +169,54 @@ void main() {
     _expectAndroidSingleNetworkLimitToastOnly();
   });
 
+  testWidgets('mobile toast avoids bottom navigation', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: 'Office', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: 'Lab', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'android-phone',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+        androidMvpSingleActiveNetworkOverride: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FSwitch).at(1));
+    await tester.pumpAndSettle();
+
+    _expectAndroidSingleNetworkLimitToastOnly();
+    final toastRect = tester.getRect(find.byType(FToast).last);
+    final navigationRect = tester.getRect(
+      find.byKey(const ValueKey<String>('mobile-dashboard-navigation')),
+    );
+
+    expect(toastRect.bottom, lessThanOrEqualTo(navigationRect.top));
+  });
+
   testWidgets(
     'android blocks joining a second network while first is joining',
     (WidgetTester tester) async {
