@@ -303,10 +303,10 @@ class CoreLifecycleService {
         );
       } finally {
         await _cleanupElevationTempFiles([
-          if (inputFile != null) inputFile,
-          if (outputFile != null) outputFile,
-          if (errorFile != null) errorFile,
-          if (commandFile != null) commandFile,
+          ?inputFile,
+          ?outputFile,
+          ?errorFile,
+          ?commandFile,
         ]);
         await _cleanupElevationTempDirectory(elevationTempDir);
       }
@@ -867,9 +867,9 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   @visibleForTesting
   static bool isElevationRequiredForDesktopCommand(
     int exitCode,
-    String stderrText,
-    {bool includeUnixPermissionErrors = false},
-  ) {
+    String stderrText, {
+    bool includeUnixPermissionErrors = false,
+  }) {
     return _isElevationRequired(
       exitCode,
       stderrText,
