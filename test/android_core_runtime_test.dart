@@ -1488,6 +1488,9 @@ void main() {
         vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
         vpnRouteRefreshFastLimit: 2,
       );
+      final runtimeEvents = <CoreRuntimeEvent>[];
+      final subscription = runtime.events.listen(runtimeEvents.add);
+      addTearDown(subscription.cancel);
       networkInfos = {
         'instances': [
           {
@@ -1528,7 +1531,10 @@ void main() {
             'running': true,
             'ipv4_cidr': '10.10.0.2/24',
             'routes': [
-              {'address': '10.20.0.0', 'prefix': 16},
+              {
+                'peer_id': 123,
+                'proxy_cidrs': ['192.168.50.0/24'],
+              },
             ],
             'dns_servers': ['10.10.0.1'],
           },
@@ -1541,10 +1547,24 @@ void main() {
         'instanceName': 'network-a',
         'vpnConfig': {
           'addresses': ['10.10.0.2/24'],
-          'routes': ['10.10.0.0/24', '10.20.0.0/16'],
+          'routes': ['10.10.0.0/24', '192.168.50.0/24'],
           'dns': <String>[],
         },
       });
+      final refreshDiagnostic = runtimeEvents
+          .where((event) => event.type == CoreRuntimeEventTypes.vpnRouteDiagnostic)
+          .map((event) => event.data)
+          .lastWhere(
+            (data) =>
+                data['phase'] == 'refresh' &&
+                data['decision'] == 'restart_vpn',
+          );
+      expect(refreshDiagnostic['route_payload_count'], 1);
+      expect(refreshDiagnostic['route_proxy_cidrs'], ['192.168.50.0/24']);
+      expect(refreshDiagnostic['routes'], [
+        '10.10.0.0/24',
+        '192.168.50.0/24',
+      ]);
     });
 
     test(

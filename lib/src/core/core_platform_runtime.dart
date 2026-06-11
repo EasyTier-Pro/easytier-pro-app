@@ -82,6 +82,7 @@ class CoreRuntimeEventTypes {
   static const String vpnStarted = 'vpn_started';
   static const String vpnStopped = 'vpn_stopped';
   static const String vpnConfigRefreshed = 'vpn_config_refreshed';
+  static const String vpnRouteDiagnostic = 'vpn_route_diagnostic';
   static const String notificationPermissionGranted =
       'notification_permission_granted';
   static const String notificationPermissionDenied =
