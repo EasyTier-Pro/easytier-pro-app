@@ -67,6 +67,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   String? _activeVpnInstanceName;
   String? _activeVpnInstanceId;
   String? _activeVpnConfigSignature;
+  String? _pendingVpnStartInstanceName;
   Map<String, Object?>? _activeVpnFallbackConfig;
   int _activeVpnRefreshCount = 0;
   bool _vpnPrepared = false;
@@ -168,6 +169,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     _activeVpnInstanceName = null;
     _activeVpnInstanceId = null;
     _activeVpnConfigSignature = null;
+    _pendingVpnStartInstanceName = null;
     _activeVpnFallbackConfig = null;
     await _methodChannel.invokeMethod<void>('stopRuntime');
   }
@@ -276,6 +278,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   Future<void> dispose() async {
     _disposed = true;
     _cancelActiveVpnRefresh();
+    _pendingVpnStartInstanceName = null;
     try {
       await _vpnSerial;
     } catch (_) {
@@ -414,6 +417,10 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       );
       if (instanceName.isNotEmpty) {
         _activeVpnInstanceName = instanceName;
+        if (_pendingVpnStartInstanceName == instanceName) {
+          _pendingVpnStartInstanceName = null;
+        }
+        _scheduleActiveVpnRefresh();
       }
     }
     if (runtimeEvent.type == CoreRuntimeEventTypes.vpnStopped) {
@@ -421,10 +428,19 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       final instanceName = _readString(
         payload['instanceName'] ?? payload['instance_name'],
       );
+      final reason = _readString(payload['reason']);
+      final isReplacingActiveVpn =
+          reason.isEmpty &&
+          instanceName.isNotEmpty &&
+          instanceName == _pendingVpnStartInstanceName;
+      if (isReplacingActiveVpn) {
+        return;
+      }
       if (instanceName.isEmpty || instanceName == _activeVpnInstanceName) {
         _activeVpnInstanceName = null;
         _activeVpnInstanceId = null;
         _activeVpnConfigSignature = null;
+        _pendingVpnStartInstanceName = null;
         _activeVpnFallbackConfig = null;
         _cancelActiveVpnRefresh();
       }
@@ -616,10 +632,18 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         'instanceNames': <String>[target.instanceName],
       }),
     );
-    await _methodChannel.invokeMethod<void>('startVpn', {
-      'instanceName': target.instanceName,
-      'vpnConfig': target.vpnConfig,
-    });
+    _pendingVpnStartInstanceName = target.instanceName;
+    try {
+      await _methodChannel.invokeMethod<void>('startVpn', {
+        'instanceName': target.instanceName,
+        'vpnConfig': target.vpnConfig,
+      });
+    } on Object {
+      if (_pendingVpnStartInstanceName == target.instanceName) {
+        _pendingVpnStartInstanceName = null;
+      }
+      rethrow;
+    }
     _activeVpnInstanceName = target.instanceName;
     _activeVpnInstanceId = target.instanceId;
     _activeVpnConfigSignature = _vpnConfigSignature(target.vpnConfig);
@@ -893,7 +917,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       vpnConfig: _vpnConfigHasAddress(directConfig)
           ? directConfig
           : lastMatchedInstance?.vpnConfig ?? const <String, Object?>{},
-      source: _vpnConfigHasAddress(directConfig) ? 'direct_empty' : 'snapshot_empty',
+      source: _vpnConfigHasAddress(directConfig)
+          ? 'direct_empty'
+          : 'snapshot_empty',
       knownInstanceNames: knownInstanceNames,
     );
   }
@@ -1044,7 +1070,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     }
 
     void visit(Object? candidate) {
-      final decoded = candidate is String ? _tryDecodeJson(candidate) : candidate;
+      final decoded = candidate is String
+          ? _tryDecodeJson(candidate)
+          : candidate;
       if (decoded is List) {
         for (final item in decoded) {
           visit(item);
@@ -1144,7 +1172,9 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     final effectiveConfig = config ?? readResult?.config;
     final addresses = effectiveConfig == null
         ? const <String>[]
-        : _readCidrList(effectiveConfig['addresses'] ?? effectiveConfig['address']);
+        : _readCidrList(
+            effectiveConfig['addresses'] ?? effectiveConfig['address'],
+          );
     final routes = effectiveConfig == null
         ? const <String>[]
         : _readCidrList(effectiveConfig['routes'] ?? effectiveConfig['route']);
@@ -1157,15 +1187,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
           );
     final payload = <String, Object?>{
       'phase': phase,
-      if (instanceKey != null && instanceKey.isNotEmpty)
-        'instance_key': instanceKey,
-      if (instanceName != null && instanceName.isNotEmpty)
-        'instance_name': instanceName,
-      if (instanceId != null && instanceId.isNotEmpty) 'instance_id': instanceId,
-      if (source != null && source.isNotEmpty) 'source': source,
-      if (decision != null && decision.isNotEmpty) 'decision': decision,
-      if (refreshCount != null) 'refresh_count': refreshCount,
-      if (configChanged != null) 'config_changed': configChanged,
+      if (instanceKey?.isNotEmpty ?? false) 'instance_key': instanceKey,
+      if (instanceName?.isNotEmpty ?? false) 'instance_name': instanceName,
+      if (instanceId?.isNotEmpty ?? false) 'instance_id': instanceId,
+      if (source?.isNotEmpty ?? false) 'source': source,
+      if (decision?.isNotEmpty ?? false) 'decision': decision,
       'addresses': addresses,
       'address_count': addresses.length,
       'routes': routes,
@@ -1173,6 +1199,12 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       'dns': dns,
       'dns_count': dns.length,
     };
+    if (refreshCount != null) {
+      payload['refresh_count'] = refreshCount;
+    }
+    if (configChanged != null) {
+      payload['config_changed'] = configChanged;
+    }
     if (readResult != null) {
       payload.addAll({
         'route_response_keys': readResult.routeResponseKeys,

@@ -1552,20 +1552,98 @@ void main() {
         },
       });
       final refreshDiagnostic = runtimeEvents
-          .where((event) => event.type == CoreRuntimeEventTypes.vpnRouteDiagnostic)
+          .where(
+            (event) => event.type == CoreRuntimeEventTypes.vpnRouteDiagnostic,
+          )
           .map((event) => event.data)
           .lastWhere(
             (data) =>
-                data['phase'] == 'refresh' &&
-                data['decision'] == 'restart_vpn',
+                data['phase'] == 'refresh' && data['decision'] == 'restart_vpn',
           );
       expect(refreshDiagnostic['route_payload_count'], 1);
       expect(refreshDiagnostic['route_proxy_cidrs'], ['192.168.50.0/24']);
-      expect(refreshDiagnostic['routes'], [
-        '10.10.0.0/24',
-        '192.168.50.0/24',
-      ]);
+      expect(refreshDiagnostic['routes'], ['10.10.0.0/24', '192.168.50.0/24']);
     });
+
+    test(
+      'keeps route refresh after same-instance native restart stop event',
+      () async {
+        await runtime.dispose();
+        runtime = AndroidCoreRuntime(
+          methodChannel: methodChannel,
+          eventChannel: _FakeEventChannel(nativeEvents.stream),
+          vpnRouteRefreshFastInterval: const Duration(milliseconds: 10),
+          vpnRouteRefreshSteadyInterval: const Duration(milliseconds: 10),
+          vpnRouteRefreshFastLimit: 2,
+        );
+        networkInfos = {
+          'instances': [
+            {
+              'instance_id': 'instance-a',
+              'instance_name': 'network-a',
+              'running': true,
+              'ipv4_cidr': '10.10.0.2/24',
+              'routes': <Map<String, Object?>>[],
+            },
+          ],
+        };
+
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.configServer,
+          'payload': {
+            'event': 'run_network_instance',
+            'instance_name': 'network-a',
+          },
+        });
+
+        final firstStartVpn = await _waitForCall(calls, 'startVpn');
+        expect(firstStartVpn.arguments, {
+          'instanceName': 'network-a',
+          'vpnConfig': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.10.0.0/24'],
+            'dns': <String>[],
+          },
+        });
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnStopped,
+          'payload': {'instanceName': 'network-a'},
+        });
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnStarted,
+          'payload': {'instanceName': 'network-a'},
+        });
+        networkInfos = {
+          'instances': [
+            {
+              'instance_id': 'instance-a',
+              'instance_name': 'network-a',
+              'running': true,
+              'ipv4_cidr': '10.10.0.2/24',
+              'routes': [
+                {
+                  'peer_id': 123,
+                  'proxy_cidrs': ['192.168.50.0/24'],
+                },
+              ],
+            },
+          ],
+        };
+
+        await _waitForCallCount(calls, 'startVpn', 2);
+        final startVpnCalls = calls.where((call) => call.method == 'startVpn');
+        expect(startVpnCalls.last.arguments, {
+          'instanceName': 'network-a',
+          'vpnConfig': {
+            'addresses': ['10.10.0.2/24'],
+            'routes': ['10.10.0.0/24', '192.168.50.0/24'],
+            'dns': <String>[],
+          },
+        });
+      },
+    );
 
     test(
       'returns empty traffic totals when the active instance has disappeared',
