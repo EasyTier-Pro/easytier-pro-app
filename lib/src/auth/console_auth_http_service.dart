@@ -77,9 +77,14 @@ class ConsoleAuthService implements AuthService {
       Duration(seconds: info.expiresIn),
     );
     var intervalSeconds = info.interval;
+    var firstAttempt = true;
 
     while (DateTime.now().toUtc().isBefore(deadline)) {
-      await Future<void>.delayed(Duration(seconds: intervalSeconds));
+      if (firstAttempt) {
+        firstAttempt = false;
+      } else {
+        await Future<void>.delayed(Duration(seconds: intervalSeconds));
+      }
 
       final response = await _post(
         Uri.parse('$consoleBaseUrl/api/v1/auth/device/token'),

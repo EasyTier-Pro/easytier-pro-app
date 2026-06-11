@@ -4057,6 +4057,52 @@ void main() {
     );
   });
 
+  test('console service polls device token immediately on resume', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final requestedPaths = <String>[];
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requestedPaths.add(request.url.path);
+        if (request.url.path == '/api/v1/auth/device/token') {
+          return _jsonResponse({
+            'access_token': 'access-token',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+          });
+        }
+        if (request.url.path == '/api/v1/auth/me') {
+          return _jsonResponse({
+            'user': {'email': 'tester@example.com', 'display_name': 'Tester'},
+            'tenants': [
+              {'id': 'tenant-1', 'name': 'Test Workspace'},
+            ],
+          });
+        }
+        return _jsonResponse({'message': 'not found'}, 404);
+      }),
+    );
+
+    final session = await service
+        .completeDeviceAuth(
+          const DeviceAuthInfo(
+            deviceCode: 'device-code',
+            userCode: 'USER-CODE',
+            verificationUri: 'https://console.test/login/oauth/device',
+            verificationUriComplete:
+                'https://console.test/login/oauth/device/USER-CODE',
+            expiresIn: 600,
+            interval: 5,
+          ),
+        )
+        .timeout(const Duration(seconds: 1));
+
+    expect(session.user.email, 'tester@example.com');
+    expect(requestedPaths, ['/api/v1/auth/device/token', '/api/v1/auth/me']);
+  });
+
   test('console service preserves node operating system metadata', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
