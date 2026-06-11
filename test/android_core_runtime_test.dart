@@ -1642,6 +1642,17 @@ void main() {
             'dns': <String>[],
           },
         });
+
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnStopped,
+          'payload': {'instanceName': 'network-a'},
+        });
+        nativeEvents.add({
+          'type': CoreRuntimeEventTypes.vpnStarted,
+          'payload': {'instanceName': 'network-a'},
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        expect(calls.where((call) => call.method == 'startVpn'), hasLength(2));
       },
     );
 

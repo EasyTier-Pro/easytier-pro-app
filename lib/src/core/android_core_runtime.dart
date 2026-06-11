@@ -743,10 +743,18 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         return;
       }
 
-      await _methodChannel.invokeMethod<void>('startVpn', {
-        'instanceName': activeName,
-        'vpnConfig': config,
-      });
+      _pendingVpnStartInstanceName = activeName;
+      try {
+        await _methodChannel.invokeMethod<void>('startVpn', {
+          'instanceName': activeName,
+          'vpnConfig': config,
+        });
+      } on Object {
+        if (_pendingVpnStartInstanceName == activeName) {
+          _pendingVpnStartInstanceName = null;
+        }
+        rethrow;
+      }
       _activeVpnInstanceName = activeName;
       _activeVpnConfigSignature = signature;
       _activeVpnFallbackConfig = config;
