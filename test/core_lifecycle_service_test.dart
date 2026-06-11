@@ -97,12 +97,28 @@ void main() {
           'install failed: Permission denied',
           includeUnixPermissionErrors: true,
         ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'install failed: Permission denied: /usr/local/easytier',
+          includeUnixPermissionErrors: true,
+        ),
         isTrue,
       );
       expect(
         CoreLifecycleService.isElevationRequiredForDesktopCommand(
           1,
           'Operation not permitted',
+          includeUnixPermissionErrors: true,
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'Operation not permitted: /Library/LaunchDaemons/net.easytier.plist',
           includeUnixPermissionErrors: true,
         ),
         isTrue,
@@ -142,6 +158,14 @@ void main() {
         CoreLifecycleService.isElevationRequiredForDesktopCommand(
           1,
           'config server returned access denied',
+          includeUnixPermissionErrors: true,
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'config server returned: permission denied',
           includeUnixPermissionErrors: true,
         ),
         isFalse,

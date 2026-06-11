@@ -1136,14 +1136,10 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return text.contains('must be run as root') ||
         text.contains('requires root') ||
         text.contains('administrator privileges') ||
-        text.contains('permission denied') ||
-        text.contains('operation not permitted') ||
-        text.contains('os error 13') ||
-        text.contains('eacces') ||
-        _isProtectedInstallPathWriteError(text);
+        _isProtectedInstallPathPermissionError(text);
   }
 
-  static bool _isProtectedInstallPathWriteError(String text) {
+  static bool _isProtectedInstallPathPermissionError(String text) {
     final mentionsProtectedPath =
         text.contains('/usr/local/easytier') ||
         text.contains('/usr/local/bin/easytier') ||
@@ -1152,7 +1148,11 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     if (!mentionsProtectedPath) {
       return false;
     }
-    return text.contains('failed to write') ||
+    return text.contains('permission denied') ||
+        text.contains('operation not permitted') ||
+        text.contains('os error 13') ||
+        text.contains('eacces') ||
+        text.contains('failed to write') ||
         text.contains('cannot write') ||
         text.contains('unable to write') ||
         text.contains('无法写入') ||
