@@ -4057,6 +4057,73 @@ void main() {
     );
   });
 
+  test('console service includes app return URI in Android device auth request', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    late Map<String, String> requestBody;
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requestBody = request.bodyFields;
+        return _jsonResponse({
+          'device_code': 'device-code',
+          'user_code': 'USER-CODE',
+          'verification_uri':
+              'https://casdoor.test/login/oauth/device/USER-CODE',
+          'expires_in': 600,
+          'interval': 5,
+        });
+      }),
+    );
+
+    final info = await service.startDeviceAuth();
+
+    expect(info.deviceCode, 'device-code');
+    expect(requestBody['client_id'], '');
+    expect(requestBody['scope'], 'openid profile email');
+    expect(
+      requestBody['app_return_uri'],
+      'easytierpro://auth/device-complete',
+    );
+  });
+
+  test('console service omits app return URI in desktop device auth request', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    late Map<String, String> requestBody;
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requestBody = request.bodyFields;
+        return _jsonResponse({
+          'device_code': 'device-code',
+          'user_code': 'USER-CODE',
+          'verification_uri':
+              'https://casdoor.test/login/oauth/device/USER-CODE',
+          'expires_in': 600,
+          'interval': 5,
+        });
+      }),
+    );
+
+    final info = await service.startDeviceAuth();
+
+    expect(info.deviceCode, 'device-code');
+    expect(requestBody['client_id'], '');
+    expect(requestBody['scope'], 'openid profile email');
+    expect(requestBody.containsKey('app_return_uri'), isFalse);
+  });
+
   test('console service polls device token immediately on resume', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

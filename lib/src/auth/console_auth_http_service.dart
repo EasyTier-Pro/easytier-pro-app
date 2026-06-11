@@ -1,5 +1,7 @@
 part of 'console_auth_service.dart';
 
+const _deviceAuthAppReturnUri = 'easytierpro://auth/device-complete';
+
 class ConsoleAuthService implements AuthService {
   ConsoleAuthService({
     required this.tokenStore,
@@ -41,10 +43,18 @@ class ConsoleAuthService implements AuthService {
   @override
   Future<DeviceAuthInfo> startDeviceAuth() async {
     _logger.info('auth', 'Starting device authorization');
+    final requestBody = <String, String>{
+      'client_id': '',
+      'scope': 'openid profile email',
+    };
+    if (_shouldRequestDeviceAuthAppReturnUri()) {
+      requestBody['app_return_uri'] = _deviceAuthAppReturnUri;
+    }
+
     final response = await _post(
       Uri.parse('$consoleBaseUrl/api/v1/auth/device'),
       operation: 'startDeviceAuth',
-      body: const {'client_id': '', 'scope': 'openid profile email'},
+      body: requestBody,
     );
 
     if (!response.statusCode.toString().startsWith('2')) {
@@ -1109,6 +1119,10 @@ class ConsoleAuthService implements AuthService {
     return defaultTargetPlatform == TargetPlatform.android
         ? 'Android Auto Key'
         : 'Desktop Auto Key';
+  }
+
+  static bool _shouldRequestDeviceAuthAppReturnUri() {
+    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   }
 }
 
