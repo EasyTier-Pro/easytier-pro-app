@@ -118,6 +118,45 @@ void main() {
       expect(
         CoreLifecycleService.isElevationRequiredForDesktopCommand(
           1,
+          '无法写入 /usr/local/easytier',
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          '无法写入 /usr/local/easytier',
+          includeUnixPermissionErrors: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'failed to write /usr/local/easytier',
+          includeUnixPermissionErrors: true,
+        ),
+        isTrue,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'config server returned access denied',
+          includeUnixPermissionErrors: true,
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
+          'config server returned: failed to write policy',
+          includeUnixPermissionErrors: true,
+        ),
+        isFalse,
+      );
+      expect(
+        CoreLifecycleService.isElevationRequiredForDesktopCommand(
+          1,
           'failed to read bootstrap config',
         ),
         isFalse,
