@@ -63,6 +63,41 @@ void main() {
     }
   });
 
+  testWidgets('device auth return route is consumed without replacing app', (
+    WidgetTester tester,
+  ) async {
+    final previousOnError = FlutterError.onError;
+    final flutterErrors = <FlutterErrorDetails>[];
+    final authService = _LoginFlowAuthService();
+    FlutterError.onError = flutterErrors.add;
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      final routeFuture = navigator.pushNamed<void>('/device-complete');
+      await tester.pump();
+      await tester.pump();
+      await routeFuture;
+
+      expect(flutterErrors, isEmpty);
+      expect(navigator.canPop(), isFalse);
+      expect(find.byType(FButton), findsOneWidget);
+    } finally {
+      FlutterError.onError = previousOnError;
+    }
+  });
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {
@@ -4057,72 +4092,78 @@ void main() {
     );
   });
 
-  test('console service includes app return URI in Android device auth request', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    addTearDown(() {
-      debugDefaultTargetPlatformOverride = null;
-    });
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    late Map<String, String> requestBody;
-    final service = ConsoleAuthService(
-      tokenStore: OAuthTokenStore(preferences),
-      consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
-        requestBody = request.bodyFields;
-        return _jsonResponse({
-          'device_code': 'device-code',
-          'user_code': 'USER-CODE',
-          'verification_uri':
-              'https://casdoor.test/login/oauth/device/USER-CODE',
-          'expires_in': 600,
-          'interval': 5,
-        });
-      }),
-    );
+  test(
+    'console service includes app return URI in Android device auth request',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+      });
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      late Map<String, String> requestBody;
+      final service = ConsoleAuthService(
+        tokenStore: OAuthTokenStore(preferences),
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) async {
+          requestBody = request.bodyFields;
+          return _jsonResponse({
+            'device_code': 'device-code',
+            'user_code': 'USER-CODE',
+            'verification_uri':
+                'https://casdoor.test/login/oauth/device/USER-CODE',
+            'expires_in': 600,
+            'interval': 5,
+          });
+        }),
+      );
 
-    final info = await service.startDeviceAuth();
+      final info = await service.startDeviceAuth();
 
-    expect(info.deviceCode, 'device-code');
-    expect(requestBody['client_id'], '');
-    expect(requestBody['scope'], 'openid profile email');
-    expect(
-      requestBody['app_return_uri'],
-      'easytierpro://auth/device-complete',
-    );
-  });
+      expect(info.deviceCode, 'device-code');
+      expect(requestBody['client_id'], '');
+      expect(requestBody['scope'], 'openid profile email');
+      expect(
+        requestBody['app_return_uri'],
+        'easytierpro://auth/device-complete',
+      );
+    },
+  );
 
-  test('console service omits app return URI in desktop device auth request', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    addTearDown(() {
-      debugDefaultTargetPlatformOverride = null;
-    });
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    late Map<String, String> requestBody;
-    final service = ConsoleAuthService(
-      tokenStore: OAuthTokenStore(preferences),
-      consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
-        requestBody = request.bodyFields;
-        return _jsonResponse({
-          'device_code': 'device-code',
-          'user_code': 'USER-CODE',
-          'verification_uri':
-              'https://casdoor.test/login/oauth/device/USER-CODE',
-          'expires_in': 600,
-          'interval': 5,
-        });
-      }),
-    );
+  test(
+    'console service omits app return URI in desktop device auth request',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+      });
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      late Map<String, String> requestBody;
+      final service = ConsoleAuthService(
+        tokenStore: OAuthTokenStore(preferences),
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) async {
+          requestBody = request.bodyFields;
+          return _jsonResponse({
+            'device_code': 'device-code',
+            'user_code': 'USER-CODE',
+            'verification_uri':
+                'https://casdoor.test/login/oauth/device/USER-CODE',
+            'expires_in': 600,
+            'interval': 5,
+          });
+        }),
+      );
 
-    final info = await service.startDeviceAuth();
+      final info = await service.startDeviceAuth();
 
-    expect(info.deviceCode, 'device-code');
-    expect(requestBody['client_id'], '');
-    expect(requestBody['scope'], 'openid profile email');
-    expect(requestBody.containsKey('app_return_uri'), isFalse);
-  });
+      expect(info.deviceCode, 'device-code');
+      expect(requestBody['client_id'], '');
+      expect(requestBody['scope'], 'openid profile email');
+      expect(requestBody.containsKey('app_return_uri'), isFalse);
+    },
+  );
 
   test('console service polls device token immediately on resume', () async {
     SharedPreferences.setMockInitialValues({});

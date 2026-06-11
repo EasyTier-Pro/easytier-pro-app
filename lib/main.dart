@@ -19,6 +19,7 @@ const Color _foreground = Color(0xFF0A0A0A);
 const Color _border = Color(0xFFE5E7EB);
 const Color _brandCoral = Color(0xFFFF5530);
 const String _appFontFamily = 'Inter';
+const String _deviceAuthReturnPath = '/device-complete';
 const double _foruiTypographyScale = 0.96;
 const List<String> _appFontFamilyFallback = <String>[
   'Noto Sans SC',
@@ -138,6 +139,7 @@ class _MyAppState extends State<MyApp> {
         data: _foruiThemeData,
         child: FToaster(child: child ?? const SizedBox.shrink()),
       ),
+      onGenerateRoute: _onGenerateRoute,
       theme: ThemeData(
         colorScheme: colorScheme,
         scaffoldBackgroundColor: _appBackground,
@@ -154,6 +156,54 @@ class _MyAppState extends State<MyApp> {
             widget.androidMvpSingleActiveNetworkOverride,
       ),
     );
+  }
+
+  Route<void>? _onGenerateRoute(RouteSettings settings) {
+    if (settings.name != _deviceAuthReturnPath) {
+      return null;
+    }
+    AppLogger.instance.info(
+      'auth.deeplink',
+      'Consumed device authorization return route',
+      context: {'route': settings.name ?? ''},
+    );
+    return PageRouteBuilder<void>(
+      settings: settings,
+      opaque: false,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const _DeviceAuthReturnRoute();
+      },
+    );
+  }
+}
+
+class _DeviceAuthReturnRoute extends StatefulWidget {
+  const _DeviceAuthReturnRoute();
+
+  @override
+  State<_DeviceAuthReturnRoute> createState() => _DeviceAuthReturnRouteState();
+}
+
+class _DeviceAuthReturnRouteState extends State<_DeviceAuthReturnRoute> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final navigator = Navigator.maybeOf(context);
+      if (navigator != null) {
+        unawaited(navigator.maybePop());
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
   }
 }
 

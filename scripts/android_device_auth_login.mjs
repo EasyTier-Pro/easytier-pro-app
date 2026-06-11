@@ -260,20 +260,40 @@ async function approveDeviceAuthPage(webSocketDebuggerUrl, user, pass) {
     await cdp.call('Runtime.enable');
     await cdp.call('Network.enable');
 
-    const submit = await cdp.call('Runtime.evaluate', {
-      expression: deviceAuthSubmitExpression(user, pass),
-      returnByValue: true,
-      awaitPromise: true,
-    });
+    let submit;
+    try {
+      submit = await cdp.call('Runtime.evaluate', {
+        expression: deviceAuthSubmitExpression(user, pass),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+    } catch (error) {
+      if (!isCdpRuntimeTimeout(error)) {
+        throw error;
+      }
+      log('Chrome page stopped responding after submit; waiting for app completion.');
+      return;
+    }
     const value = submit.result?.result?.value;
     if (!value?.ok) {
       fail(`Could not submit device auth page: ${value?.reason || 'unknown'}`);
     }
 
-    await waitForPageText(cdp, /Logged in successfully/i, 20000);
+    try {
+      await waitForPageText(cdp, /Logged in successfully/i, 20000);
+    } catch (error) {
+      if (!isCdpRuntimeTimeout(error)) {
+        throw error;
+      }
+      log('Chrome success page timed out; waiting for app completion.');
+    }
   } finally {
     cdp.close();
   }
+}
+
+function isCdpRuntimeTimeout(error) {
+  return error instanceof Error && error.message === 'CDP timeout: Runtime.evaluate';
 }
 
 function deviceAuthSubmitExpression(user, pass) {

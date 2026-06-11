@@ -6,6 +6,40 @@ Android emulator and exposes adb at `localhost:5555`.
 
 ## Build And Install
 
+Preferred Docker-based build path:
+
+```sh
+scripts/flutter_docker.sh bash -lc \
+  'flutter pub get && flutter build apk --debug \
+    --dart-define=EASYTIER_CONSOLE_URL=http://10.147.223.128:14173'
+adb connect localhost:5555
+adb -s localhost:5555 install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+The Docker helper keeps large toolchain caches on the host under
+`/data/project/.cache/easytier-pro-app/`:
+
+- `gradle-home/` for Gradle wrapper distributions and dependency cache;
+- `pub-cache/` for Dart and Flutter packages;
+- `android-sdk/ndk/` for the Android NDK installed by Gradle;
+- `android-sdk/cmake/` for CMake installed by Gradle;
+- `android-sdk/temp/` for Android SDK manager temporary downloads.
+
+By default the helper temporarily maps the Gradle wrapper distribution from
+`gradle-*-all.zip` to `gradle-*-bin.zip` inside the container. This does not
+modify repository files, and avoids repeated large `all` distribution downloads
+for normal APK builds. Set `EASYTIER_GRADLE_DISTRIBUTION=all` when the exact
+wrapper distribution is required.
+
+If a previous interrupted download leaves a corrupt Gradle zip, clear only the
+wrapper distribution cache and rerun the same helper command:
+
+```sh
+rm -rf /data/project/.cache/easytier-pro-app/gradle-home/wrapper/dists/gradle-*
+```
+
+Direct host build path:
+
 ```sh
 flutter pub get
 flutter build apk --debug \
