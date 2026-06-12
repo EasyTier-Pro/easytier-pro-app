@@ -70,6 +70,11 @@ class _DesktopTraySupport extends TraySupport
 
     _quitRequested = true;
     await windowManager.setPreventClose(false);
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      await windowManager.destroy();
+      return;
+    }
+
     await windowManager.close();
   }
 
