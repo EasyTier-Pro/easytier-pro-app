@@ -13,6 +13,9 @@ permissions:
 env:
   INSTALLER_REPOSITORY: EasyTier-Pro/installer
   INSTALLER_REF: main
+  APPCAST_GITEE_BASE_URL: https://gitee.com/EasyTier-Pro/easytier-pro-app/releases/download/latest
+  APPCAST_OSS_BASE_URL: https://easytier.net/releases
+  APPCAST_GITHUB_BASE_URL: https://github.com/EasyTier-Pro/easytier-pro-app/releases/latest/download
 
 jobs:
   windows:
@@ -116,6 +119,50 @@ jobs:
         shell: pwsh
         run: ./scripts/package_windows_installer.ps1
 
+      - name: Sign Windows installer for appcast
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          WINDOWS_UPDATE_DSA_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_DSA_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_UPDATE_DSA_PRIVATE_KEY)) {
+            throw "Missing WINDOWS_UPDATE_DSA_PRIVATE_KEY secret for appcast signing."
+          }
+
+          $installer = Get-ChildItem dist -Filter "easytier-pro-windows-x64-setup-*.exe" | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "Windows installer was not found in dist."
+          }
+
+          $keyPath = Join-Path $env:RUNNER_TEMP "dsa_priv.pem"
+          try {
+            [System.IO.File]::WriteAllText(
+              $keyPath,
+              $env:WINDOWS_UPDATE_DSA_PRIVATE_KEY,
+              [System.Text.UTF8Encoding]::new($false)
+            )
+
+            $signature = (& dart run auto_updater:sign_update $installer.FullName $keyPath) -join "`n"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows appcast signing failed."
+            }
+            $signaturePath = "dist/easytier-pro-windows-x64.appcast-signature.txt"
+            [System.IO.File]::WriteAllText(
+              $signaturePath,
+              $signature + [Environment]::NewLine,
+              [System.Text.UTF8Encoding]::new($false)
+            )
+
+            dart scripts/generate_appcast.dart metadata `
+              --platform windows `
+              --arch x64 `
+              --artifact $installer.FullName `
+              --signature-file $signaturePath `
+              --output dist/easytier-pro-windows-x64.appcast.json
+          } finally {
+            Remove-Item $keyPath -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Package Windows portable archive
         shell: pwsh
         run: |
@@ -130,6 +177,16 @@ jobs:
         with:
           name: easytier-pro-windows-x64-installer
           path: dist/easytier-pro-windows-x64-setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload Windows appcast metadata
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-windows-x64-appcast-metadata
+          path: |
+            dist/easytier-pro-windows-x64.appcast.json
+            dist/easytier-pro-windows-x64.appcast-signature.txt
           if-no-files-found: error
 
       - name: Upload Windows portable archive
@@ -246,6 +303,39 @@ jobs:
             "build/macos/Build/Products/Release/EasyTier Pro.app" \
             "dist/easytier-pro-macos-${{ matrix.arch }}.zip"
 
+      - name: Sign macOS zip for appcast
+        if: github.event_name != 'pull_request'
+        env:
+          MACOS_UPDATE_SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_UPDATE_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MACOS_UPDATE_SPARKLE_PRIVATE_KEY:-}" ]]; then
+            echo "Missing MACOS_UPDATE_SPARKLE_PRIVATE_KEY secret for appcast signing." >&2
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/sparkle_private_key"
+          cleanup() {
+            rm -f "$key_path"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$MACOS_UPDATE_SPARKLE_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+
+          signature_path="dist/easytier-pro-macos-${{ matrix.arch }}.appcast-signature.txt"
+          dart run auto_updater:sign_update \
+            --ed-key-file "$key_path" \
+            "dist/easytier-pro-macos-${{ matrix.arch }}.zip" \
+            > "$signature_path"
+
+          dart scripts/generate_appcast.dart metadata \
+            --platform macos \
+            --arch "${{ matrix.arch }}" \
+            --artifact "dist/easytier-pro-macos-${{ matrix.arch }}.zip" \
+            --signature-file "$signature_path" \
+            --output "dist/easytier-pro-macos-${{ matrix.arch }}.appcast.json"
+
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
@@ -258,4 +348,69 @@ jobs:
         with:
           name: easytier-pro-macos-${{ matrix.arch }}
           path: dist/easytier-pro-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+      - name: Upload macOS appcast metadata
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-macos-${{ matrix.arch }}-appcast-metadata
+          path: |
+            dist/easytier-pro-macos-${{ matrix.arch }}.appcast.json
+            dist/easytier-pro-macos-${{ matrix.arch }}.appcast-signature.txt
+          if-no-files-found: error
+
+  appcast:
+    name: Appcast feed XML
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs:
+      - windows
+      - macos
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Download appcast metadata
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easytier-pro-*-appcast-metadata
+          path: dist/appcast-metadata
+          merge-multiple: true
+
+      - name: Generate appcast feed XML
+        run: |
+          set -euo pipefail
+          mkdir -p dist/appcast
+          dart scripts/generate_appcast.dart appcast \
+            --base-url "${APPCAST_GITEE_BASE_URL}" \
+            --output dist/appcast/appcast-gitee.xml \
+            dist/appcast-metadata/*.json
+          dart scripts/generate_appcast.dart appcast \
+            --base-url "${APPCAST_OSS_BASE_URL}" \
+            --output dist/appcast/appcast-oss.xml \
+            dist/appcast-metadata/*.json
+          dart scripts/generate_appcast.dart appcast \
+            --base-url "${APPCAST_GITHUB_BASE_URL}" \
+            --output dist/appcast/appcast-github.xml \
+            dist/appcast-metadata/*.json
+          cp dist/appcast/appcast-github.xml dist/appcast/appcast.xml
+
+      - name: Upload appcast feed XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-appcast
+          path: |
+            dist/appcast/*.xml
+            dist/appcast-metadata/*.json
+            dist/appcast-metadata/*.txt
           if-no-files-found: error

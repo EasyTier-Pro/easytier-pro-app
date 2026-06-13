@@ -187,6 +187,29 @@ sparkle:dsaSignature="MEUCIQD..." length="0"
 
 将 `sparkle:dsaSignature` 写入 appcast 的 Windows `enclosure` 节点。
 
+## GitHub Actions 签名与 Appcast
+
+`Desktop Packages` workflow 会在非 PR 构建中生成自动更新签名和 appcast feed XML。PR 构建不会注入仓库 secrets，因此只打包普通 artifact，不生成带真实签名的 appcast。
+
+需要配置以下 GitHub Actions secrets：
+
+- `MACOS_UPDATE_SPARKLE_PRIVATE_KEY`：Sparkle EdDSA 私钥文件内容，对应 `dart run auto_updater:sign_update --ed-key-file`。
+- `WINDOWS_UPDATE_DSA_PRIVATE_KEY`：Windows `dsa_priv.pem` 文件内容。
+
+非 PR 构建会上传：
+
+- `easytier-pro-windows-x64-appcast-metadata`：Windows 安装包的 `sparkle:dsaSignature` 和 appcast metadata。
+- `easytier-pro-macos-arm64-appcast-metadata` / `easytier-pro-macos-x64-appcast-metadata`：macOS zip 的 `sparkle:edSignature` 和 appcast metadata。
+- `easytier-pro-appcast`：聚合后的 feed XML，包括 `appcast-gitee.xml`、`appcast-oss.xml`、`appcast-github.xml` 和默认副本 `appcast.xml`。
+
+发布到不同渠道时，将对应 XML 上传并命名为 `appcast.xml`：
+
+- Gitee release 使用 `appcast-gitee.xml`。
+- OSS `https://easytier.net/releases` 使用 `appcast-oss.xml`。
+- GitHub release 使用 `appcast-github.xml`；默认 `appcast.xml` 也是 GitHub URL 版本。
+
+如果正在发布包含新公钥的桥接版本，这两个 secrets 仍应填旧私钥；等用户升级到桥接版本后，再把 secrets 切换为新私钥。
+
 ## Appcast 示例
 
 macOS 的 `sparkle:version` 应对应 `CFBundleVersion`，建议使用 `pubspec.yaml` 中 `version` 的 build number，例如 `1.0.1+2` 对应 `sparkle:version` 为 `2`，`sparkle:shortVersionString` 为 `1.0.1`。
@@ -269,12 +292,10 @@ python -m http.server 5002
 
 每次发布前检查：
 
-- GitHub Actions 的 `Desktop Packages` workflow 已为 Windows 生成 Inno Setup `.exe` 安装器和 portable zip，并为 macOS 生成 `.dmg` 与 `.zip` artifact；正式分发前仍需使用受控证书、私钥和渠道配置完成签名、公证和渠道发布配置。
+- GitHub Actions 的 `Desktop Packages` workflow 已为 Windows 生成 Inno Setup `.exe` 安装器和 portable zip，为 macOS 生成 `.dmg` 与 `.zip` artifact，并在非 PR 构建中生成自动更新签名和 appcast XML。
 - `pubspec.yaml` 的 `version` 已更新。
 - 如果发布渠道不同于内置 feed 列表，使用正确的 `EASYTIER_APPCAST_URLS` 构建 release 包。
 - macOS release 构建已完成签名和 notarization。
-- macOS zip 更新包已用 Sparkle EdDSA 私钥签名。
-- Windows 安装包已用受控的 `dsa_priv.pem` 签名。
-- appcast 中的版本号、`url`、签名字段和 `length` 已更新。
+- `easytier-pro-appcast` artifact 中的 XML 已匹配本次要发布的渠道。
 - appcast 已按 Gitee、OSS、GitHub 优先级发布，且更新包均已上传到 HTTPS 可访问地址。
 - 不要提交或上传任何私钥到公开位置。
