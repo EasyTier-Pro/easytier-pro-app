@@ -64,10 +64,10 @@ macOS 更新包必须使用 Sparkle EdDSA key 签名。
 
 ```xml
 <key>SUPublicEDKey</key>
-<string>gLgi+l+ziKzrIIR/VhL3Mx4fq84vXt7hf9h7rBIN/YQ=</string>
+<string>jK9CM/sTpLGHjgWE0faLi4siziuu0uJ3P86goYsTkww=</string>
 ```
 
-私钥由 Sparkle 存放在当前 macOS Keychain 中，不能提交到仓库。发布机或 CI 需要安全备份和恢复该私钥；如果私钥丢失，已安装客户端将无法验证后续 macOS 更新。
+私钥由发布环境安全保存，不能提交到仓库。可以存放在 macOS Keychain 中，也可以导出为私钥文件并在 CI 中通过 secret 注入；如果私钥丢失，密钥轮换能力取决于 Sparkle 配置、更新包类型和 Developer ID 代码签名链，需要发布前用旧版本客户端实测。
 
 首次生成 key：
 
@@ -78,6 +78,8 @@ pod install
 cd ..
 dart run auto_updater:generate_keys
 ```
+
+如果使用私钥文件签名，建议在发布环境使用 Sparkle 2 的 `generate_keys -x private-key-file` 导出私钥，或使用同格式的 Ed25519 seed 文件，并将该文件作为受控 secret 保存。
 
 ## macOS Release Entitlements
 
@@ -128,6 +130,17 @@ dart run auto_updater:generate_keys
 DSAPub      DSAPEM      "../../dsa_pub.pem"
 ```
 
+## 密钥轮换发布顺序
+
+更新签名公钥是客户端内置的信任根，不能直接用新私钥签署包含新公钥的第一个版本。正确顺序：
+
+1. 先生成新公私钥，并将新公钥提交到 `macos/Runner/Info.plist` 和 `dsa_pub.pem`。
+2. 构建包含新公钥的桥接版本，但 appcast 中的 macOS zip 和 Windows 安装包仍使用旧私钥签名。
+3. 已安装客户端用旧公钥验证桥接版本并升级后，客户端才会内置新公钥。
+4. 从桥接版本之后的更新开始，再改用新私钥签名。
+
+如果旧 Windows DSA 私钥已经丢失，旧 Windows 客户端无法通过自动更新跨过这次信任根轮换，只能引导用户手动下载安装新版本。macOS 是否能在旧 EdDSA 私钥丢失后继续轮换，取决于 Sparkle 版本、更新包类型、`SUVerifyUpdateBeforeExtraction`/feed 签名配置，以及新旧应用是否使用同一 Developer ID 代码签名；没有完成旧版本客户端验证前，不要依赖该兜底路径。
+
 ## macOS 更新包签名
 
 发布 macOS release 后，生成 zip 更新包：
@@ -141,7 +154,7 @@ ditto -c -k --keepParent "build/macos/Build/Products/Release/EasyTier Pro.app" "
 对 zip 更新包签名：
 
 ```bash
-dart run auto_updater:sign_update dist/EasyTierPro-1.0.1-macos.zip
+dart run auto_updater:sign_update --ed-key-file path/to/sparkle_private_key dist/EasyTierPro-1.0.1-macos.zip
 ```
 
 命令会输出类似内容：

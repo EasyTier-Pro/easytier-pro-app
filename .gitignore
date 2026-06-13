@@ -44,6 +44,8 @@ app.*.map.json
 # Auto updater signing private key. Keep the matching public key committed.
 dsa_priv.pem
 dsaparam.pem
+sparkle_private_key
+sparkle_private_key.*
 
 # Android Studio will place build artifacts here
 /android/app/debug
