@@ -94,16 +94,27 @@ class NetworkNodeListPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = nodes.isEmpty
-        ? Column(
+        ? LayoutBuilder(
             key: const ValueKey<String>('network-node-list-panel-empty'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (runtimeError != null) ...[
-                _RuntimeStatusNotice(message: runtimeError!),
-                const SizedBox(height: 12),
-              ],
-              const NetworkDetailEmptyState(message: '暂无节点'),
-            ],
+            builder: (context, constraints) {
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight:
+                      constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (runtimeError != null) ...[
+                      _RuntimeStatusNotice(message: runtimeError!),
+                      const SizedBox(height: 12),
+                    ],
+                    const NetworkDetailEmptyState(message: '暂无节点'),
+                  ],
+                ),
+              );
+            },
           )
         : Column(
             key: const ValueKey<String>('network-node-list-panel-loaded'),
