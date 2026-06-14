@@ -332,7 +332,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     );
 
     return FScaffold(
-      header: const FHeader(title: Text('EasyTier Pro')),
       child: content,
     );
   }
@@ -491,7 +490,7 @@ class _LoginRequiredView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '使用控制台账号授权此设备，即可加入你的零信任网络。',
+              '即刻加入你的私有零信任网络。',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
@@ -633,7 +632,7 @@ class _DeviceAuthViewState extends State<_DeviceAuthView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final info = widget.deviceAuthInfo;
-    final status = widget.statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。';
+    final status = widget.statusMessage ?? '在浏览器页面中输入用户代码，完成授权后应用会自动继续。';
 
     return FCard(
       child: Padding(
