@@ -109,6 +109,27 @@ class _SettingsPanel extends StatelessWidget {
     }
   }
 
+  Widget _iconAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPress,
+    FButtonVariant variant = FButtonVariant.ghost,
+  }) =>
+      _ControlSelectionBoundary(
+        child: FTooltip(
+          tipBuilder: (context, controller) => Text(tooltip),
+          child: FButton(
+            variant: variant,
+            size: .xs,
+            style: const .delta(
+              contentStyle: .delta(padding: .value(EdgeInsets.zero)),
+            ),
+            onPress: onPress,
+            child: Icon(icon, size: 16),
+          ),
+        ),
+      );
+
   Future<void> _showLogsDialog(BuildContext context) async {
     await showFDialog<void>(
       context: context,
@@ -257,19 +278,16 @@ class _SettingsPanel extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        _ControlSelectionBoundary(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              FButton(
-                                variant: .outline,
-                                onPress: () => unawaited(onLogout()),
-                                child: const Text('退出登录'),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Spacer(),
+                            _iconAction(
+                              icon: Icons.logout,
+                              tooltip: '退出登录',
+                              onPress: () => unawaited(onLogout()),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -389,31 +407,31 @@ class _SettingsPanel extends StatelessWidget {
                                     ?.copyWith(color: const Color(0xFF737373)),
                               ),
                             ],
-                            const SizedBox(height: 14),
-                            _ControlSelectionBoundary(
-                              child: Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  if (status.phase ==
-                                      CoreRunPhase.needsElevation)
-                                    FButton(
-                                      variant: .primary,
-                                      onPress: () => unawaited(
-                                        coreLifecycleService
-                                            .repairWithElevation(),
-                                      ),
-                                      child: const Text('以管理员身份运行'),
-                                    ),
-                                  FButton(
-                                    variant: .outline,
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (status.phase ==
+                                    CoreRunPhase.needsElevation) ...[
+                                  _iconAction(
+                                    icon: Icons.admin_panel_settings,
+                                    tooltip: '以管理员身份运行',
+                                    variant: .primary,
                                     onPress: () => unawaited(
-                                      coreLifecycleService.repair(),
+                                      coreLifecycleService
+                                          .repairWithElevation(),
                                     ),
-                                    child: const Text('重试/修复'),
                                   ),
+                                  const SizedBox(width: 8),
                                 ],
-                              ),
+                                _iconAction(
+                                  icon: Icons.refresh,
+                                  tooltip: '重试/修复',
+                                  onPress: () => unawaited(
+                                    coreLifecycleService.repair(),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         );
@@ -497,29 +515,29 @@ class _SettingsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _ControlSelectionBoundary(
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => unawaited(_showLogsDialog(context)),
-                  child: const Text('查看日志'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _iconAction(
+                icon: Icons.description_outlined,
+                tooltip: '查看日志',
+                onPress: () => unawaited(_showLogsDialog(context)),
+              ),
+              const SizedBox(width: 8),
+              _iconAction(
+                icon: Icons.download_outlined,
+                tooltip: '导出诊断日志',
+                onPress: () => unawaited(_exportLogs(context)),
+              ),
+              if (_canOpenLogDirectory) ...[
+                const SizedBox(width: 8),
+                _iconAction(
+                  icon: Icons.folder_open_outlined,
+                  tooltip: '打开日志目录',
+                  onPress: () => unawaited(_openLogDirectory(context)),
                 ),
-                FButton(
-                  variant: .outline,
-                  onPress: () => unawaited(_exportLogs(context)),
-                  child: const Text('导出诊断日志'),
-                ),
-                if (_canOpenLogDirectory)
-                  FButton(
-                    variant: .outline,
-                    onPress: () => unawaited(_openLogDirectory(context)),
-                    child: const Text('打开日志目录'),
-                  ),
               ],
-            ),
+            ],
           ),
         ],
       ),

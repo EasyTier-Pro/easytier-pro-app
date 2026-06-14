@@ -3246,8 +3246,8 @@ void main() {
 
       await _openSettingsFromUserMenu(tester);
 
-      expect(find.text('导出诊断日志'), findsOneWidget);
-      expect(find.text('打开日志目录'), findsNothing);
+      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
