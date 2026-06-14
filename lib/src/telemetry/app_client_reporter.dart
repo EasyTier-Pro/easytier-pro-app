@@ -125,25 +125,28 @@ class AppClientReporter {
     if (!_shouldSend(workspaceId, principalKey, report)) {
       return;
     }
+    final sequencedReport = report.withReportSequence(
+      await _nextReportSequence(workspaceId),
+    );
 
     final response = await _httpClient
         .put(
           _reportUri(
             workspaceId: workspaceId,
-            installationId: report.installationId,
+            installationId: sequencedReport.installationId,
           ),
           headers: {
             'Authorization': 'Bearer ${session.tokenSet.accessToken}',
             'Content-Type': 'application/json',
           },
-          body: jsonEncode(report.toJson()),
+          body: jsonEncode(sequencedReport.toJson()),
         )
         .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('console returned ${response.statusCode}');
     }
 
-    await _rememberReport(workspaceId, principalKey, report);
+    await _rememberReport(workspaceId, principalKey, sequencedReport);
     _logger.debug(
       'app.client',
       'Reported app client installation',
@@ -189,6 +192,7 @@ class AppClientReporter {
       osName: _fallback(environment.osName, 'unknown'),
       osVersion: _emptyToNull(environment.osVersion),
       deviceModel: _emptyToNull(environment.deviceModel),
+      reportSequence: null,
     );
   }
 
@@ -255,6 +259,13 @@ class AppClientReporter {
     return generated;
   }
 
+  Future<int> _nextReportSequence(String workspaceId) async {
+    final key = _sequenceKey(workspaceId);
+    final next = (_preferences.getInt(key) ?? 0) + 1;
+    await _preferences.setInt(key, next);
+    return next;
+  }
+
   Uri _reportUri({
     required String workspaceId,
     required String installationId,
@@ -277,6 +288,9 @@ class AppClientReporter {
 
   static String _reportedAtKey(String workspaceId, _AppClientReportKind kind) =>
       'app_client_reported_at_${kind.name}_$workspaceId';
+
+  static String _sequenceKey(String workspaceId) =>
+      'app_client_report_sequence_$workspaceId';
 }
 
 enum _AppClientReportKind {
@@ -345,6 +359,7 @@ class _AppClientReport {
     required this.osName,
     required this.osVersion,
     required this.deviceModel,
+    required this.reportSequence,
   });
 
   final String installationId;
@@ -357,15 +372,38 @@ class _AppClientReport {
   final String osName;
   final String? osVersion;
   final String? deviceModel;
+  final int? reportSequence;
 
-  String get fingerprint => jsonEncode(toJson());
+  _AppClientReport withReportSequence(int sequence) {
+    return _AppClientReport(
+      installationId: installationId,
+      machineId: machineId,
+      hostname: hostname,
+      appName: appName,
+      appVersion: appVersion,
+      appBuild: appBuild,
+      appPlatform: appPlatform,
+      osName: osName,
+      osVersion: osVersion,
+      deviceModel: deviceModel,
+      reportSequence: sequence,
+    );
+  }
 
-  String get baseFingerprint => jsonEncode(toJson(includeMachineId: false));
+  String get fingerprint => jsonEncode(toJson(includeReportSequence: false));
 
-  Map<String, Object?> toJson({bool includeMachineId = true}) {
+  String get baseFingerprint =>
+      jsonEncode(toJson(includeMachineId: false, includeReportSequence: false));
+
+  Map<String, Object?> toJson({
+    bool includeMachineId = true,
+    bool includeReportSequence = true,
+  }) {
     return <String, Object?>{
       if (includeMachineId && machineId != null) 'machine_id': machineId,
       if (hostname != null) 'hostname': hostname,
+      if (includeReportSequence && reportSequence != null)
+        'report_sequence': reportSequence,
       'app_name': appName,
       'app_version': appVersion,
       'app_build': appBuild,

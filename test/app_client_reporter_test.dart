@@ -48,6 +48,7 @@ void main() {
     expect(body['os_name'], 'windows');
     expect(body['os_version'], 'Windows 11');
     expect(body['hostname'], 'desktop-1');
+    expect(body['report_sequence'], 1);
     expect(body.containsKey('machine_id'), isFalse);
 
     now = now.add(const Duration(hours: 25));
@@ -82,6 +83,7 @@ void main() {
     expect(requests, hasLength(2));
     final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
     expect(body['machine_id'], '33333333-3333-4333-8333-333333333333');
+    expect(body['report_sequence'], 2);
   });
 
   test(
@@ -178,6 +180,8 @@ void main() {
     responses.last.complete(http.Response('{}', 200));
     await Future.wait([aliceReport, bobReport]);
 
+    expect(jsonDecode(requests[0].body)['report_sequence'], 1);
+    expect(jsonDecode(requests[1].body)['report_sequence'], 2);
     expect(
       preferences.getString('app_client_report_principal_tenant-1'),
       'email:bob@example.com',
@@ -220,6 +224,8 @@ void main() {
 
       await Future.wait([aliceReport, bobReport]);
       expect(requests, hasLength(2));
+      expect(jsonDecode(requests[0].body)['report_sequence'], 1);
+      expect(jsonDecode(requests[1].body)['report_sequence'], 2);
       expect(
         preferences.getString('app_client_report_principal_tenant-1'),
         'email:bob@example.com',
