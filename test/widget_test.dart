@@ -92,7 +92,7 @@ void main() {
 
       expect(flutterErrors, isEmpty);
       expect(navigator.canPop(), isFalse);
-      expect(find.byType(FButton), findsOneWidget);
+      expect(find.text('开始登录'), findsOneWidget);
     } finally {
       FlutterError.onError = previousOnError;
     }

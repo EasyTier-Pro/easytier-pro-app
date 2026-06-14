@@ -458,9 +458,62 @@ class _BrandPanel extends StatelessWidget {
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
               ),
+              SizedBox(height: compact ? 20 : 32),
+              _BrandFooterLinks(compact: compact),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BrandFooterLinks extends StatelessWidget {
+  const _BrandFooterLinks({this.compact = false});
+
+  final bool compact;
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _link(BuildContext context, {required String label, required String url}) {
+    final theme = Theme.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => unawaited(_openUrl(url)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTextStyle.merge(
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _link(context, label: '官网', url: 'https://easytier.cn'),
+          const Text(' · '),
+          _link(context, label: '控制台', url: 'https://console.easytier.net'),
+        ],
       ),
     );
   }
