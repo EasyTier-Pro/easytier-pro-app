@@ -6,12 +6,14 @@ class _SettingsPanel extends StatelessWidget {
     required this.workspaceName,
     required this.onLogout,
     required this.coreLifecycleService,
+    required this.windowBehaviorPreferences,
   });
 
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
+  final WindowBehaviorPreferences windowBehaviorPreferences;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
@@ -21,6 +23,12 @@ class _SettingsPanel extends StatelessWidget {
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.linux;
+
+  bool get _canConfigureWindowBehavior =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   void _showToast(
     BuildContext context,
@@ -219,7 +227,7 @@ class _SettingsPanel extends StatelessWidget {
               crossAxisCount: wide ? 2 : 1,
               mainAxisSpacing: compact ? 12 : 20,
               crossAxisSpacing: compact ? 12 : 20,
-              itemCount: 3,
+              itemCount: _canConfigureWindowBehavior ? 4 : 3,
               itemBuilder: (context, index) {
                 return switch (index) {
                   0 => FCard(
@@ -391,48 +399,109 @@ class _SettingsPanel extends StatelessWidget {
                       },
                     ),
                   ),
-                  _ => FCard(
-                    key: const ValueKey<String>('settings-diagnostics-card'),
-                    title: const Text('诊断日志'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
-                        _ControlSelectionBoundary(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              FButton(
-                                variant: .outline,
-                                onPress: () =>
-                                    unawaited(_showLogsDialog(context)),
-                                child: const Text('查看日志'),
-                              ),
-                              FButton(
-                                variant: .outline,
-                                onPress: () => unawaited(_exportLogs(context)),
-                                child: const Text('导出诊断日志'),
-                              ),
-                              if (_canOpenLogDirectory)
-                                FButton(
-                                  variant: .outline,
-                                  onPress: () =>
-                                      unawaited(_openLogDirectory(context)),
-                                  child: const Text('打开日志目录'),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  2 =>
+                    _canConfigureWindowBehavior
+                        ? _buildWindowBehaviorCard(context)
+                        : _buildDiagnosticsCard(context),
+                  _ => _buildDiagnosticsCard(context),
                 };
               },
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildWindowBehaviorCard(BuildContext context) {
+    return FCard(
+      key: const ValueKey<String>('settings-window-behavior-card'),
+      title: const Text('窗口行为'),
+      child: AnimatedBuilder(
+        animation: windowBehaviorPreferences,
+        builder: (context, _) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.web_asset_outlined),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '最小化窗口时隐藏到托盘',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: const Color(0xFF0F172A),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '关闭窗口仍会隐藏到托盘，可从托盘菜单退出应用。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFF737373)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _ControlSelectionBoundary(
+                    child: FSwitch(
+                      value: windowBehaviorPreferences.minimizeToTray,
+                      onChange: (value) => unawaited(
+                        windowBehaviorPreferences.setMinimizeToTray(value),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDiagnosticsCard(BuildContext context) {
+    return FCard(
+      key: const ValueKey<String>('settings-diagnostics-card'),
+      title: const Text('诊断日志'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          _ControlSelectionBoundary(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => unawaited(_showLogsDialog(context)),
+                  child: const Text('查看日志'),
+                ),
+                FButton(
+                  variant: .outline,
+                  onPress: () => unawaited(_exportLogs(context)),
+                  child: const Text('导出诊断日志'),
+                ),
+                if (_canOpenLogDirectory)
+                  FButton(
+                    variant: .outline,
+                    onPress: () => unawaited(_openLogDirectory(context)),
+                    child: const Text('打开日志目录'),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

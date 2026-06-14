@@ -10,6 +10,7 @@ import 'src/auth/console_auth_service.dart';
 import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/app_update_service.dart';
 import 'src/desktop/tray_support.dart';
+import 'src/desktop/window_behavior_preferences.dart';
 import 'src/logging/app_logger.dart';
 import 'src/shared/app_motion.dart';
 
@@ -56,7 +57,10 @@ Future<void> main() async {
   );
   final coreLifecycleService = CoreLifecycleService(authService: authService);
   const appUpdateService = AppUpdateService();
-  final traySupport = createTraySupport();
+  final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+  final traySupport = createTraySupport(
+    windowBehaviorPreferences: windowBehaviorPreferences,
+  );
 
   await traySupport.initialize();
   unawaited(appUpdateService.initialize());
@@ -67,6 +71,7 @@ Future<void> main() async {
       authService: authService,
       traySupport: traySupport,
       coreLifecycleService: coreLifecycleService,
+      windowBehaviorPreferences: windowBehaviorPreferences,
     ),
   );
 }
@@ -77,12 +82,14 @@ class MyApp extends StatefulWidget {
     required this.authService,
     required this.traySupport,
     required this.coreLifecycleService,
+    this.windowBehaviorPreferences,
     this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
   final TraySupport traySupport;
   final CoreLifecycleService coreLifecycleService;
+  final WindowBehaviorPreferences? windowBehaviorPreferences;
   final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
@@ -90,9 +97,13 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  late final WindowBehaviorPreferences _windowBehaviorPreferences;
+
   @override
   void initState() {
     super.initState();
+    _windowBehaviorPreferences =
+        widget.windowBehaviorPreferences ?? WindowBehaviorPreferences.memory();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
     unawaited(
       widget.traySupport.updateCoreStatus(
@@ -152,6 +163,7 @@ class _MyAppState extends State<MyApp> {
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
+        windowBehaviorPreferences: _windowBehaviorPreferences,
         androidMvpSingleActiveNetworkOverride:
             widget.androidMvpSingleActiveNetworkOverride,
       ),

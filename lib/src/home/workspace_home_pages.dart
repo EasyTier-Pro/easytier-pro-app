@@ -11,6 +11,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
         workspaceName: _workspace?.name ?? '未关联工作区',
         onLogout: widget.onLogout,
         coreLifecycleService: widget.coreLifecycleService,
+        windowBehaviorPreferences: widget.windowBehaviorPreferences,
       ),
     };
   }

@@ -7,10 +7,11 @@ import 'package:window_manager/window_manager.dart';
 import '../core/core_lifecycle_service.dart';
 import '../logging/app_logger.dart';
 import 'tray_support.dart';
+import 'window_behavior_preferences.dart';
 
 class _DesktopTraySupport extends TraySupport
     with TrayListener, WindowListener {
-  _DesktopTraySupport();
+  _DesktopTraySupport({required this._windowBehaviorPreferences});
 
   static const String _trayTooltip = 'EasyTier Pro';
   static const String _windowsTrayIconPath =
@@ -23,6 +24,7 @@ class _DesktopTraySupport extends TraySupport
   bool _trayMenuVisible = false;
   TrayConnectionAction? _connectionAction;
   final AppLogger _logger = AppLogger.instance;
+  final WindowBehaviorPreferences _windowBehaviorPreferences;
 
   bool get _isDesktopPlatform {
     return !kIsWeb &&
@@ -206,7 +208,7 @@ class _DesktopTraySupport extends TraySupport
 
   @override
   void onWindowMinimize() {
-    if (_quitRequested) {
+    if (_quitRequested || !_windowBehaviorPreferences.minimizeToTray) {
       return;
     }
 
@@ -235,4 +237,6 @@ class _DesktopTraySupport extends TraySupport
   }
 }
 
-TraySupport createPlatformTraySupport() => _DesktopTraySupport();
+TraySupport createPlatformTraySupport({
+  required WindowBehaviorPreferences windowBehaviorPreferences,
+}) => _DesktopTraySupport(windowBehaviorPreferences: windowBehaviorPreferences);

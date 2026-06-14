@@ -18,6 +18,7 @@ import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
+import 'package:easytier_pro_app/src/desktop/window_behavior_preferences.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
@@ -3247,6 +3248,97 @@ void main() {
 
       expect(find.text('导出诊断日志'), findsOneWidget);
       expect(find.text('打开日志目录'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test('window behavior preferences default minimize to taskbar', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+
+    expect(windowBehaviorPreferences.minimizeToTray, isFalse);
+
+    await windowBehaviorPreferences.setMinimizeToTray(true);
+    final reloaded = WindowBehaviorPreferences(preferences);
+
+    expect(reloaded.minimizeToTray, isTrue);
+  });
+
+  testWidgets('desktop settings toggles minimize to tray preference', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+          windowBehaviorPreferences: windowBehaviorPreferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-window-behavior-card')),
+        findsOneWidget,
+      );
+      expect(find.text('最小化窗口时隐藏到托盘'), findsOneWidget);
+      expect(windowBehaviorPreferences.minimizeToTray, isFalse);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey<String>('settings-window-behavior-card'),
+          ),
+          matching: find.byType(FSwitch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(windowBehaviorPreferences.minimizeToTray, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('android settings hides desktop window behavior', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-window-behavior-card')),
+        findsNothing,
+      );
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

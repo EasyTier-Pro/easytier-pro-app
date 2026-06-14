@@ -13,6 +13,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../desktop/tray_support.dart';
+import '../desktop/window_behavior_preferences.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
@@ -47,6 +48,7 @@ class WorkspaceHomeView extends StatefulWidget {
     required this.authService,
     required this.coreLifecycleService,
     required this.traySupport,
+    required this.windowBehaviorPreferences,
     required this.session,
     required this.onLogout,
     this.androidMvpSingleActiveNetworkOverride,
@@ -55,6 +57,7 @@ class WorkspaceHomeView extends StatefulWidget {
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
   final TraySupport traySupport;
+  final WindowBehaviorPreferences windowBehaviorPreferences;
   final AuthSession session;
   final Future<void> Function() onLogout;
   final bool? androidMvpSingleActiveNetworkOverride;
