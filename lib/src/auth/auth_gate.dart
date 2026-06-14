@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/core_lifecycle_service.dart';
 import '../desktop/tray_support.dart';
+import '../desktop/window_behavior_preferences.dart';
 import '../logging/app_logger.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
@@ -27,12 +28,14 @@ class AuthGate extends StatefulWidget {
     required this.authService,
     required this.coreLifecycleService,
     required this.traySupport,
+    required this.windowBehaviorPreferences,
     this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
   final TraySupport traySupport;
+  final WindowBehaviorPreferences windowBehaviorPreferences;
   final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
@@ -293,6 +296,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
+        windowBehaviorPreferences: widget.windowBehaviorPreferences,
         onLogout: _logout,
         androidMvpSingleActiveNetworkOverride:
             widget.androidMvpSingleActiveNetworkOverride,

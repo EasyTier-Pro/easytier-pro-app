@@ -1179,7 +1179,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
 
   static String _elevationLastError(_ElevationRequiredException error) {
     final message = _cleanProcessErrorMessage(error.message.trim());
-    return message.isEmpty ? '创建虚拟网卡需要提升权限' : message;
+    return message.isEmpty ? '安装连接引擎需要管理员权限' : message;
   }
 
   static String _quoteAppleScriptString(String value) {

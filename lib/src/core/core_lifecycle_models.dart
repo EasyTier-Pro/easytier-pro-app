@@ -12,7 +12,7 @@ enum CoreRunPhase {
 }
 
 class _ElevationRequiredException implements Exception {
-  const _ElevationRequiredException([this.message = '需要管理员权限']);
+  const _ElevationRequiredException([this.message = '安装连接引擎需要管理员权限']);
   final String message;
   @override
   String toString() => message;

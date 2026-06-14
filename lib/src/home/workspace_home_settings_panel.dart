@@ -363,7 +363,7 @@ class _SettingsPanel extends StatelessWidget {
                                 needsVpnPermission) ...[
                               const SizedBox(height: 10),
                               Text(
-                                needsVpnPermission ? '需要 VPN 授权' : '需要管理员权限',
+                                needsVpnPermission ? '需要 VPN 授权' : '需要管理员权限安装引擎',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFF737373)),
                               ),
