@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -139,6 +140,56 @@ void main() {
 
     expect(requests, hasLength(2));
   });
+
+  test('serializes same tenant reports so newer user wins', () async {
+    SharedPreferences.setMockInitialValues({
+      'app_client_installation_id': '77777777-7777-4777-8777-777777777777',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    final responses = <Completer<http.Response>>[];
+    final reporter = AppClientReporter(
+      preferences: preferences,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) {
+        requests.add(request);
+        final response = Completer<http.Response>();
+        responses.add(response);
+        return response.future;
+      }),
+      environmentLoader: _testEnvironment,
+      now: () => DateTime.utc(2026, 6, 14, 1),
+    );
+
+    final aliceReport = reporter.reportSessionEstablished(
+      _session('tenant-1', email: 'alice@example.com'),
+    );
+    await _waitForRequests(requests, 1);
+
+    final bobReport = reporter.reportSessionEstablished(
+      _session('tenant-1', email: 'bob@example.com'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, hasLength(1));
+
+    responses.first.complete(http.Response('{}', 200));
+    await _waitForRequests(requests, 2);
+
+    responses.last.complete(http.Response('{}', 200));
+    await Future.wait([aliceReport, bobReport]);
+
+    expect(
+      preferences.getString('app_client_report_principal_tenant-1'),
+      'email:bob@example.com',
+    );
+  });
+}
+
+Future<void> _waitForRequests(List<http.Request> requests, int count) async {
+  for (var attempt = 0; attempt < 50 && requests.length < count; attempt += 1) {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  expect(requests, hasLength(count));
 }
 
 Future<AppClientEnvironment> _testEnvironment() async {

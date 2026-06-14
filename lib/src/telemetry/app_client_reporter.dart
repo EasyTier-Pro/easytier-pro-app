@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -53,6 +54,7 @@ class AppClientReporter {
   final AppClientClock _now;
   final Duration _reportInterval;
   final AppLogger _logger = AppLogger.instance;
+  final Map<String, Future<void>> _workspaceReports = {};
 
   Future<void> reportSessionEstablished(AuthSession session) {
     return _report(session, machineId: null, reason: 'session_established');
@@ -84,36 +86,16 @@ class AppClientReporter {
         return;
       }
 
-      final report = await _buildReport(machineId: machineId);
       final principalKey = _principalKeyFor(session);
-      if (!_shouldSend(workspace.id, principalKey, report)) {
-        return;
-      }
-
-      final response = await _httpClient.put(
-        _reportUri(
+      await _enqueueWorkspaceReport(
+        workspace.id,
+        () => _sendReport(
+          session: session,
           workspaceId: workspace.id,
-          installationId: report.installationId,
+          principalKey: principalKey,
+          machineId: machineId,
+          reason: reason,
         ),
-        headers: {
-          'Authorization': 'Bearer ${session.tokenSet.accessToken}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(report.toJson()),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('console returned ${response.statusCode}');
-      }
-
-      await _rememberReport(workspace.id, principalKey, report);
-      _logger.debug(
-        'app.client',
-        'Reported app client installation',
-        context: {
-          'workspace_id': workspace.id,
-          'machine_id': report.machineId ?? '',
-          'reason': reason,
-        },
       );
     } catch (error) {
       _logger.warn(
@@ -122,6 +104,68 @@ class AppClientReporter {
         context: {'reason': reason, 'error': error.toString()},
       );
     }
+  }
+
+  Future<void> _sendReport({
+    required AuthSession session,
+    required String workspaceId,
+    required String principalKey,
+    required String? machineId,
+    required String reason,
+  }) async {
+    if (session.tokenSet.isExpired) {
+      return;
+    }
+    final report = await _buildReport(machineId: machineId);
+    if (!_shouldSend(workspaceId, principalKey, report)) {
+      return;
+    }
+
+    final response = await _httpClient.put(
+      _reportUri(
+        workspaceId: workspaceId,
+        installationId: report.installationId,
+      ),
+      headers: {
+        'Authorization': 'Bearer ${session.tokenSet.accessToken}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(report.toJson()),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('console returned ${response.statusCode}');
+    }
+
+    await _rememberReport(workspaceId, principalKey, report);
+    _logger.debug(
+      'app.client',
+      'Reported app client installation',
+      context: {
+        'workspace_id': workspaceId,
+        'machine_id': report.machineId ?? '',
+        'reason': reason,
+      },
+    );
+  }
+
+  Future<void> _enqueueWorkspaceReport(
+    String workspaceId,
+    Future<void> Function() task,
+  ) {
+    final previous = _workspaceReports[workspaceId] ?? Future<void>.value();
+    late final Future<void> current;
+    current = previous.catchError((_) {}).then((_) => task());
+    _workspaceReports[workspaceId] = current;
+    unawaited(
+      current
+          .whenComplete(() {
+            if (identical(_workspaceReports[workspaceId], current)) {
+              _workspaceReports.remove(workspaceId);
+            }
+          })
+          .catchError((_) {}),
+    );
+    return current;
   }
 
   Future<_AppClientReport> _buildReport({required String? machineId}) async {
