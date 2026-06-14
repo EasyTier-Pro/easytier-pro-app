@@ -20,9 +20,16 @@ const List<String> _defaultAppcastFeedUrls = [
 ];
 
 class AppUpdateService {
-  const AppUpdateService({this.httpClient});
+  AppUpdateService({
+    this.httpClient,
+    this.updateDriver = const AutoUpdaterDriver(),
+    String? Function()? supportedPlatformName,
+  }) : _supportedPlatformNameOverride = supportedPlatformName;
 
   final http.Client? httpClient;
+  final AppUpdateDriver updateDriver;
+  final String? Function()? _supportedPlatformNameOverride;
+  Future<void> _updateOperation = Future<void>.value();
 
   Future<void> initialize() async {
     final platform = _supportedPlatformName;
@@ -30,32 +37,106 @@ class AppUpdateService {
       return;
     }
 
-    try {
-      final preparation = await _prepareUpdater();
-      if (!preparation.ready) {
-        _logPreparationFailure(platform, preparation);
-        return;
-      }
+    await _runSerialized(
+      () async {
+        final preparation = await _prepareUpdater();
+        if (!preparation.ready) {
+          _logPreparationFailure(platform, preparation);
+          return;
+        }
 
-      final interval = _normalizedCheckIntervalSeconds;
-      AppLogger.instance.info(
-        'app.update',
-        'Initializing $platform app updater',
-        context: {
-          'feed_url': preparation.feedUrl,
-          'interval_seconds': interval,
-          'platform': platform,
-        },
-      );
-      await autoUpdater.setScheduledCheckInterval(interval);
-      await autoUpdater.checkForUpdates(inBackground: true);
-    } catch (error, stack) {
-      AppLogger.instance.error(
-        'app.update',
-        error.toString(),
-        context: {'stack': stack.toString()},
-      );
+        final interval = _normalizedCheckIntervalSeconds;
+        AppLogger.instance.info(
+          'app.update',
+          'Initializing $platform app updater',
+          context: {
+            'feed_url': preparation.feedUrl,
+            'interval_seconds': interval,
+            'platform': platform,
+          },
+        );
+        await updateDriver.setScheduledCheckInterval(interval);
+        await updateDriver.checkForUpdates(inBackground: true);
+      },
+      onError: (error, stack) {
+        AppLogger.instance.error(
+          'app.update',
+          error.toString(),
+          context: {'stack': stack.toString()},
+        );
+      },
+    );
+  }
+
+  Future<T?> _runSerialized<T>(
+    Future<T> Function() operation, {
+    void Function(Object error, StackTrace stack)? onError,
+  }) {
+    final previousOperation = _updateOperation;
+    late final Future<T?> currentOperation;
+    currentOperation = previousOperation
+        .catchError((_) {
+          return null;
+        })
+        .then((_) => operation())
+        .then<T?>((value) => value)
+        .catchError((Object error, StackTrace stack) {
+          onError?.call(error, stack);
+          return null;
+        });
+    _updateOperation = currentOperation.then<void>((_) {});
+    return currentOperation;
+  }
+
+  Future<AppUpdateCheckResult> _runSerializedCheck(
+    Future<AppUpdateCheckResult> Function() operation,
+  ) async {
+    final result = await _runSerialized(
+      operation,
+      onError: (error, stack) {
+        AppLogger.instance.error(
+          'app.update',
+          'Manual update check failed',
+          context: {'error': error.toString(), 'stack': stack.toString()},
+        );
+      },
+    );
+    return result ?? const AppUpdateCheckResult(AppUpdateCheckStatus.failed);
+  }
+
+  Future<AppUpdateCheckResult> _checkForUpdatesOnSupportedPlatform(
+    String platform,
+  ) async {
+    final preparation = await _prepareUpdater();
+    if (!preparation.ready) {
+      _logPreparationFailure(platform, preparation);
+      return AppUpdateCheckResult(preparation.status);
     }
+
+    AppLogger.instance.info(
+      'app.update',
+      'Manually checking $platform app updates',
+      context: {'feed_url': preparation.feedUrl, 'platform': platform},
+    );
+    await updateDriver.checkForUpdates(inBackground: false);
+    return AppUpdateCheckResult(
+      AppUpdateCheckStatus.started,
+      feedUrl: preparation.feedUrl,
+    );
+  }
+
+  String? get _supportedPlatformName {
+    final override = _supportedPlatformNameOverride;
+    if (override != null) {
+      return override();
+    }
+    if (Platform.isMacOS) {
+      return 'macOS';
+    }
+    if (Platform.isWindows) {
+      return 'Windows';
+    }
+    return null;
   }
 
   Future<AppUpdateCheckResult> checkForUpdates() async {
@@ -66,31 +147,9 @@ class AppUpdateService {
       );
     }
 
-    try {
-      final preparation = await _prepareUpdater();
-      if (!preparation.ready) {
-        _logPreparationFailure(platform, preparation);
-        return AppUpdateCheckResult(preparation.status);
-      }
-
-      AppLogger.instance.info(
-        'app.update',
-        'Manually checking $platform app updates',
-        context: {'feed_url': preparation.feedUrl, 'platform': platform},
-      );
-      await autoUpdater.checkForUpdates(inBackground: false);
-      return AppUpdateCheckResult(
-        AppUpdateCheckStatus.started,
-        feedUrl: preparation.feedUrl,
-      );
-    } catch (error, stack) {
-      AppLogger.instance.error(
-        'app.update',
-        'Manual update check failed',
-        context: {'error': error.toString(), 'stack': stack.toString()},
-      );
-      return AppUpdateCheckResult(AppUpdateCheckStatus.failed, error: error);
-    }
+    return _runSerializedCheck(
+      () => _checkForUpdatesOnSupportedPlatform(platform),
+    );
   }
 
   int get _normalizedCheckIntervalSeconds {
@@ -109,16 +168,6 @@ class AppUpdateService {
       return AppcastFeedResolver.parseFeedUrls(override);
     }
     return _defaultAppcastFeedUrls;
-  }
-
-  String? get _supportedPlatformName {
-    if (Platform.isMacOS) {
-      return 'macOS';
-    }
-    if (Platform.isWindows) {
-      return 'Windows';
-    }
-    return null;
   }
 
   Future<_AppUpdatePreparation> _prepareUpdater() async {
@@ -141,7 +190,7 @@ class AppUpdateService {
         );
       }
 
-      await autoUpdater.setFeedURL(feedUrl);
+      await updateDriver.setFeedURL(feedUrl);
       return _AppUpdatePreparation(
         status: AppUpdateCheckStatus.started,
         feedUrl: feedUrl,
@@ -198,6 +247,33 @@ class AppUpdateService {
       }
     }
     return null;
+  }
+}
+
+abstract class AppUpdateDriver {
+  Future<void> setFeedURL(String feedUrl);
+
+  Future<void> setScheduledCheckInterval(int interval);
+
+  Future<void> checkForUpdates({bool? inBackground});
+}
+
+class AutoUpdaterDriver implements AppUpdateDriver {
+  const AutoUpdaterDriver();
+
+  @override
+  Future<void> setFeedURL(String feedUrl) {
+    return autoUpdater.setFeedURL(feedUrl);
+  }
+
+  @override
+  Future<void> setScheduledCheckInterval(int interval) {
+    return autoUpdater.setScheduledCheckInterval(interval);
+  }
+
+  @override
+  Future<void> checkForUpdates({bool? inBackground}) {
+    return autoUpdater.checkForUpdates(inBackground: inBackground);
   }
 }
 

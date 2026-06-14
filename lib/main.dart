@@ -60,7 +60,7 @@ Future<void> main() async {
     authService: authService,
     appClientReporter: appClientReporter,
   );
-  const appUpdateService = AppUpdateService();
+  final appUpdateService = AppUpdateService();
   final traySupport = createTraySupport();
 
   await traySupport.initialize();
@@ -78,14 +78,14 @@ Future<void> main() async {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({
+  MyApp({
     super.key,
     required this.authService,
     required this.traySupport,
     required this.coreLifecycleService,
-    this.appUpdateService = const AppUpdateService(),
+    AppUpdateService? appUpdateService,
     this.androidMvpSingleActiveNetworkOverride,
-  });
+  }) : appUpdateService = appUpdateService ?? AppUpdateService();
 
   final AuthService authService;
   final TraySupport traySupport;
