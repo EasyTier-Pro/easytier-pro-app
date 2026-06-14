@@ -18,6 +18,7 @@ import 'package:easytier_pro_app/main.dart';
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
+import 'package:easytier_pro_app/src/desktop/app_update_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
@@ -3293,6 +3294,45 @@ void main() {
     expect(find.text('检查更新'), findsOneWidget);
   });
 
+  testWidgets('settings update action shows pending state and result toast', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final updateResult = Completer<AppUpdateCheckResult>();
+    final appUpdateService = _FakeAppUpdateService(updateResult.future);
+    final authService = _FakeAuthService();
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+        appUpdateService: appUpdateService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openSettingsFromUserMenu(tester);
+    await tester.tap(find.text('检查更新'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(appUpdateService.checkCount, 1);
+    expect(find.text('正在检查...'), findsOneWidget);
+
+    updateResult.complete(
+      const AppUpdateCheckResult(AppUpdateCheckStatus.unsupportedPlatform),
+    );
+    await tester.pump();
+
+    expect(find.text('检查更新'), findsOneWidget);
+    expect(find.text('当前平台暂不支持应用内更新检查'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'mobile settings account card stays compact and does not scroll sideways',
     (WidgetTester tester) async {
@@ -5532,5 +5572,18 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
         ? peerReadCount - 1
         : peerSamples.length - 1;
     return peerSamples[sampleIndex];
+  }
+}
+
+class _FakeAppUpdateService extends AppUpdateService {
+  _FakeAppUpdateService(this.result);
+
+  final Future<AppUpdateCheckResult> result;
+  int checkCount = 0;
+
+  @override
+  Future<AppUpdateCheckResult> checkForUpdates() {
+    checkCount++;
+    return result;
   }
 }
