@@ -720,8 +720,9 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     try {
       process = await Process.start(executable, ['desktop', command, '--json']);
     } on ProcessException catch (e) {
-      if (_isElevationRequired(0, e.message)) {
-        throw _ElevationRequiredException(e.message);
+      final message = _cleanProcessErrorMessage(e.message);
+      if (_isElevationRequired(0, message)) {
+        throw _ElevationRequiredException(message);
       }
       rethrow;
     }
@@ -1177,7 +1178,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   }
 
   static String _elevationLastError(_ElevationRequiredException error) {
-    final message = error.message.trim();
+    final message = _cleanProcessErrorMessage(error.message.trim());
     return message.isEmpty ? '创建虚拟网卡需要提升权限' : message;
   }
 
@@ -1194,7 +1195,18 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   }
 
   String _normalizeError(Object error) {
-    return error.toString().replaceFirst('Exception: ', '');
+    return _cleanProcessErrorMessage(
+      error.toString().replaceFirst('Exception: ', ''),
+    );
+  }
+
+  static String _cleanProcessErrorMessage(String message) {
+    // Dart's ProcessException on Windows appends runtime source paths like:
+    // "请求的操作需要提升。 (at ../../../flutter/third_party/dart/runtime/bin/process_win.cc:577)"
+    return message.replaceAllMapped(
+      RegExp(r'\s*\(at\s+\.\./[^)]+\.cc:\d+\)\s*$'),
+      (_) => '',
+    );
   }
 
   void _handleRuntimeEvent(CoreRuntimeEvent event) {
