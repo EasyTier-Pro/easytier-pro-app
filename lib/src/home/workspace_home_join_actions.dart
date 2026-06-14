@@ -10,6 +10,15 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       _setJoinError(network.id, '当前账号未关联工作区。');
       return;
     }
+    if (coreStatus.phase == CoreRunPhase.needsElevation) {
+      const message = '需要管理员权限安装连接引擎后才能加入网络';
+      _setJoinError(network.id, message);
+      _showNetworkActionToast(
+        '加入「${network.name}」失败：$message',
+        destructive: true,
+      );
+      return;
+    }
     if (!coreStatus.isRunning || machineId == null || machineId.isEmpty) {
       _setJoinError(network.id, '请等待本机设备准备完成后再加入网络。');
       return;
