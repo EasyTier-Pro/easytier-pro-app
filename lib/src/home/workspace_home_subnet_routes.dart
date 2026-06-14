@@ -90,17 +90,7 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         if (routes.routes.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            child: Center(
-              child: Text(
-                '还没有配置子网路由',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF94A3B8),
-                ),
-              ),
-            ),
-          )
+          const NetworkDetailEmptyState(message: '暂无子网路由')
         else
           for (final route in routes.routes)
             _NetworkSubnetRouteCard(

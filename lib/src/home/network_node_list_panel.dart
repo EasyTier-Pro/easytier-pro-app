@@ -102,7 +102,7 @@ class NetworkNodeListPanel extends StatelessWidget {
                 _RuntimeStatusNotice(message: runtimeError!),
                 const SizedBox(height: 12),
               ],
-              const Center(child: _NodeStateMessage(message: '该网络暂无节点')),
+              const NetworkDetailEmptyState(message: '暂无节点'),
             ],
           )
         : Column(
@@ -153,5 +153,28 @@ class NetworkNodeListPanel extends StatelessWidget {
       return null;
     }
     return peerStatusesByIpv4[ipv4];
+  }
+}
+
+/// Network Detail 各 tab 在未加入网络或内容为空时使用的统一空状态提示。
+class NetworkDetailEmptyState extends StatelessWidget {
+  const NetworkDetailEmptyState({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: const Color(0xFF94A3B8),
+          ),
+        ),
+      ),
+    );
   }
 }

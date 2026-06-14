@@ -33,7 +33,7 @@ class _LocalNetworkSettingsViewport extends StatelessWidget {
                     ? constraints.maxHeight
                     : 0,
               ),
-              child: const _StateMessage(message: '本机尚未加入此网络。'),
+              child: const NetworkDetailEmptyState(message: '本机尚未加入网络'),
             ),
           );
         },

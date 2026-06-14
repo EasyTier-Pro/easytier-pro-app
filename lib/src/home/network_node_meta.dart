@@ -92,20 +92,6 @@ class _RuntimeStatusNotice extends StatelessWidget {
   }
 }
 
-class _NodeStateMessage extends StatelessWidget {
-  const _NodeStateMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Text(message, textAlign: TextAlign.center),
-    );
-  }
-}
-
 String _formatConnectionCost(String costText) {
   final value = costText.trim();
   if (value.isEmpty || value == '-' || value == '*') {

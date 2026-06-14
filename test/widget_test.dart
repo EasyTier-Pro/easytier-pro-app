@@ -1717,7 +1717,7 @@ void main() {
     await tester.tap(find.text('子网 0'));
     await _pumpAppMotionFrames(tester);
 
-    expect(find.textContaining('还没有配置子网路由'), findsOneWidget);
+    expect(find.textContaining('暂无子网路由'), findsOneWidget);
   });
 
   testWidgets('network detail subnet segment retries failed route load', (
@@ -1924,7 +1924,7 @@ void main() {
     await tester.tap(find.text('本机'));
     await _pumpAppMotionFrames(tester);
 
-    expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
+    expect(find.textContaining('本机尚未加入网络'), findsOneWidget);
   });
 
 
