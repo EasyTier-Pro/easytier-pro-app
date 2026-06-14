@@ -213,6 +213,27 @@ sparkle:dsaSignature="MEUCIQD..." length="0"
 
 如果正在发布包含新公钥的桥接版本，这两个 secrets 仍应填旧私钥；等用户升级到桥接版本后，再把 secrets 切换为新私钥。
 
+## GitHub Draft Release
+
+推送 `v*` tag 会触发 `Desktop Packages` workflow，并在所有桌面产物和 appcast XML 生成后自动创建 GitHub draft release：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+draft release job 会检查 tag 版本与 `pubspec.yaml` 的短版本一致。例如 `pubspec.yaml` 为 `version: 1.0.0+1` 时，tag 必须是 `v1.0.0`。不一致会直接失败，避免草稿 release 绑定错误版本。
+
+自动创建的 draft release 会附带公开发布所需的最终产物：
+
+- Windows installer `.exe`
+- Windows portable `.zip`
+- macOS arm64/x64 `.dmg`
+- macOS arm64/x64 `.zip`
+- `appcast.xml`、`appcast-gitee.xml`、`appcast-oss.xml`、`appcast-github.xml`
+
+如果同 tag 已存在 draft release 或已发布 release，workflow 会拒绝覆盖。需要重跑生成草稿时，先手动删除已有 draft release，再重新运行 workflow。
+
 ## Appcast 示例
 
 macOS 的 `sparkle:version` 应对应 `CFBundleVersion`，建议使用 `pubspec.yaml` 中 `version` 的 build number，例如 `1.0.1+2` 对应 `sparkle:version` 为 `2`，`sparkle:shortVersionString` 为 `1.0.1`。
@@ -297,6 +318,7 @@ python -m http.server 5002
 
 - GitHub Actions 的 `Desktop Packages` workflow 已为 Windows 生成 Inno Setup `.exe` 安装器和 portable zip，为 macOS 生成 `.dmg` 与 `.zip` artifact，并在非 PR 构建中生成自动更新签名和 appcast XML。
 - `pubspec.yaml` 的 `version` 已更新。
+- 如需自动生成 GitHub draft release，推送的 tag 已匹配 `pubspec.yaml` 短版本，例如 `version: 1.0.0+1` 对应 `v1.0.0`。
 - 如果发布渠道不同于内置 feed 列表，使用正确的 `EASYTIER_APPCAST_URLS` 构建 release 包。
 - macOS release 构建已完成签名和 notarization。
 - `easytier-pro-appcast` artifact 中的 XML 已匹配本次要发布的渠道。

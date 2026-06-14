@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
@@ -413,3 +415,102 @@ jobs:
           name: easytier-pro-appcast
           path: dist/appcast/*.xml
           if-no-files-found: error
+
+  draft-release:
+    name: Draft GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs:
+      - windows
+      - macos
+      - appcast
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate tag version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          release_version="${tag#v}"
+          pubspec_version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          pubspec_short_version="${pubspec_version%%+*}"
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use the vX.Y.Z format: $tag" >&2
+            exit 1
+          fi
+
+          if [[ "$release_version" != "$pubspec_short_version" ]]; then
+            echo "Tag $tag does not match pubspec.yaml version $pubspec_version." >&2
+            echo "Expected tag: v$pubspec_short_version" >&2
+            exit 1
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easytier-pro-*
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: Validate release artifacts
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          required_patterns=(
+            "appcast.xml"
+            "appcast-gitee.xml"
+            "appcast-oss.xml"
+            "appcast-github.xml"
+            "easytier-pro-windows-x64-setup-*.exe"
+            "easytier-pro-windows-x64.zip"
+            "easytier-pro-macos-arm64.dmg"
+            "easytier-pro-macos-arm64.zip"
+            "easytier-pro-macos-x64.dmg"
+            "easytier-pro-macos-x64.zip"
+          )
+
+          for pattern in "${required_patterns[@]}"; do
+            matches=(dist/release-assets/$pattern)
+            if [[ "${#matches[@]}" -ne 1 ]]; then
+              echo "Expected exactly one release artifact matching $pattern, found ${#matches[@]}." >&2
+              find dist/release-assets -maxdepth 1 -type f -print | sort >&2
+              exit 1
+            fi
+          done
+
+          if find dist/release-assets -maxdepth 1 -type f \( -name "*.json" -o -name "*.txt" \) | grep -q .; then
+            echo "Internal appcast metadata files must not be attached to the release." >&2
+            find dist/release-assets -maxdepth 1 -type f \( -name "*.json" -o -name "*.txt" \) -print >&2
+            exit 1
+          fi
+
+          find dist/release-assets -maxdepth 1 -type f -print | sort
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          title="EasyTier Pro $tag"
+          mapfile -t assets < <(find dist/release-assets -maxdepth 1 -type f -print | sort)
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists. Delete the existing draft before rerunning this workflow." >&2
+            exit 1
+          fi
+
+          gh release create "$tag" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --verify-tag \
+            --title "$title" \
+            --generate-notes
