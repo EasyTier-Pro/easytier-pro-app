@@ -92,6 +92,11 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   Set<String> _deletingNetworkIds = const <String>{};
   _DashboardView _activeView = _DashboardView.overview;
   _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
+  double _networkDetailHeaderCollapseOffset = 0;
+  final _networkDetailHeaderCollapse =
+      ValueNotifier<_NetworkDetailHeaderCollapse>(
+        const _NetworkDetailHeaderCollapse(progress: 0, animate: false),
+      );
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
   final TextEditingController _newNetworkNameController = TextEditingController(
@@ -114,6 +119,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   final Map<String, List<_TrafficHistoryPoint>> _networkTrafficHistories =
       <String, List<_TrafficHistoryPoint>>{};
   static const int _maxNetworkTrafficHistoryPoints = 1800;
+  static const double _networkDetailHeaderCollapseDistance = 96;
   Map<String, _NetworkTrafficSnapshot> _networkTraffic =
       const <String, _NetworkTrafficSnapshot>{};
   Map<String, bool> _networkInstanceReady = const <String, bool>{};
@@ -172,6 +178,90 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
 
   List<ManagedDevice> _visibleManagedDevices(Iterable<ManagedDevice> devices) {
     return devices.where((device) => !device.removed).toList(growable: false);
+  }
+
+  double get _networkDetailHeaderCollapseProgress =>
+      (_networkDetailHeaderCollapseOffset /
+              _networkDetailHeaderCollapseDistance)
+          .clamp(0.0, 1.0)
+          .toDouble();
+
+  double _coordinateNetworkDetailScrollDelta(
+    double delta,
+    ScrollMetrics metrics, {
+    AppScrollDeltaSource source = AppScrollDeltaSource.pointerSignal,
+  }) {
+    if (delta == 0) {
+      return 0;
+    }
+
+    var nextOffset = _networkDetailHeaderCollapseOffset;
+    var remainingDelta = delta;
+    final remainingCollapse =
+        _networkDetailHeaderCollapseDistance -
+        _networkDetailHeaderCollapseOffset;
+    final cannotScroll =
+        metrics.maxScrollExtent <= metrics.minScrollExtent + 0.5;
+    if (delta > 0 && remainingCollapse > 0) {
+      final consumed = math.min(delta, remainingCollapse);
+      nextOffset += consumed;
+      remainingDelta -= consumed;
+    } else if (delta < 0 &&
+        _networkDetailHeaderCollapseOffset > 0 &&
+        (cannotScroll || metrics.pixels <= metrics.minScrollExtent + 0.5)) {
+      final consumed = math.min(-delta, _networkDetailHeaderCollapseOffset);
+      nextOffset -= consumed;
+      remainingDelta += consumed;
+    }
+
+    _setNetworkDetailHeaderCollapseOffset(
+      nextOffset,
+      animate: source == AppScrollDeltaSource.pointerSignal,
+    );
+    return remainingDelta;
+  }
+
+  void _setNetworkDetailHeaderCollapseOffset(
+    double offset, {
+    required bool animate,
+  }) {
+    final nextOffset = offset
+        .clamp(0.0, _networkDetailHeaderCollapseDistance)
+        .toDouble();
+    final notifiedOffset =
+        _networkDetailHeaderCollapse.value.progress *
+        _networkDetailHeaderCollapseDistance;
+    if ((_networkDetailHeaderCollapseOffset - nextOffset).abs() < 0.001) {
+      return;
+    }
+    _networkDetailHeaderCollapseOffset = nextOffset;
+    final reachedEdge =
+        nextOffset == 0 || nextOffset == _networkDetailHeaderCollapseDistance;
+    if (!reachedEdge && (notifiedOffset - nextOffset).abs() < 0.5) {
+      return;
+    }
+    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+      progress: _networkDetailHeaderCollapseProgress,
+      animate: animate,
+    );
+  }
+
+  void _resetNetworkDetailScrollOffset({bool animate = false}) {
+    if (_networkDetailHeaderCollapseOffset == 0) {
+      return;
+    }
+    _networkDetailHeaderCollapseOffset = 0;
+    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+      progress: 0,
+      animate: animate,
+    );
+  }
+
+  void _handleNetworkDetailStaticViewportShown() {
+    if (_networkDetailHeaderCollapseOffset == 0) {
+      return;
+    }
+    _resetNetworkDetailScrollOffset();
   }
 
   void _updateState(VoidCallback fn) {
@@ -306,6 +396,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _peerPollTimer?.cancel();
     _newNetworkNameController.dispose();
     _newNetworkIPv4CidrController.dispose();
+    _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     widget.traySupport.setConnectionAction(null);
     super.dispose();
