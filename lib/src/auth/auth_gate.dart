@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:forui/forui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/core_lifecycle_service.dart';
@@ -78,7 +79,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   Future<void> _bootstrap() async {
     _logger.info('auth.gate', 'Bootstrapping auth gate');
-    _setStage(AuthStage.checking, statusMessage: '正在检查本地登录状态...');
+    _setStage(AuthStage.checking, statusMessage: '正在检查本地登录状态…');
 
     try {
       final session = await widget.authService.restoreSession();
@@ -95,7 +96,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   Future<void> _startLogin() async {
     _logger.info('auth.gate', 'Starting interactive login');
-    _setStage(AuthStage.requestingCode, statusMessage: '正在向控制台申请设备登录验证码...');
+    _setStage(AuthStage.requestingCode, statusMessage: '正在向控制台申请设备登录验证码…');
 
     try {
       final info = await widget.authService.startDeviceAuth();
@@ -286,46 +287,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final unauthenticatedBody = Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: switch (_stage) {
-              AuthStage.checking || AuthStage.requestingCode => _LoadingView(
-                key: ValueKey<AuthStage>(_stage),
-                message: _statusMessage ?? '加载中...',
-              ),
-              AuthStage.loginRequired => _LoginRequiredView(
-                key: const ValueKey<String>('login-required'),
-                onLogin: _startLogin,
-              ),
-              AuthStage.waitingForApproval => _DeviceAuthView(
-                key: const ValueKey<String>('device-auth'),
-                deviceAuthInfo: _deviceAuthInfo,
-                statusMessage: _statusMessage,
-                onOpenBrowser: _deviceAuthInfo == null
-                    ? null
-                    : () => _openBrowser(
-                        _deviceAuthInfo!.verificationUriComplete,
-                      ),
-              ),
-              AuthStage.authenticated => const SizedBox.shrink(),
-              AuthStage.error => _ErrorView(
-                key: const ValueKey<String>('auth-error'),
-                message: _statusMessage ?? '登录失败',
-                onRetry: () async {
-                  _setStage(AuthStage.loginRequired);
-                },
-              ),
-            },
-          ),
-        ),
-      ),
-    );
-
     if (_stage == AuthStage.authenticated) {
       return WorkspaceHomeView(
         session: _session!,
@@ -338,9 +299,170 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       );
     }
 
+    final content = _AuthPageShell(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: switch (_stage) {
+          AuthStage.checking || AuthStage.requestingCode => _LoadingView(
+            key: ValueKey<AuthStage>(_stage),
+            message: _statusMessage ?? '加载中…',
+          ),
+          AuthStage.loginRequired => _LoginRequiredView(
+            key: const ValueKey<String>('login-required'),
+            onLogin: _startLogin,
+          ),
+          AuthStage.waitingForApproval => _DeviceAuthView(
+            key: const ValueKey<String>('device-auth'),
+            deviceAuthInfo: _deviceAuthInfo,
+            statusMessage: _statusMessage,
+            onOpenBrowser: _deviceAuthInfo == null
+                ? null
+                : () => _openBrowser(
+                    _deviceAuthInfo!.verificationUriComplete,
+                  ),
+          ),
+          AuthStage.error => _ErrorView(
+            key: const ValueKey<String>('auth-error'),
+            message: _statusMessage ?? '登录失败',
+            onRetry: () async => _setStage(AuthStage.loginRequired),
+          ),
+          AuthStage.authenticated => const SizedBox.shrink(),
+        },
+      ),
+    );
+
     return FScaffold(
       header: const FHeader(title: Text('EasyTier Pro')),
-      child: unauthenticatedBody,
+      child: content,
+    );
+  }
+}
+
+class _AuthPageShell extends StatelessWidget {
+  const _AuthPageShell({required this.child});
+
+  final Widget child;
+
+  static const double _wideBreakpoint = 800;
+  static const double _maxContentWidth = 420;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= _wideBreakpoint;
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Expanded(
+                flex: 5,
+                child: _BrandPanel(),
+              ),
+              Expanded(
+                flex: 5,
+                child: SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _maxContentWidth,
+                            ),
+                            child: child,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const _BrandPanel(compact: true),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: _maxContentWidth,
+                    ),
+                    child: child,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BrandPanel extends StatelessWidget {
+  const _BrandPanel({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final logoSize = compact ? 80.0 : 120.0;
+    final titleStyle = compact
+        ? theme.textTheme.headlineSmall
+        : theme.textTheme.headlineMedium;
+
+    return Semantics(
+      container: true,
+      label: 'EasyTier Pro 品牌区',
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: 32,
+            vertical: compact ? 24 : 48,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/easytier.png',
+                width: logoSize,
+                height: logoSize,
+                semanticLabel: 'EasyTier Pro Logo',
+              ),
+              SizedBox(height: compact ? 16 : 24),
+              Text(
+                'EasyTier Pro',
+                style: titleStyle?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '安全、简单的零信任组网',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -352,18 +474,46 @@ class _LoginRequiredView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return FCard(
-      title: Text('请先登录控制台', style: Theme.of(context).textTheme.headlineSmall),
       child: Padding(
-        padding: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('使用控制台账号授权此设备加入你的零信任网络。'),
-            const SizedBox(height: 20),
+            Text(
+              '登录控制台',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '使用控制台账号授权此设备，即可加入你的零信任网络。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
             FButton(
               onPress: () => unawaited(onLogin()),
-              child: const Text('登录 EasyTier Pro'),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.login, size: 18),
+                  SizedBox(width: 8),
+                  Text('开始登录'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '登录即表示你同意将本设备注册到所选工作区。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
             ),
           ],
         ),
@@ -379,15 +529,21 @@ class _LoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return FCard(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const FCircularProgress(),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
@@ -395,7 +551,7 @@ class _LoadingView extends StatelessWidget {
   }
 }
 
-class _DeviceAuthView extends StatelessWidget {
+class _DeviceAuthView extends StatefulWidget {
   const _DeviceAuthView({
     super.key,
     required this.deviceAuthInfo,
@@ -408,30 +564,155 @@ class _DeviceAuthView extends StatelessWidget {
   final VoidCallback? onOpenBrowser;
 
   @override
+  State<_DeviceAuthView> createState() => _DeviceAuthViewState();
+}
+
+class _DeviceAuthViewState extends State<_DeviceAuthView> {
+  late final DateTime _expiresAt;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _expiresAt = DateTime.now().add(
+      Duration(seconds: widget.deviceAuthInfo?.expiresIn ?? 600),
+    );
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _remainingText {
+    final remaining = _expiresAt.difference(DateTime.now());
+    if (remaining.isNegative) {
+      return '已过期';
+    }
+    final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  bool get _isExpired {
+    return _expiresAt.isBefore(DateTime.now());
+  }
+
+  Future<void> _copyCode(BuildContext context, String code) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!context.mounted) {
+      return;
+    }
+    _showToast(context, '用户代码已复制');
+  }
+
+  Future<void> _copyUrl(BuildContext context, String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) {
+      return;
+    }
+    _showToast(context, '授权链接已复制');
+  }
+
+  void _showToast(BuildContext context, String message) {
+    showRawFToast(
+      context: context,
+      variant: FToastVariant.primary,
+      duration: const Duration(seconds: 2),
+      builder: (context, entry) => FToast(title: Text(message)),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final info = widget.deviceAuthInfo;
+    final status = widget.statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。';
+
     return FCard(
-      title: Text(
-        '请完成设备授权登录',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
       child: Padding(
-        padding: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(statusMessage ?? '请在浏览器中完成授权，授权完成后会自动返回应用。'),
-            if (deviceAuthInfo != null) ...[
+            Row(
+              children: [
+                Icon(
+                  Icons.browser_updated_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '请在浏览器中完成授权',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              status,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            if (info != null) ...[
+              const SizedBox(height: 24),
+              _AuthCodeBlock(
+                label: '用户代码',
+                value: info.userCode,
+                onCopy: (value) => unawaited(_copyCode(context, value)),
+              ),
               const SizedBox(height: 16),
-              _AuthValueRow(label: '用户代码', value: deviceAuthInfo!.userCode),
-              const SizedBox(height: 8),
-              _AuthValueRow(
+              _AuthCodeBlock(
                 label: '授权链接',
-                value: deviceAuthInfo!.verificationUriComplete,
+                value: info.verificationUriComplete,
+                onCopy: (value) => unawaited(_copyUrl(context, value)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 16,
+                    color: _isExpired
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isExpired ? '授权码已过期' : '授权码有效期：$_remainingText',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _isExpired
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 24),
-            FButton(onPress: onOpenBrowser, child: const Text('重新打开浏览器')),
+            FButton(
+              onPress: widget.onOpenBrowser,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.open_in_new, size: 18),
+                  SizedBox(width: 8),
+                  Text('打开授权页面'),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -439,20 +720,70 @@ class _DeviceAuthView extends StatelessWidget {
   }
 }
 
-class _AuthValueRow extends StatelessWidget {
-  const _AuthValueRow({required this.label, required this.value});
+class _AuthCodeBlock extends StatelessWidget {
+  const _AuthCodeBlock({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
 
   final String label;
   final String value;
+  final ValueChanged<String> onCopy;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      '$label：$value',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: const Color(0xFF334155),
-        fontFamily: 'monospace',
-      ),
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontFamily: 'monospace',
+                    fontFamilyFallback: const <String>[
+                      'Noto Sans SC',
+                      'PingFang SC',
+                      'Microsoft YaHei',
+                    ],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FTooltip(
+                tipBuilder: (context, controller) => Text('复制$label'),
+                child: FButton(
+                  variant: FButtonVariant.ghost,
+                  onPress: () => onCopy(value),
+                  child: const Icon(Icons.copy, size: 18),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -465,19 +796,56 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return FCard(
-      title: Text('登录失败', style: Theme.of(context).textTheme.headlineSmall),
       child: Padding(
-        padding: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
+            Row(
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: theme.colorScheme.error,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '登录失败',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
-            FButton(
-              onPress: () => unawaited(onRetry()),
-              child: const Text('重新尝试登录'),
+            Row(
+              children: [
+                FButton(
+                  onPress: () => unawaited(onRetry()),
+                  child: const Text('重新尝试登录'),
+                ),
+              ],
             ),
           ],
         ),
