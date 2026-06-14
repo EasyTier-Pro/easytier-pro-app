@@ -24,13 +24,10 @@
 - 运行 Windows 桌面端：`flutter run -d windows`
 
 ## Flutter 桌面端无障碍与语义树
-- 如果桌面端反复输出 `accessibility_bridge.cc`、`Failed to update ui::AXTree` 或 `Nodes left pending by the update`，优先按 Flutter Engine accessibility/semantics 树更新问题排查，不要当作 Dart 层业务异常处理。
-- 优先定位日志出现时正在 rebuild、滚动或动画刷新的 Widget，重点检查 `ListView`、`GridView`、`ReorderableListView`、`AnimatedList`、树形控件、菜单、动态表单、`Overlay`、`Tooltip`、`SelectableText`、`TextField`、自定义 `RenderObject` 和图表刷新区域。
-- 动态列表、网格或可重排区域的 item 必须使用业务稳定 ID 作为 key，例如 `ValueKey(item.id)`；不要使用 `UniqueKey()`、`DateTime.now()`、随机数 key；发生插入、删除、重排的列表也不要只使用 `ValueKey(index)`。
-- 对频繁变化且不需要逐节点无障碍读取的复杂展示区域，可以局部使用 `ExcludeSemantics(child: ...)` 验证并降低语义树抖动，例如装饰性图表、过渡动画或非交互状态装饰。
-- 对需要保留无障碍能力的复杂区域，优先使用 `Semantics(container: true, label: ..., child: ...)` 建立稳定语义边界，避免滚动、切换或动画时语义节点被频繁插入、删除、重排。
+- Windows 桌面端已在 `lib/main.dart` 中对应用子树使用 `ExcludeSemantics`，以避免 Flutter/ForUI 的动态 `Tooltip`、`OverlayPortal`、滚动区域和动画语义树反复触发 Windows `accessibility_bridge.cc` / `Failed to update ui::AXTree` 日志。
+- 该策略会牺牲 Windows 屏幕阅读器语义支持，但可以从源头避免向 Windows AXTree 提交复杂动态 semantics update；不要再为这类日志做局部猜测式修复，例如反复调整列表 key、局部包裹 `Semantics` 或过滤日志。
+- 如果未来明确要恢复 Windows 无障碍能力，必须先撤销全局 `ExcludeSemantics`，再基于可复现步骤系统验证 `Tooltip`、`FTooltip`、`FPopoverMenu`、`OverlayPortal`、`ListView`、`GridView`、`AnimatedSwitcher`、图表和动态表单的语义树稳定性。
 - 这类 native/engine 层日志通常无法通过 `FlutterError.onError` 或 `runZonedGuarded` 捕获，不要优先用 Dart 异常处理兜底。
-- 升级 Flutter stable 后，执行 `flutter clean && flutter pub get` 重新验证；如果只是本地开发日志噪音，可临时在 IDE、logcat 或 CI 日志采集侧过滤 `accessibility_bridge.cc` 或 `Failed to update ui::AXTree`，但最终仍应定位触发 UI。
 
 ## 约定
 - 优先做最小且聚焦的改动，并保持与现有 Flutter 项目结构一致。

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:forui/forui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/auth/auth_gate.dart';
@@ -146,10 +147,18 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'EasyTier Pro',
       scrollBehavior: const AppScrollBehavior(),
-      builder: (context, child) => FTheme(
-        data: _foruiThemeData,
-        child: FToaster(child: child ?? const SizedBox.shrink()),
-      ),
+      builder: (context, child) {
+        final app = FTheme(
+          data: _foruiThemeData,
+          child: FToaster(child: child ?? const SizedBox.shrink()),
+        );
+
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+          return ExcludeSemantics(child: app);
+        }
+
+        return app;
+      },
       onGenerateRoute: _onGenerateRoute,
       theme: ThemeData(
         colorScheme: colorScheme,
