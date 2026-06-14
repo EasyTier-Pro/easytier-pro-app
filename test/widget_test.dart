@@ -3245,6 +3245,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '诊断日志');
 
       expect(find.byIcon(Icons.download_outlined), findsOneWidget);
       expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
@@ -3290,6 +3291,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '窗口行为');
 
       expect(
         find.byKey(const ValueKey<String>('settings-window-behavior-card')),
@@ -3363,17 +3365,20 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '账号');
 
-      final titleRect = tester.getRect(
-        find.byKey(const ValueKey<String>('settings-section-title')),
+      final accountSectionRect = tester.getRect(
+        find.byWidgetPredicate(
+          (widget) => widget is FCard && widget.child is FItemGroup,
+        ),
       );
-      final accountCardRect = tester.getRect(
-        find.byKey(const ValueKey<String>('settings-account-card')),
-      );
-      expect(accountCardRect.top - titleRect.bottom, lessThanOrEqualTo(14));
+      final titleRect = tester.getRect(find.text('账号'));
+      expect(accountSectionRect.top - titleRect.bottom, lessThanOrEqualTo(14));
 
       final horizontalScrolls = find.descendant(
-        of: find.byKey(const ValueKey<String>('settings-account-card')),
+        of: find.byWidgetPredicate(
+          (widget) => widget is FCard && widget.child is FItemGroup,
+        ),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is SingleChildScrollView &&
@@ -3671,6 +3676,7 @@ void main() {
     await tester.pump();
 
     await _openSettingsFromUserMenu(tester);
+    await _tapSettingsCategory(tester, '连接引擎');
 
     expect(
       find.byWidgetPredicate((widget) {
@@ -3678,7 +3684,10 @@ void main() {
       }),
       findsOneWidget,
     );
-    expect(find.byIcon(Icons.copy), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('settings-core-error-copy')),
+      findsOneWidget,
+    );
 
     String? clipboardText;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -3694,7 +3703,9 @@ void main() {
           .setMockMethodCallHandler(SystemChannels.platform, null);
     });
 
-    await tester.tap(find.byIcon(Icons.copy));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('settings-core-error-copy')),
+    );
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(clipboardText, errorText);
@@ -5046,6 +5057,11 @@ Future<void> _openSettingsFromUserMenu(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey<String>('user-menu-settings')));
   await _pumpAppMotionFrames(tester);
+}
+
+Future<void> _tapSettingsCategory(WidgetTester tester, String title) async {
+  await tester.tap(find.text(title));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _openNetworkDeleteDialog(WidgetTester tester) async {
