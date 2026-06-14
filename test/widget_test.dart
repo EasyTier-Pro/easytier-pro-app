@@ -2553,13 +2553,14 @@ void main() {
     await tester.pumpAndSettle();
 
     await _openSettingsFromUserMenu(tester);
+    await _tapSettingsCategory(tester, '应用信息');
     await tester.pump();
 
     expect(
       find.byKey(const ValueKey<String>('settings-app-card')),
       findsOneWidget,
     );
-    expect(find.text('应用信息'), findsOneWidget);
+    expect(find.text('应用信息'), findsAtLeastNWidgets(1));
     expect(find.text('v1.0.0 (build 1)'), findsOneWidget);
     expect(find.text('检查更新'), findsOneWidget);
   });
@@ -2586,6 +2587,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _openSettingsFromUserMenu(tester);
+    await _tapSettingsCategory(tester, '应用信息');
     await tester.tap(find.text('检查更新'));
     await tester.pump(const Duration(milliseconds: 100));
 
