@@ -323,7 +323,10 @@ class _SettingsPanel extends StatelessWidget {
                               const SizedBox(height: 10),
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF8F9FB),
                                   borderRadius: BorderRadius.circular(8),
@@ -332,45 +335,44 @@ class _SettingsPanel extends StatelessWidget {
                                   ),
                                 ),
                                 child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Expanded(
-                                      child: SelectableTextHitBoundary(
-                                        child: SelectableText(
-                                          status.lastError!,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall?.copyWith(
-                                            color:
-                                                status.phase ==
-                                                        CoreRunPhase
-                                                            .needsElevation ||
-                                                    needsVpnPermission
-                                                ? const Color(0xFFB45309)
-                                                : const Color(0xFFDC2626),
-                                          ),
+                                      child: Text(
+                                        status.lastError!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall?.copyWith(
+                                          color:
+                                              status.phase ==
+                                                      CoreRunPhase
+                                                          .needsElevation ||
+                                                  needsVpnPermission
+                                              ? const Color(0xFFB45309)
+                                              : const Color(0xFFDC2626),
                                         ),
                                       ),
                                     ),
-                                    _ControlSelectionBoundary(
-                                      child: FTooltip(
-                                        tipBuilder:
-                                            (context, controller) =>
-                                                const Text('复制错误'),
-                                        child: FButton(
-                                          variant: .ghost,
-                                          size: .sm,
-                                          onPress: () => unawaited(
-                                            _copyText(
-                                              context,
-                                              status.lastError!,
-                                            ),
+                                    FTooltip(
+                                      tipBuilder:
+                                          (context, controller) =>
+                                              const Text('复制错误'),
+                                      child: FButton(
+                                        variant: .ghost,
+                                        size: .xs,
+                                        style: const .delta(
+                                          contentStyle: .delta(
+                                            padding: .value(EdgeInsets.zero),
                                           ),
-                                          child: const Icon(
-                                            Icons.copy,
-                                            size: 18,
-                                          ),
+                                        ),
+                                        onPress: () => unawaited(
+                                          _copyText(context, status.lastError!),
+                                        ),
+                                        child: const Icon(
+                                          Icons.copy,
+                                          size: 14,
                                         ),
                                       ),
                                     ),

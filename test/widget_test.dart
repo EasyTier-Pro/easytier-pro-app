@@ -3641,7 +3641,7 @@ void main() {
     );
   });
 
-  testWidgets('settings exposes selectable and copyable runtime errors', (
+  testWidgets('settings exposes runtime errors with inline copy action', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester);
@@ -3674,7 +3674,7 @@ void main() {
 
     expect(
       find.byWidgetPredicate((widget) {
-        return widget is SelectableText && widget.data == errorText;
+        return widget is Text && widget.data == errorText;
       }),
       findsOneWidget,
     );
