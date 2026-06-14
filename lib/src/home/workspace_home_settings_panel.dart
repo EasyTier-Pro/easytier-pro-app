@@ -923,7 +923,6 @@ class _CoreSettingsSection extends StatelessWidget {
 
 class _WindowBehaviorSettingsSection extends StatelessWidget {
   const _WindowBehaviorSettingsSection({
-    super.key,
     required this.windowBehaviorPreferences,
   });
 
@@ -997,77 +996,86 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return FTileGroup(
+      divider: .full,
       children: [
-        FCard.raw(
-          child: Column(
-            children: [
-              _DiagnosticsActionTile(
-                icon: Icons.description_outlined,
-                title: '查看日志',
-                subtitle: '在弹窗中查看最近的应用日志',
-                onTap: onShowLogsDialog,
-              ),
-              const Divider(height: 1, color: Color(0xFFE5E7EB)),
-              _DiagnosticsActionTile(
-                icon: Icons.download_outlined,
-                title: '导出诊断日志',
-                subtitle: '将日志打包为文件以便分享',
-                onTap: onExportLogs,
-              ),
-              if (canOpenLogDirectory) ...[
-                const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                _DiagnosticsActionTile(
-                  icon: Icons.folder_open_outlined,
-                  title: '打开日志目录',
-                  subtitle: '在文件管理器中查看日志文件夹',
-                  onTap: onOpenLogDirectory,
-                ),
-              ],
-            ],
+        FTile(
+          prefix: const Icon(
+            Icons.description_outlined,
+            size: 22,
+            color: Color(0xFF3C3C43),
           ),
+          title: Text(
+            '查看日志',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            '在弹窗中查看最近的应用日志',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF737373),
+            ),
+          ),
+          suffix: const Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: Color(0xFF9CA3AF),
+          ),
+          onPress: onShowLogsDialog,
         ),
+        FTile(
+          prefix: const Icon(
+            Icons.download_outlined,
+            size: 22,
+            color: Color(0xFF3C3C43),
+          ),
+          title: Text(
+            '导出诊断日志',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            '将日志打包为文件以便分享',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF737373),
+            ),
+          ),
+          suffix: const Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: Color(0xFF9CA3AF),
+          ),
+          onPress: onExportLogs,
+        ),
+        if (canOpenLogDirectory)
+          FTile(
+            prefix: const Icon(
+              Icons.folder_open_outlined,
+              size: 22,
+              color: Color(0xFF3C3C43),
+            ),
+            title: Text(
+              '打开日志目录',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              '在文件管理器中查看日志文件夹',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF737373),
+              ),
+            ),
+            suffix: const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: Color(0xFF9CA3AF),
+            ),
+            onPress: onOpenLogDirectory,
+          ),
       ],
-    );
-  }
-}
-
-class _DiagnosticsActionTile extends StatelessWidget {
-  const _DiagnosticsActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return FTile(
-      prefix: Icon(icon, size: 22, color: const Color(0xFF3C3C43)),
-      title: Text(
-        title,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: const Color(0xFF737373),
-        ),
-      ),
-      suffix: const Icon(
-        Icons.chevron_right,
-        size: 20,
-        color: Color(0xFF9CA3AF),
-      ),
-      onPress: onTap,
     );
   }
 }
