@@ -14,6 +14,7 @@ typedef AppClientEnvironmentLoader = Future<AppClientEnvironment> Function();
 typedef AppClientClock = DateTime Function();
 
 const Duration _defaultReportInterval = Duration(hours: 24);
+const Duration _defaultRequestTimeout = Duration(seconds: 10);
 const String _installationIdKey = 'app_client_installation_id';
 final RegExp _uuidPattern = RegExp(
   r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
@@ -27,6 +28,7 @@ class AppClientReporter {
     AppClientEnvironmentLoader? environmentLoader,
     AppClientClock? now,
     Duration reportInterval = _defaultReportInterval,
+    Duration requestTimeout = _defaultRequestTimeout,
   }) {
     return AppClientReporter._(
       preferences: preferences,
@@ -35,6 +37,7 @@ class AppClientReporter {
       environmentLoader: environmentLoader ?? AppClientEnvironment.load,
       now: now ?? DateTime.now,
       reportInterval: reportInterval,
+      requestTimeout: requestTimeout,
     );
   }
 
@@ -45,6 +48,7 @@ class AppClientReporter {
     required this._environmentLoader,
     required this._now,
     required this._reportInterval,
+    required this._requestTimeout,
   });
 
   final SharedPreferences _preferences;
@@ -53,6 +57,7 @@ class AppClientReporter {
   final AppClientEnvironmentLoader _environmentLoader;
   final AppClientClock _now;
   final Duration _reportInterval;
+  final Duration _requestTimeout;
   final AppLogger _logger = AppLogger.instance;
   final Map<String, Future<void>> _workspaceReports = {};
 
@@ -121,17 +126,19 @@ class AppClientReporter {
       return;
     }
 
-    final response = await _httpClient.put(
-      _reportUri(
-        workspaceId: workspaceId,
-        installationId: report.installationId,
-      ),
-      headers: {
-        'Authorization': 'Bearer ${session.tokenSet.accessToken}',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(report.toJson()),
-    );
+    final response = await _httpClient
+        .put(
+          _reportUri(
+            workspaceId: workspaceId,
+            installationId: report.installationId,
+          ),
+          headers: {
+            'Authorization': 'Bearer ${session.tokenSet.accessToken}',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(report.toJson()),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('console returned ${response.statusCode}');
     }

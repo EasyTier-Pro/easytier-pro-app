@@ -183,6 +183,49 @@ void main() {
       'email:bob@example.com',
     );
   });
+
+  test(
+    'continues queued reports after a telemetry request times out',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'app_client_installation_id': '88888888-8888-4888-8888-888888888888',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final requests = <http.Request>[];
+      var shouldHang = true;
+      final reporter = AppClientReporter(
+        preferences: preferences,
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) {
+          requests.add(request);
+          if (shouldHang) {
+            shouldHang = false;
+            return Completer<http.Response>().future;
+          }
+          return Future.value(http.Response('{}', 200));
+        }),
+        environmentLoader: _testEnvironment,
+        now: () => DateTime.utc(2026, 6, 14, 1),
+        requestTimeout: const Duration(milliseconds: 1),
+      );
+
+      final aliceReport = reporter.reportSessionEstablished(
+        _session('tenant-1', email: 'alice@example.com'),
+      );
+      await _waitForRequests(requests, 1);
+
+      final bobReport = reporter.reportSessionEstablished(
+        _session('tenant-1', email: 'bob@example.com'),
+      );
+
+      await Future.wait([aliceReport, bobReport]);
+      expect(requests, hasLength(2));
+      expect(
+        preferences.getString('app_client_report_principal_tenant-1'),
+        'email:bob@example.com',
+      );
+    },
+  );
 }
 
 Future<void> _waitForRequests(List<http.Request> requests, int count) async {
