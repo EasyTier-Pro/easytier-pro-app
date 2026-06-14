@@ -2605,6 +2605,44 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('settings update action recovers from thrown errors', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final updateResult = Completer<AppUpdateCheckResult>();
+    final appUpdateService = _FakeAppUpdateService(updateResult.future);
+    final authService = _FakeAuthService();
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+        appUpdateService: appUpdateService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openSettingsFromUserMenu(tester);
+    await _tapSettingsCategory(tester, '应用信息');
+    await tester.tap(find.text('检查更新'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(appUpdateService.checkCount, 1);
+    expect(find.text('正在检查...'), findsOneWidget);
+
+    updateResult.completeError(Exception('boom'), StackTrace.current);
+    await tester.pump();
+
+    expect(find.text('检查更新'), findsOneWidget);
+    expect(find.text('检查更新失败，请稍后重试'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'mobile settings account card stays compact and does not scroll sideways',
     (WidgetTester tester) async {

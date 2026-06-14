@@ -162,19 +162,33 @@ class _SettingsPanelState extends State<_SettingsPanel> {
     setState(() {
       _checkingForUpdates = true;
     });
-    final result = await widget.appUpdateService.checkForUpdates();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _checkingForUpdates = false;
-    });
-    if (!context.mounted) {
-      return;
-    }
+    try {
+      final result = await widget.appUpdateService.checkForUpdates();
+      if (!mounted || !context.mounted) {
+        return;
+      }
 
-    final (:message, :destructive) = _updateCheckFeedback(result.status);
-    _showToast(context, message, destructive: destructive);
+      final (:message, :destructive) = _updateCheckFeedback(result.status);
+      _showToast(context, message, destructive: destructive);
+    } catch (error, stack) {
+      AppLogger.instance.error(
+        'settings',
+        'Update check failed',
+        context: {'error': error.toString(), 'stack': stack.toString()},
+      );
+      if (mounted && context.mounted) {
+        final (:message, :destructive) = _updateCheckFeedback(
+          AppUpdateCheckStatus.failed,
+        );
+        _showToast(context, message, destructive: destructive);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingForUpdates = false;
+        });
+      }
+    }
   }
 
   ({String message, bool destructive}) _updateCheckFeedback(
