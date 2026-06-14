@@ -109,9 +109,13 @@ class _NetworkDetailSectionTabLabel extends StatelessWidget {
 }
 
 class _NetworkDetailScrollViewport extends StatefulWidget {
-  const _NetworkDetailScrollViewport({required this.child});
+  const _NetworkDetailScrollViewport({
+    required this.child,
+    this.scrollDeltaCoordinator,
+  });
 
   final Widget child;
+  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
 
   @override
   State<_NetworkDetailScrollViewport> createState() =>
@@ -136,8 +140,52 @@ class _NetworkDetailScrollViewportState
       child: AppSmoothScrollView(
         controller: _scrollController,
         primary: false,
+        scrollDeltaCoordinator: widget.scrollDeltaCoordinator,
         child: widget.child,
       ),
     );
+  }
+}
+
+class _NetworkDetailStaticViewport extends StatefulWidget {
+  const _NetworkDetailStaticViewport({required this.child, this.onShown});
+
+  final Widget child;
+  final VoidCallback? onShown;
+
+  @override
+  State<_NetworkDetailStaticViewport> createState() =>
+      _NetworkDetailStaticViewportState();
+}
+
+class _NetworkDetailStaticViewportState
+    extends State<_NetworkDetailStaticViewport> {
+  @override
+  void initState() {
+    super.initState();
+    _scheduleReset();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NetworkDetailStaticViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onShown != widget.onShown ||
+        oldWidget.child.key != widget.child.key) {
+      _scheduleReset();
+    }
+  }
+
+  void _scheduleReset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      widget.onShown?.call();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
