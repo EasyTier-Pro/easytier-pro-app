@@ -8,10 +8,12 @@ import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import '../desktop/app_update_service.dart';
 import '../desktop/tray_support.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
@@ -47,6 +49,7 @@ class WorkspaceHomeView extends StatefulWidget {
     required this.authService,
     required this.coreLifecycleService,
     required this.traySupport,
+    required this.appUpdateService,
     required this.session,
     required this.onLogout,
     this.androidMvpSingleActiveNetworkOverride,
@@ -55,6 +58,7 @@ class WorkspaceHomeView extends StatefulWidget {
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
   final TraySupport traySupport;
+  final AppUpdateService appUpdateService;
   final AuthSession session;
   final Future<void> Function() onLogout;
   final bool? androidMvpSingleActiveNetworkOverride;

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/core_lifecycle_service.dart';
+import '../desktop/app_update_service.dart';
 import '../desktop/tray_support.dart';
 import '../logging/app_logger.dart';
 import '../home/workspace_home_view.dart';
@@ -26,12 +27,14 @@ class AuthGate extends StatefulWidget {
     required this.authService,
     required this.coreLifecycleService,
     required this.traySupport,
+    required this.appUpdateService,
     this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
   final CoreLifecycleService coreLifecycleService;
   final TraySupport traySupport;
+  final AppUpdateService appUpdateService;
   final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
@@ -332,6 +335,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
+        appUpdateService: widget.appUpdateService,
         onLogout: _logout,
         androidMvpSingleActiveNetworkOverride:
             widget.androidMvpSingleActiveNetworkOverride,

@@ -1,17 +1,27 @@
 part of 'workspace_home_view.dart';
 
-class _SettingsPanel extends StatelessWidget {
+class _SettingsPanel extends StatefulWidget {
   const _SettingsPanel({
     required this.user,
     required this.workspaceName,
     required this.onLogout,
     required this.coreLifecycleService,
+    required this.appUpdateService,
   });
 
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
+  final AppUpdateService appUpdateService;
+
+  @override
+  State<_SettingsPanel> createState() => _SettingsPanelState();
+}
+
+class _SettingsPanelState extends State<_SettingsPanel> {
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
+  bool _checkingForUpdates = false;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
@@ -99,6 +109,102 @@ class _SettingsPanel extends StatelessWidget {
         _showToast(context, '打开日志目录失败', destructive: true);
       }
     }
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    if (_checkingForUpdates) {
+      return;
+    }
+    setState(() {
+      _checkingForUpdates = true;
+    });
+    final result = await widget.appUpdateService.checkForUpdates();
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    setState(() {
+      _checkingForUpdates = false;
+    });
+
+    final (:message, :destructive) = _updateCheckFeedback(result.status);
+    _showToast(context, message, destructive: destructive);
+  }
+
+  String _appDisplayName(PackageInfo? info) {
+    final appName = info?.appName.trim();
+    if (appName != null && appName.isNotEmpty) {
+      return appName;
+    }
+    return 'EasyTier Pro';
+  }
+
+  String _appVersionText(AsyncSnapshot<PackageInfo> snapshot) {
+    if (snapshot.hasError) {
+      return '版本信息不可用';
+    }
+    final info = snapshot.data;
+    if (info == null) {
+      return '正在读取版本...';
+    }
+
+    final version = info.version.trim();
+    final buildNumber = info.buildNumber.trim();
+    if (version.isEmpty && buildNumber.isEmpty) {
+      return '版本信息不可用';
+    }
+    if (version.isEmpty) {
+      return 'build $buildNumber';
+    }
+
+    final displayVersion = version.startsWith('v') ? version : 'v$version';
+    if (buildNumber.isEmpty || buildNumber == version) {
+      return displayVersion;
+    }
+    return '$displayVersion (build $buildNumber)';
+  }
+
+  String _platformLabel() {
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Android',
+      TargetPlatform.iOS => 'iOS',
+      TargetPlatform.linux => 'Linux',
+      TargetPlatform.macOS => 'macOS',
+      TargetPlatform.windows => 'Windows',
+      TargetPlatform.fuchsia => 'Fuchsia',
+    };
+    return '平台：$platform';
+  }
+
+  String _updateSupportHint() {
+    if (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows) {
+      return '通过已配置的更新源检查桌面客户端版本。';
+    }
+    return '当前平台暂不支持应用内更新检查。';
+  }
+
+  ({String message, bool destructive}) _updateCheckFeedback(
+    AppUpdateCheckStatus status,
+  ) {
+    return switch (status) {
+      AppUpdateCheckStatus.started => (message: '已开始检查更新', destructive: false),
+      AppUpdateCheckStatus.unsupportedPlatform => (
+        message: '当前平台暂不支持应用内更新检查',
+        destructive: false,
+      ),
+      AppUpdateCheckStatus.noFeedConfigured => (
+        message: '暂未配置更新检查服务',
+        destructive: false,
+      ),
+      AppUpdateCheckStatus.noReachableFeed => (
+        message: '无法连接更新源，请稍后重试',
+        destructive: true,
+      ),
+      AppUpdateCheckStatus.failed => (
+        message: '检查更新失败，请稍后重试',
+        destructive: true,
+      ),
+    };
   }
 
   Future<void> _showLogsDialog(BuildContext context) async {
@@ -219,7 +325,7 @@ class _SettingsPanel extends StatelessWidget {
               crossAxisCount: wide ? 2 : 1,
               mainAxisSpacing: compact ? 12 : 20,
               crossAxisSpacing: compact ? 12 : 20,
-              itemCount: 3,
+              itemCount: 4,
               itemBuilder: (context, index) {
                 return switch (index) {
                   0 => FCard(
@@ -235,17 +341,17 @@ class _SettingsPanel extends StatelessWidget {
                             _SettingsAccountItem(
                               prefix: const Icon(Icons.person_outline),
                               label: '用户',
-                              primary: user.effectiveName.isEmpty
+                              primary: widget.user.effectiveName.isEmpty
                                   ? '用户'
-                                  : user.effectiveName,
-                              secondary: user.email.isEmpty
+                                  : widget.user.effectiveName,
+                              secondary: widget.user.email.isEmpty
                                   ? '未提供邮箱'
-                                  : user.email,
+                                  : widget.user.email,
                             ),
                             _SettingsAccountItem(
                               prefix: const Icon(Icons.apartment_outlined),
                               label: '工作区',
-                              primary: workspaceName,
+                              primary: widget.workspaceName,
                             ),
                           ],
                         ),
@@ -257,7 +363,7 @@ class _SettingsPanel extends StatelessWidget {
                             children: [
                               FButton(
                                 variant: .outline,
-                                onPress: () => unawaited(onLogout()),
+                                onPress: () => unawaited(widget.onLogout()),
                                 child: const Text('退出登录'),
                               ),
                             ],
@@ -270,7 +376,7 @@ class _SettingsPanel extends StatelessWidget {
                     key: const ValueKey<String>('settings-core-card'),
                     title: const Text('连接引擎'),
                     child: ValueListenableBuilder<CoreRunStatus>(
-                      valueListenable: coreLifecycleService.status,
+                      valueListenable: widget.coreLifecycleService.status,
                       builder: (context, status, _) {
                         final running = status.phase == CoreRunPhase.running;
                         final needsVpnPermission =
@@ -371,7 +477,7 @@ class _SettingsPanel extends StatelessWidget {
                                     FButton(
                                       variant: .primary,
                                       onPress: () => unawaited(
-                                        coreLifecycleService
+                                        widget.coreLifecycleService
                                             .repairWithElevation(),
                                       ),
                                       child: const Text('以管理员身份运行'),
@@ -379,11 +485,76 @@ class _SettingsPanel extends StatelessWidget {
                                   FButton(
                                     variant: .outline,
                                     onPress: () => unawaited(
-                                      coreLifecycleService.repair(),
+                                      widget.coreLifecycleService.repair(),
                                     ),
                                     child: const Text('重试/修复'),
                                   ),
                                 ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  2 => FCard(
+                    key: const ValueKey<String>('settings-app-card'),
+                    title: const Text('应用信息'),
+                    child: FutureBuilder<PackageInfo>(
+                      future: _packageInfo,
+                      builder: (context, snapshot) {
+                        final info = snapshot.data;
+                        return Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            FItemGroup(
+                              divider: .full,
+                              physics: const NeverScrollableScrollPhysics(),
+                              children: [
+                                _SettingsAccountItem(
+                                  prefix: const Icon(Icons.apps_outlined),
+                                  label: '应用',
+                                  primary: _appDisplayName(info),
+                                ),
+                                _SettingsAccountItem(
+                                  prefix: const Icon(Icons.info_outline),
+                                  label: '版本',
+                                  primary: _appVersionText(snapshot),
+                                  secondary: _platformLabel(),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _updateSupportHint(),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFF737373)),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _ControlSelectionBoundary(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FButton(
+                                  variant: .outline,
+                                  onPress: _checkingForUpdates
+                                      ? null
+                                      : () => unawaited(
+                                          _checkForUpdates(context),
+                                        ),
+                                  child: _checkingForUpdates
+                                      ? const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FCircularProgress(size: .xs),
+                                            SizedBox(width: 8),
+                                            Text('正在检查...'),
+                                          ],
+                                        )
+                                      : const Text('检查更新'),
+                                ),
                               ),
                             ),
                           ],

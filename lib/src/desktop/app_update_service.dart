@@ -25,32 +25,15 @@ class AppUpdateService {
   final http.Client? httpClient;
 
   Future<void> initialize() async {
-    if (!Platform.isMacOS && !Platform.isWindows) {
+    final platform = _supportedPlatformName;
+    if (platform == null) {
       return;
     }
 
-    final platform = Platform.isMacOS ? 'macOS' : 'Windows';
-    final feedUrls = _configuredAppcastFeedUrls;
-    if (feedUrls.isEmpty) {
-      AppLogger.instance.info(
-        'app.update',
-        '$platform app updater disabled because no appcast feed URLs are configured',
-      );
-      return;
-    }
-
-    final client = httpClient ?? http.Client();
     try {
-      final feedUrl = await _selectReachableFeedUrl(
-        client: client,
-        feedUrls: feedUrls,
-      );
-      if (feedUrl == null) {
-        AppLogger.instance.warn(
-          'app.update',
-          '$platform app updater disabled because no appcast feed was reachable',
-          context: {'feed_urls': feedUrls},
-        );
+      final preparation = await _prepareUpdater();
+      if (!preparation.ready) {
+        _logPreparationFailure(platform, preparation);
         return;
       }
 
@@ -59,12 +42,11 @@ class AppUpdateService {
         'app.update',
         'Initializing $platform app updater',
         context: {
-          'feed_url': feedUrl,
+          'feed_url': preparation.feedUrl,
           'interval_seconds': interval,
           'platform': platform,
         },
       );
-      await autoUpdater.setFeedURL(feedUrl);
       await autoUpdater.setScheduledCheckInterval(interval);
       await autoUpdater.checkForUpdates(inBackground: true);
     } catch (error, stack) {
@@ -73,10 +55,41 @@ class AppUpdateService {
         error.toString(),
         context: {'stack': stack.toString()},
       );
-    } finally {
-      if (httpClient == null) {
-        client.close();
+    }
+  }
+
+  Future<AppUpdateCheckResult> checkForUpdates() async {
+    final platform = _supportedPlatformName;
+    if (platform == null) {
+      return const AppUpdateCheckResult(
+        AppUpdateCheckStatus.unsupportedPlatform,
+      );
+    }
+
+    try {
+      final preparation = await _prepareUpdater();
+      if (!preparation.ready) {
+        _logPreparationFailure(platform, preparation);
+        return AppUpdateCheckResult(preparation.status);
       }
+
+      AppLogger.instance.info(
+        'app.update',
+        'Manually checking $platform app updates',
+        context: {'feed_url': preparation.feedUrl, 'platform': platform},
+      );
+      await autoUpdater.checkForUpdates(inBackground: false);
+      return AppUpdateCheckResult(
+        AppUpdateCheckStatus.started,
+        feedUrl: preparation.feedUrl,
+      );
+    } catch (error, stack) {
+      AppLogger.instance.error(
+        'app.update',
+        'Manual update check failed',
+        context: {'error': error.toString(), 'stack': stack.toString()},
+      );
+      return AppUpdateCheckResult(AppUpdateCheckStatus.failed, error: error);
     }
   }
 
@@ -96,6 +109,73 @@ class AppUpdateService {
       return AppcastFeedResolver.parseFeedUrls(override);
     }
     return _defaultAppcastFeedUrls;
+  }
+
+  String? get _supportedPlatformName {
+    if (Platform.isMacOS) {
+      return 'macOS';
+    }
+    if (Platform.isWindows) {
+      return 'Windows';
+    }
+    return null;
+  }
+
+  Future<_AppUpdatePreparation> _prepareUpdater() async {
+    final feedUrls = _configuredAppcastFeedUrls;
+    if (feedUrls.isEmpty) {
+      return const _AppUpdatePreparation(
+        status: AppUpdateCheckStatus.noFeedConfigured,
+      );
+    }
+
+    final client = httpClient ?? http.Client();
+    try {
+      final feedUrl = await _selectReachableFeedUrl(
+        client: client,
+        feedUrls: feedUrls,
+      );
+      if (feedUrl == null) {
+        return const _AppUpdatePreparation(
+          status: AppUpdateCheckStatus.noReachableFeed,
+        );
+      }
+
+      await autoUpdater.setFeedURL(feedUrl);
+      return _AppUpdatePreparation(
+        status: AppUpdateCheckStatus.started,
+        feedUrl: feedUrl,
+      );
+    } finally {
+      if (httpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  void _logPreparationFailure(
+    String platform,
+    _AppUpdatePreparation preparation,
+  ) {
+    switch (preparation.status) {
+      case AppUpdateCheckStatus.noFeedConfigured:
+        AppLogger.instance.info(
+          'app.update',
+          '$platform app updater disabled because no appcast feed URLs are configured',
+        );
+        break;
+      case AppUpdateCheckStatus.noReachableFeed:
+        AppLogger.instance.warn(
+          'app.update',
+          '$platform app updater disabled because no appcast feed was reachable',
+          context: {'feed_urls': _configuredAppcastFeedUrls},
+        );
+        break;
+      case AppUpdateCheckStatus.started:
+      case AppUpdateCheckStatus.unsupportedPlatform:
+      case AppUpdateCheckStatus.failed:
+        break;
+    }
   }
 
   Future<String?> _selectReachableFeedUrl({
@@ -119,6 +199,32 @@ class AppUpdateService {
     }
     return null;
   }
+}
+
+enum AppUpdateCheckStatus {
+  started,
+  unsupportedPlatform,
+  noFeedConfigured,
+  noReachableFeed,
+  failed,
+}
+
+class AppUpdateCheckResult {
+  const AppUpdateCheckResult(this.status, {this.feedUrl, this.error});
+
+  final AppUpdateCheckStatus status;
+  final String? feedUrl;
+  final Object? error;
+}
+
+class _AppUpdatePreparation {
+  const _AppUpdatePreparation({required this.status, this.feedUrl});
+
+  final AppUpdateCheckStatus status;
+  final String? feedUrl;
+
+  bool get ready =>
+      status == AppUpdateCheckStatus.started && feedUrl?.isNotEmpty == true;
 }
 
 class AppcastFeedResolver {

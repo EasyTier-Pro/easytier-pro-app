@@ -10,6 +10,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -21,6 +22,16 @@ import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'EasyTier Pro',
+      packageName: 'net.easytier.pro',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
+
   testWidgets('android login waits until app resumes before polling token', (
     WidgetTester tester,
   ) async {
@@ -3250,6 +3261,36 @@ void main() {
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  testWidgets('settings shows app version and update action', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openSettingsFromUserMenu(tester);
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('settings-app-card')),
+      findsOneWidget,
+    );
+    expect(find.text('应用信息'), findsOneWidget);
+    expect(find.text('v1.0.0 (build 1)'), findsOneWidget);
+    expect(find.text('检查更新'), findsOneWidget);
   });
 
   testWidgets(

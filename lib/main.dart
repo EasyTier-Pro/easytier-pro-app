@@ -67,6 +67,7 @@ Future<void> main() async {
       authService: authService,
       traySupport: traySupport,
       coreLifecycleService: coreLifecycleService,
+      appUpdateService: appUpdateService,
     ),
   );
 }
@@ -77,12 +78,14 @@ class MyApp extends StatefulWidget {
     required this.authService,
     required this.traySupport,
     required this.coreLifecycleService,
+    this.appUpdateService = const AppUpdateService(),
     this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
   final TraySupport traySupport;
   final CoreLifecycleService coreLifecycleService;
+  final AppUpdateService appUpdateService;
   final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
@@ -152,6 +155,7 @@ class _MyAppState extends State<MyApp> {
         authService: widget.authService,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
+        appUpdateService: widget.appUpdateService,
         androidMvpSingleActiveNetworkOverride:
             widget.androidMvpSingleActiveNetworkOverride,
       ),
