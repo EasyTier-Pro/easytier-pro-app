@@ -1,5 +1,6 @@
 import 'tray_support.dart';
 import '../core/core_lifecycle_service.dart';
+import 'window_behavior_preferences.dart';
 
 class _NoopTraySupport implements TraySupport {
   @override
@@ -21,4 +22,6 @@ class _NoopTraySupport implements TraySupport {
   void setConnectionAction(TrayConnectionAction? action) {}
 }
 
-TraySupport createPlatformTraySupport() => _NoopTraySupport();
+TraySupport createPlatformTraySupport({
+  required WindowBehaviorPreferences windowBehaviorPreferences,
+}) => _NoopTraySupport();

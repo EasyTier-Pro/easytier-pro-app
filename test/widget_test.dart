@@ -20,6 +20,7 @@ import 'package:easytier_pro_app/src/core/core_peer_status.dart';
 import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/app_update_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
+import 'package:easytier_pro_app/src/desktop/window_behavior_preferences.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
@@ -104,7 +105,7 @@ void main() {
 
       expect(flutterErrors, isEmpty);
       expect(navigator.canPop(), isFalse);
-      expect(find.byType(FButton), findsOneWidget);
+      expect(find.text('开始登录'), findsOneWidget);
     } finally {
       FlutterError.onError = previousOnError;
     }
@@ -1061,734 +1062,6 @@ void main() {
     expect(nodeTop - scrollTop, lessThan(8));
   });
 
-  testWidgets('network detail device list scrolls when content overflows', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(24, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: index.isEven,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-        os: index.isEven ? 'windows' : 'linux',
-        osDistribution: index.isEven ? 'Windows 11' : 'Ubuntu',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-      ],
-      managedDevices: <ManagedDevice>[
-        for (var index = 0; index < networkDevices.length; index++)
-          ManagedDevice(
-            id: 'device-${index + 1}',
-            machineId: 'machine-${index + 1}',
-            hostname: 'desktop-${index + 1}',
-            approvalState: 'approved',
-            connectivityState: index.isEven ? 'online' : 'offline',
-          ),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'local-machine',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, '办公网');
-
-    final scrollView = tester.widget<SingleChildScrollView>(
-      find.byKey(const ValueKey<String>('network-node-list-scroll')),
-    );
-    final controller = scrollView.controller!;
-    expect(controller.position.maxScrollExtent, greaterThan(0));
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final scrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-    final mouse = TestPointer(1, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(scrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-    expect(controller.offset, controller.position.minScrollExtent);
-    final headerRect = tester.getRect(headerFinder);
-    final joinButtonRect = tester.getRect(
-      find
-          .ancestor(of: find.text('加入网络'), matching: find.byType(FButton))
-          .first,
-    );
-    expect(joinButtonRect.bottom, lessThanOrEqualTo(headerRect.bottom - 3));
-
-    final beforeWheelOffset = controller.offset;
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(controller.offset, greaterThan(beforeWheelOffset));
-
-    controller.jumpTo(controller.position.minScrollExtent);
-    await tester.pump();
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(scrollFinder)),
-    );
-    final beforePrecisionOffset = controller.offset;
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 8)));
-    await tester.pump();
-
-    expect(controller.offset, greaterThan(beforePrecisionOffset + 8));
-
-    controller.jumpTo(80);
-    await tester.pump();
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(scrollFinder)),
-    );
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -240)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(controller.offset, controller.position.minScrollExtent);
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(expandedHeaderHeight, 0.1),
-    );
-
-    controller.jumpTo(controller.position.maxScrollExtent);
-    await tester.pump();
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(scrollFinder)),
-    );
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 240)));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(controller.offset, controller.position.maxScrollExtent);
-  });
-
-  testWidgets(
-    'network detail expands when collapsed content stops overflowing',
-    (WidgetTester tester) async {
-      _useDesktopViewport(tester, size: const Size(1600, 700));
-
-      final networkDevices = List<NetworkDevice>.generate(5, (index) {
-        final number = index + 1;
-        return NetworkDevice(
-          id: 'node-$number',
-          name: 'desktop-$number',
-          online: true,
-          ipv4: '10.144.0.${number + 1}',
-          deviceId: 'device-$number',
-          machineId: 'machine-$number',
-        );
-      });
-      final authService = _FakeAuthService(
-        networks: const <ConsoleNetwork>[
-          ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-        ],
-        networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-      );
-
-      await tester.pumpWidget(
-        MyApp(
-          authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
-            authService: authService,
-            machineId: 'machine-1',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await _selectNetworkFromHeader(tester, '办公网');
-
-      final headerFinder = find.byKey(
-        const ValueKey<String>('network-detail-header'),
-      );
-      final expandedHeaderHeight = tester.getSize(headerFinder).height;
-      final scrollFinder = find.byKey(
-        const ValueKey<String>('network-node-list-scroll'),
-      );
-      final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
-      final controller = scrollView.controller!;
-      expect(controller.position.maxScrollExtent, greaterThan(0));
-
-      final mouse = TestPointer(4, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(
-        mouse.hover(tester.getCenter(scrollFinder)),
-      );
-      await tester.pump();
-      await tester.sendEventToBinding(mouse.scroll(const Offset(0, 64)));
-      await tester.pump();
-      await _pumpAppMotionFrames(tester);
-
-      expect(
-        tester.getSize(headerFinder).height,
-        lessThan(expandedHeaderHeight),
-      );
-      expect(
-        controller.position.maxScrollExtent,
-        lessThanOrEqualTo(controller.position.minScrollExtent),
-      );
-      final partiallyCollapsedHeaderHeight = tester
-          .getSize(headerFinder)
-          .height;
-
-      final collapseGesture = await tester.startGesture(
-        tester.getCenter(scrollFinder),
-        kind: PointerDeviceKind.touch,
-      );
-      await collapseGesture.moveBy(const Offset(0, -120));
-      await tester.pump();
-      await collapseGesture.up();
-      await tester.pump();
-
-      expect(
-        tester.getSize(headerFinder).height,
-        lessThan(partiallyCollapsedHeaderHeight),
-      );
-
-      final gesture = await tester.startGesture(
-        tester.getCenter(scrollFinder),
-        kind: PointerDeviceKind.touch,
-      );
-      await gesture.moveBy(const Offset(0, 120));
-      await tester.pump();
-      await gesture.up();
-      await tester.pump();
-
-      expect(
-        tester.getSize(headerFinder).height,
-        closeTo(expandedHeaderHeight, 0.1),
-      );
-    },
-  );
-
-  testWidgets('network detail collapses when dragging past list bottom', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(18, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, '办公网');
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final scrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-    final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
-    final controller = scrollView.controller!;
-    controller.jumpTo(controller.position.maxScrollExtent);
-    await tester.pump();
-
-    final gesture = await tester.startGesture(
-      tester.getCenter(scrollFinder),
-      kind: PointerDeviceKind.touch,
-    );
-    await gesture.moveBy(const Offset(0, -120));
-    await tester.pump();
-    await gesture.up();
-    await tester.pump();
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-  });
-
-  testWidgets(
-    'network detail collapses at list bottom for touch move without buttons',
-    (WidgetTester tester) async {
-      _useDesktopViewport(tester, size: const Size(1600, 700));
-
-      final networkDevices = List<NetworkDevice>.generate(18, (index) {
-        final number = index + 1;
-        return NetworkDevice(
-          id: 'node-$number',
-          name: 'desktop-$number',
-          online: true,
-          ipv4: '10.144.0.${number + 1}',
-          deviceId: 'device-$number',
-          machineId: 'machine-$number',
-        );
-      });
-      final authService = _FakeAuthService(
-        networks: const <ConsoleNetwork>[
-          ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
-        ],
-        networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-      );
-
-      await tester.pumpWidget(
-        MyApp(
-          authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
-            authService: authService,
-            machineId: 'machine-1',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await _selectNetworkFromHeader(tester, 'office-net');
-
-      final headerFinder = find.byKey(
-        const ValueKey<String>('network-detail-header'),
-      );
-      final expandedHeaderHeight = tester.getSize(headerFinder).height;
-      final scrollFinder = find.byKey(
-        const ValueKey<String>('network-node-list-scroll'),
-      );
-      final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
-      final controller = scrollView.controller!;
-      controller.jumpTo(controller.position.maxScrollExtent);
-      await tester.pump();
-
-      const pointer = 31;
-      final start = tester.getCenter(scrollFinder);
-      final end = start + const Offset(0, -120);
-      await tester.sendEventToBinding(
-        PointerDownEvent(
-          pointer: pointer,
-          kind: PointerDeviceKind.touch,
-          position: start,
-          buttons: 0,
-        ),
-      );
-      await tester.pump();
-      await tester.sendEventToBinding(
-        PointerMoveEvent(
-          pointer: pointer,
-          kind: PointerDeviceKind.touch,
-          position: end,
-          delta: const Offset(0, -120),
-          buttons: 0,
-        ),
-      );
-      await tester.pump();
-      await tester.sendEventToBinding(
-        PointerUpEvent(
-          pointer: pointer,
-          kind: PointerDeviceKind.touch,
-          position: end,
-          buttons: 0,
-        ),
-      );
-      await tester.pump();
-
-      expect(
-        tester.getSize(headerFinder).height,
-        lessThan(expandedHeaderHeight),
-      );
-    },
-  );
-
-  testWidgets('network detail keeps drag enabled when node list fits', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(2, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, 'office-net');
-
-    final scrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-    final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
-    expect(
-      scrollView.controller!.position.maxScrollExtent,
-      lessThanOrEqualTo(scrollView.controller!.position.minScrollExtent),
-    );
-    expect(scrollView.physics, isA<AlwaysScrollableScrollPhysics>());
-  });
-
-  testWidgets('network detail accumulates tiny drag deltas at list bottom', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(18, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, 'office-net');
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final scrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-    final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
-    final controller = scrollView.controller!;
-    controller.jumpTo(controller.position.maxScrollExtent);
-    await tester.pump();
-
-    final gesture = await tester.startGesture(
-      tester.getCenter(scrollFinder),
-      kind: PointerDeviceKind.touch,
-    );
-    for (var i = 0; i < 80; i += 1) {
-      await gesture.moveBy(const Offset(0, -0.25));
-      await tester.pump();
-    }
-    await gesture.up();
-    await tester.pump();
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-  });
-
-  testWidgets('network detail keeps collapsed header when switching tabs', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(18, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final subnetRoutes = NetworkSubnetRouteList(
-      routes: List<NetworkSubnetRoute>.generate(18, (index) {
-        final number = index + 1;
-        return NetworkSubnetRoute(
-          id: 'route-$number',
-          cidr: '192.168.$number.0/24',
-          mappedCidr: '10.$number.0.0/24',
-        );
-      }),
-      allowedProxyCidrs: const <String>[],
-      quotaLimit: 20,
-      quotaUsed: 18,
-    );
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-      subnetRoutes: <String, NetworkSubnetRouteList>{'net-1': subnetRoutes},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, 'office-net');
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final nodeScrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-
-    final mouse = TestPointer(5, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(nodeScrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    final collapsedHeaderHeight = tester.getSize(headerFinder).height;
-    expect(collapsedHeaderHeight, lessThan(expandedHeaderHeight));
-
-    final subnetTab = find.descendant(
-      of: find.byKey(const ValueKey<String>('network-detail-section-tabs')),
-      matching: find.byIcon(Icons.alt_route_outlined),
-    );
-    await tester.tap(subnetTab);
-    await _pumpAppMotionFrames(tester);
-
-    expect(
-      find.byKey(const ValueKey<String>('network-detail-section-subnets')),
-      findsOneWidget,
-    );
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(collapsedHeaderHeight, 0.1),
-    );
-  });
-
-  testWidgets('network detail subnets collapse header while scrolling', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final subnetRoutes = NetworkSubnetRouteList(
-      routes: List<NetworkSubnetRoute>.generate(18, (index) {
-        final number = index + 1;
-        return NetworkSubnetRoute(
-          id: 'route-$number',
-          cidr: '192.168.$number.0/24',
-          mappedCidr: '10.$number.0.0/24',
-        );
-      }),
-      allowedProxyCidrs: const <String>[],
-      quotaLimit: 20,
-      quotaUsed: 18,
-    );
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-      ],
-      subnetRoutes: <String, NetworkSubnetRouteList>{'net-1': subnetRoutes},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, '办公网');
-    await tester.tap(find.text('子网 18'));
-    await _pumpAppMotionFrames(tester);
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final subnetScrollFinder = find.descendant(
-      of: find.byKey(const ValueKey<String>('network-detail-section-subnets')),
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is SingleChildScrollView &&
-            widget.scrollDirection == Axis.vertical,
-      ),
-    );
-    expect(subnetScrollFinder, findsOneWidget);
-
-    final scrollView = tester.widget<SingleChildScrollView>(subnetScrollFinder);
-    final controller = scrollView.controller!;
-    expect(controller.position.maxScrollExtent, greaterThan(0));
-
-    final mouse = TestPointer(2, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(subnetScrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-    expect(controller.offset, controller.position.minScrollExtent);
-
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(controller.offset, greaterThan(controller.position.minScrollExtent));
-  });
-
-  testWidgets('network detail resets collapsed header for empty node lists', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(18, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-        ConsoleNetwork(id: 'net-2', name: '空网络', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{
-        'net-1': networkDevices,
-        'net-2': const <NetworkDevice>[],
-      },
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-1',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, '办公网');
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final scrollView = tester.widget<SingleChildScrollView>(
-      find.byKey(const ValueKey<String>('network-node-list-scroll')),
-    );
-    final controller = scrollView.controller!;
-    expect(controller.position.maxScrollExtent, greaterThan(0));
-
-    final scrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-    final mouse = TestPointer(3, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(scrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(tester.getSize(headerFinder).height, lessThan(expandedHeaderHeight));
-    expect(controller.offset, controller.position.minScrollExtent);
-
-    await _selectNetworkFromHeader(tester, '空网络');
-
-    expect(
-      find.byKey(const ValueKey<String>('network-node-list-empty')),
-      findsOneWidget,
-    );
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(expandedHeaderHeight, 0.1),
-    );
-  });
 
   testWidgets('network detail stacks safely in narrow windows', (
     WidgetTester tester,
@@ -2456,7 +1729,7 @@ void main() {
     await tester.tap(find.text('子网 0'));
     await _pumpAppMotionFrames(tester);
 
-    expect(find.textContaining('还没有配置子网路由'), findsOneWidget);
+    expect(find.textContaining('暂无子网路由'), findsOneWidget);
   });
 
   testWidgets('network detail subnet segment retries failed route load', (
@@ -2599,7 +1872,13 @@ void main() {
     await tester.tap(find.text('本机已加入'));
     await _pumpAppMotionFrames(tester);
 
-    expect(find.text('10.144.0.2'), findsOneWidget);
+    final localSectionFinder = find.byKey(
+      const ValueKey<String>('network-detail-section-local'),
+    );
+    expect(
+      find.descendant(of: localSectionFinder, matching: find.text('10.144.0.2')),
+      findsOneWidget,
+    );
     expect(find.text('desktop-1'), findsWidgets);
     expect(find.text('本机覆盖'), findsOneWidget);
     expect(find.text('已应用'), findsOneWidget);
@@ -2657,111 +1936,9 @@ void main() {
     await tester.tap(find.text('本机'));
     await _pumpAppMotionFrames(tester);
 
-    expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
+    expect(find.textContaining('本机尚未加入网络'), findsOneWidget);
   });
 
-  testWidgets('network detail keeps collapsed header for missing local node', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(1600, 700));
-
-    final networkDevices = List<NetworkDevice>.generate(18, (index) {
-      final number = index + 1;
-      return NetworkDevice(
-        id: 'node-$number',
-        name: 'desktop-$number',
-        online: true,
-        ipv4: '10.144.0.${number + 1}',
-        deviceId: 'device-$number',
-        machineId: 'machine-$number',
-      );
-    });
-    final authService = _FakeAuthService(
-      networks: const <ConsoleNetwork>[
-        ConsoleNetwork(id: 'net-1', name: 'office-net', regions: ['ap-east']),
-      ],
-      networkDevices: <String, List<NetworkDevice>>{'net-1': networkDevices},
-    );
-
-    await tester.pumpWidget(
-      MyApp(
-        authService: authService,
-        traySupport: createTraySupport(),
-        coreLifecycleService: _NoopCoreLifecycleService(
-          authService: authService,
-          machineId: 'machine-other',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _selectNetworkFromHeader(tester, 'office-net');
-
-    final headerFinder = find.byKey(
-      const ValueKey<String>('network-detail-header'),
-    );
-    final expandedHeaderHeight = tester.getSize(headerFinder).height;
-    final nodeScrollFinder = find.byKey(
-      const ValueKey<String>('network-node-list-scroll'),
-    );
-
-    final mouse = TestPointer(6, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(nodeScrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    final collapsedHeaderHeight = tester.getSize(headerFinder).height;
-    expect(collapsedHeaderHeight, lessThan(expandedHeaderHeight));
-
-    await tester.tap(find.text('本机'));
-    await _pumpAppMotionFrames(tester);
-
-    expect(find.textContaining('本机尚未加入此网络'), findsOneWidget);
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(collapsedHeaderHeight, 0.1),
-    );
-
-    final localScrollFinder = find.descendant(
-      of: find.byKey(const ValueKey<String>('network-detail-section-local')),
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is SingleChildScrollView &&
-            widget.scrollDirection == Axis.vertical,
-      ),
-    );
-    expect(localScrollFinder, findsOneWidget);
-
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(localScrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(
-      tester.getSize(headerFinder).height,
-      greaterThan(collapsedHeaderHeight),
-    );
-
-    await tester.sendEventToBinding(
-      mouse.hover(tester.getCenter(localScrollFinder)),
-    );
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 96)));
-    await tester.pump();
-    await _pumpAppMotionFrames(tester);
-
-    expect(
-      tester.getSize(headerFinder).height,
-      closeTo(collapsedHeaderHeight, 0.1),
-    );
-  });
 
   testWidgets('refresh nodes reloads console nodes and peer status', (
     WidgetTester tester,
@@ -3256,9 +2433,102 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '诊断日志');
 
-      expect(find.text('导出诊断日志'), findsOneWidget);
-      expect(find.text('打开日志目录'), findsNothing);
+      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test('window behavior preferences default minimize to taskbar', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+
+    expect(windowBehaviorPreferences.minimizeToTray, isFalse);
+
+    await windowBehaviorPreferences.setMinimizeToTray(true);
+    final reloaded = WindowBehaviorPreferences(preferences);
+
+    expect(reloaded.minimizeToTray, isTrue);
+  });
+
+  testWidgets('desktop settings toggles minimize to tray preference', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+          windowBehaviorPreferences: windowBehaviorPreferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '窗口行为');
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-window-behavior-card')),
+        findsOneWidget,
+      );
+      expect(find.text('最小化窗口时隐藏到托盘'), findsOneWidget);
+      expect(windowBehaviorPreferences.minimizeToTray, isFalse);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey<String>('settings-window-behavior-card'),
+          ),
+          matching: find.byType(FSwitch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(windowBehaviorPreferences.minimizeToTray, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('android settings hides desktop window behavior', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final authService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSettingsFromUserMenu(tester);
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-window-behavior-card')),
+        findsNothing,
+      );
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -3352,17 +2622,20 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '账号');
 
-      final titleRect = tester.getRect(
-        find.byKey(const ValueKey<String>('settings-section-title')),
+      final accountSectionRect = tester.getRect(
+        find.byWidgetPredicate(
+          (widget) => widget is FCard && widget.child is FItemGroup,
+        ),
       );
-      final accountCardRect = tester.getRect(
-        find.byKey(const ValueKey<String>('settings-account-card')),
-      );
-      expect(accountCardRect.top - titleRect.bottom, lessThanOrEqualTo(14));
+      final titleRect = tester.getRect(find.text('账号'));
+      expect(accountSectionRect.top - titleRect.bottom, lessThanOrEqualTo(14));
 
       final horizontalScrolls = find.descendant(
-        of: find.byKey(const ValueKey<String>('settings-account-card')),
+        of: find.byWidgetPredicate(
+          (widget) => widget is FCard && widget.child is FItemGroup,
+        ),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is SingleChildScrollView &&
@@ -3630,7 +2903,7 @@ void main() {
     );
   });
 
-  testWidgets('settings exposes selectable and copyable runtime errors', (
+  testWidgets('settings exposes runtime errors with inline copy action', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester);
@@ -3660,14 +2933,18 @@ void main() {
     await tester.pump();
 
     await _openSettingsFromUserMenu(tester);
+    await _tapSettingsCategory(tester, '连接引擎');
 
     expect(
       find.byWidgetPredicate((widget) {
-        return widget is SelectableText && widget.data == errorText;
+        return widget is Text && widget.data == errorText;
       }),
       findsOneWidget,
     );
-    expect(find.text('复制错误'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('settings-core-error-copy')),
+      findsOneWidget,
+    );
 
     String? clipboardText;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -3683,7 +2960,9 @@ void main() {
           .setMockMethodCallHandler(SystemChannels.platform, null);
     });
 
-    await tester.tap(find.text('复制错误'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('settings-core-error-copy')),
+    );
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(clipboardText, errorText);
@@ -5035,6 +4314,11 @@ Future<void> _openSettingsFromUserMenu(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey<String>('user-menu-settings')));
   await _pumpAppMotionFrames(tester);
+}
+
+Future<void> _tapSettingsCategory(WidgetTester tester, String title) async {
+  await tester.tap(find.text(title));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _openNetworkDeleteDialog(WidgetTester tester) async {

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:forui/forui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/auth/auth_gate.dart';
@@ -10,6 +11,7 @@ import 'src/auth/console_auth_service.dart';
 import 'src/core/core_lifecycle_service.dart';
 import 'src/desktop/app_update_service.dart';
 import 'src/desktop/tray_support.dart';
+import 'src/desktop/window_behavior_preferences.dart';
 import 'src/logging/app_logger.dart';
 import 'src/shared/app_motion.dart';
 import 'src/telemetry/app_client_reporter.dart';
@@ -61,7 +63,10 @@ Future<void> main() async {
     appClientReporter: appClientReporter,
   );
   final appUpdateService = AppUpdateService();
-  final traySupport = createTraySupport();
+  final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+  final traySupport = createTraySupport(
+    windowBehaviorPreferences: windowBehaviorPreferences,
+  );
 
   await traySupport.initialize();
   unawaited(appUpdateService.initialize());
@@ -73,6 +78,7 @@ Future<void> main() async {
       traySupport: traySupport,
       coreLifecycleService: coreLifecycleService,
       appUpdateService: appUpdateService,
+      windowBehaviorPreferences: windowBehaviorPreferences,
     ),
   );
 }
@@ -84,6 +90,7 @@ class MyApp extends StatefulWidget {
     required this.traySupport,
     required this.coreLifecycleService,
     AppUpdateService? appUpdateService,
+    this.windowBehaviorPreferences,
     this.androidMvpSingleActiveNetworkOverride,
   }) : appUpdateService = appUpdateService ?? AppUpdateService();
 
@@ -91,6 +98,7 @@ class MyApp extends StatefulWidget {
   final TraySupport traySupport;
   final CoreLifecycleService coreLifecycleService;
   final AppUpdateService appUpdateService;
+  final WindowBehaviorPreferences? windowBehaviorPreferences;
   final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
@@ -98,9 +106,13 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  late final WindowBehaviorPreferences _windowBehaviorPreferences;
+
   @override
   void initState() {
     super.initState();
+    _windowBehaviorPreferences =
+        widget.windowBehaviorPreferences ?? WindowBehaviorPreferences.memory();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
     unawaited(
       widget.traySupport.updateCoreStatus(
@@ -143,10 +155,18 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'EasyTier Pro',
       scrollBehavior: const AppScrollBehavior(),
-      builder: (context, child) => FTheme(
-        data: _foruiThemeData,
-        child: FToaster(child: child ?? const SizedBox.shrink()),
-      ),
+      builder: (context, child) {
+        final app = FTheme(
+          data: _foruiThemeData,
+          child: FToaster(child: child ?? const SizedBox.shrink()),
+        );
+
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+          return ExcludeSemantics(child: app);
+        }
+
+        return app;
+      },
       onGenerateRoute: _onGenerateRoute,
       theme: ThemeData(
         colorScheme: colorScheme,
@@ -161,6 +181,7 @@ class _MyAppState extends State<MyApp> {
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
         appUpdateService: widget.appUpdateService,
+        windowBehaviorPreferences: _windowBehaviorPreferences,
         androidMvpSingleActiveNetworkOverride:
             widget.androidMvpSingleActiveNetworkOverride,
       ),

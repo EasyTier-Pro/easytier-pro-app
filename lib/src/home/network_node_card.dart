@@ -21,7 +21,7 @@ class _NodeCardState extends State<_NodeCard> {
     final peer = widget.peer;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: AnimatedSize(
         duration: appMotionMedium,
         curve: appMotionCurve,
@@ -42,11 +42,11 @@ class _NodeCardState extends State<_NodeCard> {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -69,9 +69,9 @@ class _NodeCardState extends State<_NodeCard> {
                           child: SelectableTextHitBoundary(
                             child: Text(
                               widget.node.displayLabel,
-                              style: Theme.of(context).textTheme.titleMedium
+                              style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                     color: const Color(0xFF0F172A),
                                   ),
                               overflow: TextOverflow.ellipsis,
@@ -80,19 +80,30 @@ class _NodeCardState extends State<_NodeCard> {
                         ),
                       ),
                       const SizedBox(width: 12),
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: isOnline
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFD1D5DB),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       Text(
                         isOnline ? '在线' : '离线',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: isOnline
                               ? const Color(0xFF16A34A)
                               : const Color(0xFF9CA3AF),
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 2),
                       Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
-                        size: 18,
+                        size: 16,
                         color: const Color(0xFF94A3B8),
                       ),
                     ],

@@ -720,7 +720,7 @@ class _StatusBadge extends StatelessWidget {
         final title = error
             ? '引擎异常'
             : needsElevation
-            ? '需要管理员权限'
+            ? '需要安装连接引擎'
             : needsVpnPermission
             ? '需要 VPN 授权'
             : checking
@@ -740,7 +740,7 @@ class _StatusBadge extends StatelessWidget {
         } else if (needsElevation) {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!
-              : '创建虚拟网卡需要管理员权限';
+              : 'EasyTier 需要管理员权限来安装连接引擎并创建虚拟网卡';
         } else if (needsVpnPermission) {
           subtitle = status.lastError?.isNotEmpty == true
               ? status.lastError!

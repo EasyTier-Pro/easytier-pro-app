@@ -34,7 +34,7 @@ class _NetworkDetailSectionSelector extends StatelessWidget {
                     onChange: (index) =>
                         onChanged(_NetworkDetailSection.values[index]),
                   ),
-                  style: const FTabsStyleDelta.delta(height: 32, spacing: 0),
+                  style: const FTabsStyleDelta.delta(height: 28, spacing: 0),
                   contentPhysics: const NeverScrollableScrollPhysics(),
                   scrollable: true,
                   children: [
@@ -93,24 +93,25 @@ class _NetworkDetailSectionTabLabel extends StatelessWidget {
       children: [
         Icon(
           icon,
-          size: 14,
+          size: 12,
           color: selected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
         ),
-        const SizedBox(width: 5),
-        Text(label),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
 }
 
 class _NetworkDetailScrollViewport extends StatefulWidget {
-  const _NetworkDetailScrollViewport({
-    required this.child,
-    this.scrollDeltaCoordinator,
-  });
+  const _NetworkDetailScrollViewport({required this.child});
 
   final Widget child;
-  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
 
   @override
   State<_NetworkDetailScrollViewport> createState() =>
@@ -135,52 +136,8 @@ class _NetworkDetailScrollViewportState
       child: AppSmoothScrollView(
         controller: _scrollController,
         primary: false,
-        scrollDeltaCoordinator: widget.scrollDeltaCoordinator,
         child: widget.child,
       ),
     );
-  }
-}
-
-class _NetworkDetailStaticViewport extends StatefulWidget {
-  const _NetworkDetailStaticViewport({required this.child, this.onShown});
-
-  final Widget child;
-  final VoidCallback? onShown;
-
-  @override
-  State<_NetworkDetailStaticViewport> createState() =>
-      _NetworkDetailStaticViewportState();
-}
-
-class _NetworkDetailStaticViewportState
-    extends State<_NetworkDetailStaticViewport> {
-  @override
-  void initState() {
-    super.initState();
-    _scheduleReset();
-  }
-
-  @override
-  void didUpdateWidget(covariant _NetworkDetailStaticViewport oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.onShown != widget.onShown ||
-        oldWidget.child.key != widget.child.key) {
-      _scheduleReset();
-    }
-  }
-
-  void _scheduleReset() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      widget.onShown?.call();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

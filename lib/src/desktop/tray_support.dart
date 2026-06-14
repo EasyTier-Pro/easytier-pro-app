@@ -2,6 +2,7 @@ import 'tray_support_stub.dart'
     if (dart.library.io) 'tray_support_desktop.dart';
 
 import '../core/core_lifecycle_service.dart';
+import 'window_behavior_preferences.dart';
 
 class TrayConnectionAction {
   const TrayConnectionAction({
@@ -31,4 +32,9 @@ abstract class TraySupport {
   void setConnectionAction(TrayConnectionAction? action);
 }
 
-TraySupport createTraySupport() => createPlatformTraySupport();
+TraySupport createTraySupport({
+  WindowBehaviorPreferences? windowBehaviorPreferences,
+}) => createPlatformTraySupport(
+  windowBehaviorPreferences:
+      windowBehaviorPreferences ?? WindowBehaviorPreferences.memory(),
+);

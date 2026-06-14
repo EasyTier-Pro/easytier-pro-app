@@ -7,56 +7,48 @@ class _NetworkSubnetRouteViewport extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRetry,
-    this.scrollDeltaCoordinator,
-    this.onStaticContentShown,
   });
 
   final NetworkSubnetRouteList? routes;
   final bool loading;
   final String? error;
   final VoidCallback onRetry;
-  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
-  final VoidCallback? onStaticContentShown;
 
   @override
   Widget build(BuildContext context) {
     if (loading && routes == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: const Center(child: FCircularProgress()),
-      );
+      return const Center(child: FCircularProgress());
     }
     if (error != null && routes == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: _StateMessage(
-          message: error!,
-          action: FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: onRetry,
-            child: const Text('重试'),
-          ),
+      return _StateMessage(
+        message: error!,
+        action: FButton(
+          variant: .outline,
+          size: .sm,
+          onPress: onRetry,
+          child: const Text('重试'),
         ),
       );
     }
 
     final routeList = routes;
     if (routeList == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: const _StateMessage(message: '正在读取子网路由...'),
-      );
+      return const _StateMessage(message: '正在读取子网路由...');
     }
 
-    return _NetworkDetailScrollViewport(
-      scrollDeltaCoordinator: scrollDeltaCoordinator,
-      child: _NetworkSubnetRoutePanel(
-        routes: routeList,
-        loading: loading,
-        error: error,
-        onRetry: onRetry,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return _NetworkDetailScrollViewport(
+          child: _NetworkSubnetRoutePanel(
+            routes: routeList,
+            loading: loading,
+            error: error,
+            onRetry: onRetry,
+            minHeight:
+                constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+          ),
+        );
+      },
     );
   }
 }
@@ -67,15 +59,54 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRetry,
+    this.minHeight = 0,
   });
 
   final NetworkSubnetRouteList routes;
   final bool loading;
   final String? error;
   final VoidCallback onRetry;
+  final double minHeight;
 
   @override
   Widget build(BuildContext context) {
+    if (routes.routes.isEmpty) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: minHeight),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: FCircularProgress(size: .sm),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (error != null) ...[
+              _NetworkDetailNotice(message: error!),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FButton(
+                  variant: .outline,
+                  size: .sm,
+                  onPress: onRetry,
+                  child: const Text('重试'),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            const NetworkDetailEmptyState(message: '暂无子网路由'),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -103,24 +134,11 @@ class _NetworkSubnetRoutePanel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        if (routes.routes.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            child: Center(
-              child: Text(
-                '还没有配置子网路由',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF94A3B8),
-                ),
-              ),
-            ),
-          )
-        else
-          for (final route in routes.routes)
-            _NetworkSubnetRouteCard(
-              key: ValueKey<String>('network-subnet-route-${route.id}'),
-              route: route,
-            ),
+        for (final route in routes.routes)
+          _NetworkSubnetRouteCard(
+            key: ValueKey<String>('network-subnet-route-${route.id}'),
+            route: route,
+          ),
       ],
     );
   }
