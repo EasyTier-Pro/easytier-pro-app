@@ -6,8 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../auth/console_auth_service.dart';
-import 'core_peer_status.dart';
 import '../logging/app_logger.dart';
+import '../telemetry/app_client_reporter.dart';
+import 'core_peer_status.dart';
 
 part 'core_lifecycle_models.dart';
 part 'core_platform_runtime.dart';
@@ -18,6 +19,7 @@ class CoreLifecycleService {
   CoreLifecycleService({
     required this.authService,
     CorePlatformRuntime? runtime,
+    this.appClientReporter,
   }) : status = ValueNotifier<CoreRunStatus>(CoreRunStatus.signedOut) {
     _runtime = runtime ?? CorePlatformRuntime.current(this);
     _runtimeEvents = _runtime.events.listen(_handleRuntimeEvent);
@@ -26,6 +28,7 @@ class CoreLifecycleService {
   final AuthService authService;
   final ValueNotifier<CoreRunStatus> status;
   final AppLogger _logger = AppLogger.instance;
+  final AppClientReporter? appClientReporter;
 
   late final CorePlatformRuntime _runtime;
   late final StreamSubscription<CoreRuntimeEvent> _runtimeEvents;
@@ -57,6 +60,7 @@ class CoreLifecycleService {
           'next_workspace': nextWorkspace,
         },
       );
+      _reportSessionEstablished(session);
       if (workspaceChanged) {
         status.value = const CoreRunStatus(
           phase: CoreRunPhase.repairing,
@@ -269,6 +273,7 @@ class CoreLifecycleService {
                   machineId: machineId,
                   details: 'EasyTier ${bootstrap.version}',
                 );
+                _reportMachineReady(session, machineId);
                 return;
               }
             }
@@ -567,6 +572,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
             },
           );
           status.value = runtimeStatus.toStatus();
+          _reportMachineReady(session, machineId);
           return;
         }
       }
@@ -597,6 +603,9 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
         },
       );
       status.value = result.toStatus();
+      if (result.phase == CoreRunPhase.running) {
+        _reportMachineReady(session, result.machineId);
+      }
     } catch (error) {
       _logger.error(
         'core',
@@ -668,6 +677,22 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return message.contains('登录态已失效') ||
         message.contains('请重新登录') ||
         message.toLowerCase().contains('unauthorized');
+  }
+
+  void _reportSessionEstablished(AuthSession session) {
+    final reporter = appClientReporter;
+    if (reporter == null) {
+      return;
+    }
+    unawaited(reporter.reportSessionEstablished(session));
+  }
+
+  void _reportMachineReady(AuthSession session, String? machineId) {
+    final reporter = appClientReporter;
+    if (reporter == null) {
+      return;
+    }
+    unawaited(reporter.reportMachineReady(session, machineId));
   }
 
   Future<_DesktopCoreStatus?> _tryReadDesktopStatus(
@@ -1271,7 +1296,8 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
               payload['builderSelfDisallowed'] ??
               payload['builder_self_disallowed'] ??
               '',
-          'allow_bypass': payload['allowBypass'] ?? payload['allow_bypass'] ?? '',
+          'allow_bypass':
+              payload['allowBypass'] ?? payload['allow_bypass'] ?? '',
           'builder_allow_bypass':
               payload['builderAllowBypass'] ??
               payload['builder_allow_bypass'] ??

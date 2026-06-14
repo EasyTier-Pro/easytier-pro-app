@@ -12,6 +12,7 @@ import 'src/desktop/app_update_service.dart';
 import 'src/desktop/tray_support.dart';
 import 'src/logging/app_logger.dart';
 import 'src/shared/app_motion.dart';
+import 'src/telemetry/app_client_reporter.dart';
 
 const Color _appBackground = Color(0xFFF8F9FB);
 const Color _cardBackground = Color(0xFFFFFFFF);
@@ -54,7 +55,11 @@ Future<void> main() async {
   final authService = ConsoleAuthService(
     tokenStore: OAuthTokenStore(preferences),
   );
-  final coreLifecycleService = CoreLifecycleService(authService: authService);
+  final appClientReporter = AppClientReporter(preferences: preferences);
+  final coreLifecycleService = CoreLifecycleService(
+    authService: authService,
+    appClientReporter: appClientReporter,
+  );
   const appUpdateService = AppUpdateService();
   final traySupport = createTraySupport();
 

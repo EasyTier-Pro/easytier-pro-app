@@ -1,0 +1,113 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
+import 'package:easytier_pro_app/src/telemetry/app_client_reporter.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('reports app installation and throttles unchanged fingerprint', () async {
+    SharedPreferences.setMockInitialValues({
+      'app_client_installation_id': '11111111-1111-4111-8111-111111111111',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    var now = DateTime.utc(2026, 6, 14, 1);
+    final reporter = AppClientReporter(
+      preferences: preferences,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('{}', 200);
+      }),
+      environmentLoader: _testEnvironment,
+      now: () => now,
+    );
+
+    await reporter.reportSessionEstablished(_session('tenant-1'));
+    await reporter.reportSessionEstablished(_session('tenant-1'));
+
+    expect(requests, hasLength(1));
+    expect(requests.single.method, 'PUT');
+    expect(
+      requests.single.url.path,
+      '/api/v1/tenants/tenant-1/app-installations/11111111-1111-4111-8111-111111111111/report',
+    );
+    expect(requests.single.headers['Authorization'], 'Bearer access-token');
+    final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(body['app_name'], 'EasyTier Pro');
+    expect(body['app_version'], '1.2.3');
+    expect(body['app_build'], '45');
+    expect(body['app_platform'], 'windows');
+    expect(body['os_name'], 'windows');
+    expect(body['os_version'], 'Windows 11');
+    expect(body['hostname'], 'desktop-1');
+    expect(body.containsKey('machine_id'), isFalse);
+
+    now = now.add(const Duration(hours: 25));
+    await reporter.reportSessionEstablished(_session('tenant-1'));
+
+    expect(requests, hasLength(2));
+  });
+
+  test('reports machine id immediately after base report', () async {
+    SharedPreferences.setMockInitialValues({
+      'app_client_installation_id': '22222222-2222-4222-8222-222222222222',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    final reporter = AppClientReporter(
+      preferences: preferences,
+      consoleBaseUrl: 'https://console.test/',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('{}', 200);
+      }),
+      environmentLoader: _testEnvironment,
+      now: () => DateTime.utc(2026, 6, 14, 1),
+    );
+
+    await reporter.reportSessionEstablished(_session('tenant-1'));
+    await reporter.reportMachineReady(
+      _session('tenant-1'),
+      '33333333-3333-4333-8333-333333333333',
+    );
+
+    expect(requests, hasLength(2));
+    final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
+    expect(body['machine_id'], '33333333-3333-4333-8333-333333333333');
+  });
+}
+
+Future<AppClientEnvironment> _testEnvironment() async {
+  return const AppClientEnvironment(
+    appName: 'EasyTier Pro',
+    appVersion: '1.2.3',
+    appBuild: '45',
+    appPlatform: 'windows',
+    osName: 'windows',
+    osVersion: 'Windows 11',
+    hostname: 'desktop-1',
+  );
+}
+
+AuthSession _session(String workspaceId) {
+  return AuthSession(
+    user: ConsoleUser(
+      email: 'user@example.com',
+      displayName: 'User',
+      workspaces: [ConsoleWorkspace(id: workspaceId, name: 'Workspace')],
+    ),
+    tokenSet: TokenSet(
+      accessToken: 'access-token',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      obtainedAt: DateTime.now().toUtc(),
+    ),
+  );
+}
