@@ -559,21 +559,22 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       if (!forceReinstall) {
         final runtimeStatus = await _runtime.readStatus(bootstrap);
         final machineId = runtimeStatus?.machineId;
-        if (runtimeStatus != null &&
-            runtimeStatus.phase == CoreRunPhase.running &&
-            machineId != null &&
-            machineId.isNotEmpty) {
-          _logger.info(
-            'core',
-            'Existing runtime service is ready',
-            context: {
-              'machine_id': machineId,
-              'runtime': _runtime.runtimeType.toString(),
-            },
-          );
-          status.value = runtimeStatus.toStatus();
+        if (runtimeStatus != null) {
           _reportMachineReady(session, machineId);
-          return;
+          if (runtimeStatus.phase == CoreRunPhase.running &&
+              machineId != null &&
+              machineId.isNotEmpty) {
+            _logger.info(
+              'core',
+              'Existing runtime service is ready',
+              context: {
+                'machine_id': machineId,
+                'runtime': _runtime.runtimeType.toString(),
+              },
+            );
+            status.value = runtimeStatus.toStatus();
+            return;
+          }
         }
       }
       if (forceReinstall) {
@@ -603,9 +604,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
         },
       );
       status.value = result.toStatus();
-      if (result.phase == CoreRunPhase.running) {
-        _reportMachineReady(session, result.machineId);
-      }
+      _reportMachineReady(session, result.machineId);
     } catch (error) {
       _logger.error(
         'core',

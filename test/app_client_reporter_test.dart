@@ -82,6 +82,63 @@ void main() {
     final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
     expect(body['machine_id'], '33333333-3333-4333-8333-333333333333');
   });
+
+  test(
+    'does not resend base report immediately after machine report',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'app_client_installation_id': '44444444-4444-4444-8444-444444444444',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final requests = <http.Request>[];
+      final reporter = AppClientReporter(
+        preferences: preferences,
+        consoleBaseUrl: 'https://console.test',
+        httpClient: MockClient((request) async {
+          requests.add(request);
+          return http.Response('{}', 200);
+        }),
+        environmentLoader: _testEnvironment,
+        now: () => DateTime.utc(2026, 6, 14, 1),
+      );
+
+      await reporter.reportSessionEstablished(_session('tenant-1'));
+      await reporter.reportMachineReady(
+        _session('tenant-1'),
+        '55555555-5555-4555-8555-555555555555',
+      );
+      await reporter.reportSessionEstablished(_session('tenant-1'));
+
+      expect(requests, hasLength(2));
+    },
+  );
+
+  test('reports again when user changes in same tenant', () async {
+    SharedPreferences.setMockInitialValues({
+      'app_client_installation_id': '66666666-6666-4666-8666-666666666666',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final requests = <http.Request>[];
+    final reporter = AppClientReporter(
+      preferences: preferences,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('{}', 200);
+      }),
+      environmentLoader: _testEnvironment,
+      now: () => DateTime.utc(2026, 6, 14, 1),
+    );
+
+    await reporter.reportSessionEstablished(
+      _session('tenant-1', email: 'alice@example.com'),
+    );
+    await reporter.reportSessionEstablished(
+      _session('tenant-1', email: 'bob@example.com'),
+    );
+
+    expect(requests, hasLength(2));
+  });
 }
 
 Future<AppClientEnvironment> _testEnvironment() async {
@@ -96,10 +153,10 @@ Future<AppClientEnvironment> _testEnvironment() async {
   );
 }
 
-AuthSession _session(String workspaceId) {
+AuthSession _session(String workspaceId, {String email = 'user@example.com'}) {
   return AuthSession(
     user: ConsoleUser(
-      email: 'user@example.com',
+      email: email,
       displayName: 'User',
       workspaces: [ConsoleWorkspace(id: workspaceId, name: 'Workspace')],
     ),

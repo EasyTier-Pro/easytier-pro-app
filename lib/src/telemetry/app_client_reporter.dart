@@ -85,7 +85,8 @@ class AppClientReporter {
       }
 
       final report = await _buildReport(machineId: machineId);
-      if (!_shouldSend(workspace.id, report.fingerprint)) {
+      final principalKey = _principalKeyFor(session);
+      if (!_shouldSend(workspace.id, principalKey, report)) {
         return;
       }
 
@@ -104,7 +105,7 @@ class AppClientReporter {
         throw StateError('console returned ${response.statusCode}');
       }
 
-      await _rememberReport(workspace.id, report);
+      await _rememberReport(workspace.id, principalKey, report);
       _logger.debug(
         'app.client',
         'Reported app client installation',
@@ -140,14 +141,25 @@ class AppClientReporter {
     );
   }
 
-  bool _shouldSend(String workspaceId, String fingerprint) {
-    final lastFingerprint = _preferences.getString(
-      _fingerprintKey(workspaceId),
-    );
-    if (lastFingerprint != fingerprint) {
+  bool _shouldSend(
+    String workspaceId,
+    String principalKey,
+    _AppClientReport report,
+  ) {
+    if (_preferences.getString(_principalKey(workspaceId)) != principalKey) {
       return true;
     }
-    final lastReportedAt = _preferences.getInt(_reportedAtKey(workspaceId));
+
+    final kind = _AppClientReportKind.from(report);
+    final lastFingerprint = _preferences.getString(
+      _fingerprintKey(workspaceId, kind),
+    );
+    if (lastFingerprint != report.fingerprint) {
+      return true;
+    }
+    final lastReportedAt = _preferences.getInt(
+      _reportedAtKey(workspaceId, kind),
+    );
     if (lastReportedAt == null) {
       return true;
     }
@@ -159,20 +171,27 @@ class AppClientReporter {
 
   Future<void> _rememberReport(
     String workspaceId,
+    String principalKey,
     _AppClientReport report,
   ) async {
-    final fingerprintKey = _fingerprintKey(workspaceId);
-    final currentFingerprint = _preferences.getString(fingerprintKey);
-    if (report.machineId == null &&
-        currentFingerprint != null &&
-        currentFingerprint.contains('"machine_id"')) {
-      return;
-    }
-    await _preferences.setString(fingerprintKey, report.fingerprint);
-    await _preferences.setInt(
-      _reportedAtKey(workspaceId),
-      _now().toUtc().millisecondsSinceEpoch,
+    final kind = _AppClientReportKind.from(report);
+    final reportedAt = _now().toUtc().millisecondsSinceEpoch;
+    await _preferences.setString(_principalKey(workspaceId), principalKey);
+    await _preferences.setString(
+      _fingerprintKey(workspaceId, kind),
+      report.fingerprint,
     );
+    await _preferences.setInt(_reportedAtKey(workspaceId, kind), reportedAt);
+    if (kind == _AppClientReportKind.machine) {
+      await _preferences.setString(
+        _fingerprintKey(workspaceId, _AppClientReportKind.base),
+        report.baseFingerprint,
+      );
+      await _preferences.setInt(
+        _reportedAtKey(workspaceId, _AppClientReportKind.base),
+        reportedAt,
+      );
+    }
   }
 
   Future<String> _ensureInstallationId() async {
@@ -197,11 +216,27 @@ class AppClientReporter {
     );
   }
 
-  static String _fingerprintKey(String workspaceId) =>
-      'app_client_report_fingerprint_$workspaceId';
+  static String _principalKey(String workspaceId) =>
+      'app_client_report_principal_$workspaceId';
 
-  static String _reportedAtKey(String workspaceId) =>
-      'app_client_reported_at_$workspaceId';
+  static String _fingerprintKey(
+    String workspaceId,
+    _AppClientReportKind kind,
+  ) => 'app_client_report_fingerprint_${kind.name}_$workspaceId';
+
+  static String _reportedAtKey(String workspaceId, _AppClientReportKind kind) =>
+      'app_client_reported_at_${kind.name}_$workspaceId';
+}
+
+enum _AppClientReportKind {
+  base,
+  machine;
+
+  static _AppClientReportKind from(_AppClientReport report) {
+    return report.machineId == null
+        ? _AppClientReportKind.base
+        : _AppClientReportKind.machine;
+  }
 }
 
 class AppClientEnvironment {
@@ -274,9 +309,11 @@ class _AppClientReport {
 
   String get fingerprint => jsonEncode(toJson());
 
-  Map<String, Object?> toJson() {
+  String get baseFingerprint => jsonEncode(toJson(includeMachineId: false));
+
+  Map<String, Object?> toJson({bool includeMachineId = true}) {
     return <String, Object?>{
-      if (machineId != null) 'machine_id': machineId,
+      if (includeMachineId && machineId != null) 'machine_id': machineId,
       if (hostname != null) 'hostname': hostname,
       'app_name': appName,
       'app_version': appVersion,
@@ -287,6 +324,18 @@ class _AppClientReport {
       if (deviceModel != null) 'device_model': deviceModel,
     };
   }
+}
+
+String _principalKeyFor(AuthSession session) {
+  final email = session.user.email.trim().toLowerCase();
+  if (email.isNotEmpty) {
+    return 'email:$email';
+  }
+  final displayName = session.user.displayName.trim();
+  if (displayName.isNotEmpty) {
+    return 'display:$displayName';
+  }
+  return 'anonymous';
 }
 
 String? _emptyToNull(String? value) {
