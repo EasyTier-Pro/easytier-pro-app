@@ -170,6 +170,75 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                     Text('诊断日志', style: Theme.of(context).textTheme.titleLarge),
                     const Spacer(),
                     _ControlSelectionBoundary(
+                      child: ExcludeSemantics(
+                        child: FPopoverMenu(
+                          menuAnchor: Alignment.topRight,
+                          childAnchor: Alignment.bottomRight,
+                          divider: FItemDivider.none,
+                          menuBuilder: (context, controller, menu) => [
+                            FItemGroup(
+                              divider: FItemDivider.none,
+                              children: [
+                                FItem(
+                                  prefix: const Icon(
+                                    Icons.download_outlined,
+                                    size: 18,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  title: Text(
+                                    '导出诊断日志',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  onPress: () {
+                                    unawaited(controller.hide());
+                                    unawaited(_exportLogs(dialogContext));
+                                  },
+                                ),
+                                if (_canOpenLogDirectory)
+                                  FItem(
+                                    prefix: const Icon(
+                                      Icons.folder_open_outlined,
+                                      size: 18,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                    title: Text(
+                                      '打开日志目录',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    onPress: () {
+                                      unawaited(controller.hide());
+                                      unawaited(
+                                        _openLogDirectory(dialogContext),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ],
+                          builder: (context, controller, child) => Tooltip(
+                            message: '更多操作',
+                            excludeFromSemantics: true,
+                            child: FButton(
+                              variant: .ghost,
+                              size: .sm,
+                              onPress: () => unawaited(controller.toggle()),
+                              mainAxisSize: MainAxisSize.min,
+                              child: const Icon(Icons.more_vert, size: 18),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _ControlSelectionBoundary(
                       child: FButton(
                         variant: .ghost,
                         size: .sm,
@@ -212,52 +281,7 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                     },
                   ),
                 ),
-                const SizedBox(height: 16),
-                _ControlSelectionBoundary(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FTooltip(
-                        tipBuilder: (context, controller) =>
-                            const Text('导出诊断日志'),
-                        child: FButton(
-                          variant: .ghost,
-                          size: .xs,
-                          style: const .delta(
-                            contentStyle: .delta(
-                              padding: .value(EdgeInsets.zero),
-                            ),
-                          ),
-                          onPress: () => unawaited(_exportLogs(dialogContext)),
-                          child: const Icon(Icons.download_outlined, size: 18),
-                        ),
-                      ),
-                      if (_canOpenLogDirectory) ...[
-                        const SizedBox(width: 8),
-                        FTooltip(
-                          tipBuilder: (context, controller) =>
-                              const Text('打开日志目录'),
-                          child: FButton(
-                            variant: .ghost,
-                            size: .xs,
-                            style: const .delta(
-                              contentStyle: .delta(
-                                padding: .value(EdgeInsets.zero),
-                              ),
-                            ),
-                            onPress: () => unawaited(
-                              _openLogDirectory(dialogContext),
-                            ),
-                            child: const Icon(
-                              Icons.folder_open_outlined,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+
               ],
             ),
           ),
