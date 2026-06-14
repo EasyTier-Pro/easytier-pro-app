@@ -13,7 +13,6 @@ class _ControlSelectionBoundary extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({
-    super.key,
     required this.title,
     this.subtitle,
     this.trailing,

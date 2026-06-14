@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
@@ -471,29 +470,31 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
                         layoutBuilder: appSwitcherStackLayout,
                         child: KeyedSubtree(
                           key: contentKey,
-                          child: _activeView == _DashboardView.network
-                              ? Padding(
-                                  padding: pagePadding,
-                                  child: Center(
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 1040,
-                                      ),
-                                      child: _buildContent(context),
-                                    ),
+                          child: switch (_activeView) {
+                            _DashboardView.network => Padding(
+                              padding: pagePadding,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1040,
                                   ),
-                                )
-                              : AppSmoothScrollView(
-                                  padding: pagePadding,
-                                  child: Center(
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 1040,
-                                      ),
-                                      child: _buildContent(context),
-                                    ),
-                                  ),
+                                  child: _buildContent(context),
                                 ),
+                              ),
+                            ),
+                            _DashboardView.settings => _buildContent(context),
+                            _ => AppSmoothScrollView(
+                              padding: pagePadding,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1040,
+                                  ),
+                                  child: _buildContent(context),
+                                ),
+                              ),
+                            ),
+                          },
                         ),
                       ),
                     ),
