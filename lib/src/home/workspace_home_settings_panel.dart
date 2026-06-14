@@ -214,24 +214,47 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                 ),
                 const SizedBox(height: 16),
                 _ControlSelectionBoundary(
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      FButton(
-                        variant: .outline,
-                        size: .sm,
-                        onPress: () => unawaited(_exportLogs(dialogContext)),
-                        child: const Text('导出诊断日志'),
-                      ),
-                      if (_canOpenLogDirectory)
-                        FButton(
-                          variant: .outline,
-                          size: .sm,
-                          onPress: () =>
-                              unawaited(_openLogDirectory(dialogContext)),
-                          child: const Text('打开日志目录'),
+                      FTooltip(
+                        tipBuilder: (context, controller) =>
+                            const Text('导出诊断日志'),
+                        child: FButton(
+                          variant: .ghost,
+                          size: .xs,
+                          style: const .delta(
+                            contentStyle: .delta(
+                              padding: .value(EdgeInsets.zero),
+                            ),
+                          ),
+                          onPress: () => unawaited(_exportLogs(dialogContext)),
+                          child: const Icon(Icons.download_outlined, size: 18),
                         ),
+                      ),
+                      if (_canOpenLogDirectory) ...[
+                        const SizedBox(width: 8),
+                        FTooltip(
+                          tipBuilder: (context, controller) =>
+                              const Text('打开日志目录'),
+                          child: FButton(
+                            variant: .ghost,
+                            size: .xs,
+                            style: const .delta(
+                              contentStyle: .delta(
+                                padding: .value(EdgeInsets.zero),
+                              ),
+                            ),
+                            onPress: () => unawaited(
+                              _openLogDirectory(dialogContext),
+                            ),
+                            child: const Icon(
+                              Icons.folder_open_outlined,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
