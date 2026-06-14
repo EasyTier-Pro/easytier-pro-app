@@ -331,31 +331,50 @@ class _SettingsPanel extends StatelessWidget {
                                     color: const Color(0xFFE5E7EB),
                                   ),
                                 ),
-                                child: SelectableTextHitBoundary(
-                                  child: SelectableText(
-                                    status.lastError!,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color:
-                                              status.phase ==
-                                                      CoreRunPhase
-                                                          .needsElevation ||
-                                                  needsVpnPermission
-                                              ? const Color(0xFFB45309)
-                                              : const Color(0xFFDC2626),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: SelectableTextHitBoundary(
+                                        child: SelectableText(
+                                          status.lastError!,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall?.copyWith(
+                                            color:
+                                                status.phase ==
+                                                        CoreRunPhase
+                                                            .needsElevation ||
+                                                    needsVpnPermission
+                                                ? const Color(0xFFB45309)
+                                                : const Color(0xFFDC2626),
+                                          ),
                                         ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _ControlSelectionBoundary(
-                                child: FButton(
-                                  variant: .outline,
-                                  size: .sm,
-                                  onPress: () => unawaited(
-                                    _copyText(context, status.lastError!),
-                                  ),
-                                  child: const Text('复制错误'),
+                                      ),
+                                    ),
+                                    _ControlSelectionBoundary(
+                                      child: FTooltip(
+                                        tipBuilder:
+                                            (context, controller) =>
+                                                const Text('复制错误'),
+                                        child: FButton(
+                                          variant: .ghost,
+                                          size: .sm,
+                                          onPress: () => unawaited(
+                                            _copyText(
+                                              context,
+                                              status.lastError!,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.copy,
+                                            size: 18,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

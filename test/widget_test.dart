@@ -3678,7 +3678,7 @@ void main() {
       }),
       findsOneWidget,
     );
-    expect(find.text('复制错误'), findsOneWidget);
+    expect(find.byIcon(Icons.copy), findsOneWidget);
 
     String? clipboardText;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -3694,7 +3694,7 @@ void main() {
           .setMockMethodCallHandler(SystemChannels.platform, null);
     });
 
-    await tester.tap(find.text('复制错误'));
+    await tester.tap(find.byIcon(Icons.copy));
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(clipboardText, errorText);
