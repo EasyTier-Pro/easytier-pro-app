@@ -196,11 +196,14 @@ sparkle:dsaSignature="MEUCIQD..." length="0"
 - `MACOS_UPDATE_SPARKLE_PRIVATE_KEY`：Sparkle EdDSA 私钥文件内容，对应 `dart run auto_updater:sign_update --ed-key-file`。
 - `WINDOWS_UPDATE_DSA_PRIVATE_KEY`：Windows `dsa_priv.pem` 文件内容。
 
-非 PR 构建会上传：
+非 PR 构建会上传 `easytier-pro-appcast` artifact，里面只包含聚合后的 feed XML：
 
-- `easytier-pro-windows-x64-appcast-metadata`：Windows 安装包的 `sparkle:dsaSignature` 和 appcast metadata。
-- `easytier-pro-macos-arm64-appcast-metadata` / `easytier-pro-macos-x64-appcast-metadata`：macOS zip 的 `sparkle:edSignature` 和 appcast metadata。
-- `easytier-pro-appcast`：聚合后的 feed XML，包括 `appcast-gitee.xml`、`appcast-oss.xml`、`appcast-github.xml` 和默认副本 `appcast.xml`。
+- `appcast-gitee.xml`
+- `appcast-oss.xml`
+- `appcast-github.xml`
+- `appcast.xml`
+
+平台 job 之间会通过 `_easytier-pro-*-appcast-metadata` artifact 传递签名 metadata；这些是短期中间产物，保留 1 天，不需要在发布流程中使用。
 
 发布到不同渠道时，将对应 XML 上传并命名为 `appcast.xml`：
 

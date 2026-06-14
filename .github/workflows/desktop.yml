@@ -183,11 +183,12 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: easytier-pro-windows-x64-appcast-metadata
+          name: _easytier-pro-windows-x64-appcast-metadata
           path: |
             dist/easytier-pro-windows-x64.appcast.json
             dist/easytier-pro-windows-x64.appcast-signature.txt
           if-no-files-found: error
+          retention-days: 1
 
       - name: Upload Windows portable archive
         uses: actions/upload-artifact@v4
@@ -354,11 +355,12 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: easytier-pro-macos-${{ matrix.arch }}-appcast-metadata
+          name: _easytier-pro-macos-${{ matrix.arch }}-appcast-metadata
           path: |
             dist/easytier-pro-macos-${{ matrix.arch }}.appcast.json
             dist/easytier-pro-macos-${{ matrix.arch }}.appcast-signature.txt
           if-no-files-found: error
+          retention-days: 1
 
   appcast:
     name: Appcast feed XML
@@ -383,7 +385,7 @@ jobs:
       - name: Download appcast metadata
         uses: actions/download-artifact@v4
         with:
-          pattern: easytier-pro-*-appcast-metadata
+          pattern: _easytier-pro-*-appcast-metadata
           path: dist/appcast-metadata
           merge-multiple: true
 
@@ -409,8 +411,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: easytier-pro-appcast
-          path: |
-            dist/appcast/*.xml
-            dist/appcast-metadata/*.json
-            dist/appcast-metadata/*.txt
+          path: dist/appcast/*.xml
           if-no-files-found: error
