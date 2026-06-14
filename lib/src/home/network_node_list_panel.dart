@@ -17,15 +17,11 @@ class NetworkNodeListViewport extends StatefulWidget {
     required this.nodes,
     required this.peerStatusesByIpv4,
     this.runtimeError,
-    this.scrollDeltaCoordinator,
-    this.onStaticContentShown,
   });
 
   final List<NetworkDevice> nodes;
   final Map<String, CorePeerStatus> peerStatusesByIpv4;
   final String? runtimeError;
-  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
-  final VoidCallback? onStaticContentShown;
 
   @override
   State<NetworkNodeListViewport> createState() =>
@@ -36,36 +32,9 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
   final ScrollController _scrollController = ScrollController();
 
   @override
-  void initState() {
-    super.initState();
-    _scheduleStaticContentSync();
-  }
-
-  @override
-  void didUpdateWidget(covariant NetworkNodeListViewport oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.onStaticContentShown != widget.onStaticContentShown ||
-        oldWidget.nodes.isEmpty != widget.nodes.isEmpty) {
-      _scheduleStaticContentSync();
-    }
-  }
-
-  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _scheduleStaticContentSync() {
-    if (widget.nodes.isNotEmpty) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      widget.onStaticContentShown?.call();
-    });
   }
 
   @override
@@ -85,7 +54,6 @@ class _NetworkNodeListViewportState extends State<NetworkNodeListViewport> {
               scrollViewKey: const ValueKey<String>('network-node-list-scroll'),
               controller: _scrollController,
               primary: false,
-              scrollDeltaCoordinator: widget.scrollDeltaCoordinator,
               child: NetworkNodeListPanel(
                 nodes: widget.nodes,
                 peerStatusesByIpv4: widget.peerStatusesByIpv4,

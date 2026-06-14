@@ -73,39 +73,35 @@ class _NetworkSummaryBar extends StatelessWidget {
         final narrow =
             constraints.hasBoundedWidth && constraints.maxWidth < 480;
 
-        final onlineItem = _SummaryItem(
-          icon: Icons.circle,
-          iconColor: const Color(0xFF16A34A),
-          text: '$onlineDevices / $totalDevices 在线',
-        );
-        final downloadItem = _SummaryItem(
-          icon: Icons.arrow_downward,
-          iconColor: const Color(0xFF16A34A),
-          text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
-        );
-        final uploadItem = _SummaryItem(
-          icon: Icons.arrow_upward,
-          iconColor: const Color(0xFF2563EB),
-          text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
-        );
-        if (narrow) {
-          return Wrap(
-            spacing: 12,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [onlineItem, downloadItem, uploadItem],
-          );
-        }
+        final items = <Widget>[
+          _SummaryItem(
+            icon: Icons.circle,
+            iconColor: const Color(0xFF16A34A),
+            text: '$onlineDevices / $totalDevices 在线',
+          ),
+          _SummaryItem(
+            icon: Icons.arrow_downward,
+            iconColor: const Color(0xFF16A34A),
+            text: _formatTrafficRate(traffic?.downloadBytesPerSecond),
+          ),
+          _SummaryItem(
+            icon: Icons.arrow_upward,
+            iconColor: const Color(0xFF2563EB),
+            text: _formatTrafficRate(traffic?.uploadBytesPerSecond),
+          ),
+          if (localIpv4 != null && localIpv4!.isNotEmpty)
+            _SummaryItem(
+              icon: Icons.router_outlined,
+              iconColor: const Color(0xFF64748B),
+              text: localIpv4!,
+            ),
+        ];
 
         return Wrap(
-          spacing: 16,
-          runSpacing: 8,
+          spacing: narrow ? 12 : 16,
+          runSpacing: narrow ? 6 : 8,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            onlineItem,
-            downloadItem,
-            uploadItem,
-          ],
+          children: items,
         );
       },
     );

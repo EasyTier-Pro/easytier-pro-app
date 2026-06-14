@@ -8,7 +8,6 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     _updateState(() {
       _selectedNetworkId = network.id;
       _activeView = _DashboardView.network;
-      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(network.id));
@@ -30,7 +29,6 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
       }
       networkId = _selectedNetworkId;
       _activeView = _DashboardView.network;
-      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerPolling();
     if (networkId != null) {
@@ -43,7 +41,6 @@ extension _WorkspaceHomeNavigation on _WorkspaceHomeViewState {
     _updateState(() {
       _selectedNetworkId = networkId;
       _activeView = _DashboardView.network;
-      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerPolling();
     unawaited(_loadSingleNetworkDevices(networkId));

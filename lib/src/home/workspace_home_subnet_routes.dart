@@ -7,50 +7,36 @@ class _NetworkSubnetRouteViewport extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRetry,
-    this.scrollDeltaCoordinator,
-    this.onStaticContentShown,
   });
 
   final NetworkSubnetRouteList? routes;
   final bool loading;
   final String? error;
   final VoidCallback onRetry;
-  final AppScrollDeltaCoordinator? scrollDeltaCoordinator;
-  final VoidCallback? onStaticContentShown;
 
   @override
   Widget build(BuildContext context) {
     if (loading && routes == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: const Center(child: FCircularProgress()),
-      );
+      return const Center(child: FCircularProgress());
     }
     if (error != null && routes == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: _StateMessage(
-          message: error!,
-          action: FButton(
-            variant: .outline,
-            size: .sm,
-            onPress: onRetry,
-            child: const Text('重试'),
-          ),
+      return _StateMessage(
+        message: error!,
+        action: FButton(
+          variant: .outline,
+          size: .sm,
+          onPress: onRetry,
+          child: const Text('重试'),
         ),
       );
     }
 
     final routeList = routes;
     if (routeList == null) {
-      return _NetworkDetailStaticViewport(
-        onShown: onStaticContentShown,
-        child: const _StateMessage(message: '正在读取子网路由...'),
-      );
+      return const _StateMessage(message: '正在读取子网路由...');
     }
 
     return _NetworkDetailScrollViewport(
-      scrollDeltaCoordinator: scrollDeltaCoordinator,
       child: _NetworkSubnetRoutePanel(
         routes: routeList,
         loading: loading,
