@@ -42,7 +42,6 @@ class _SettingsPanel extends StatefulWidget {
 
 class _SettingsPanelState extends State<_SettingsPanel> {
   _SettingsCategory _selectedCategory = _SettingsCategory.account;
-  _SettingsCategory? _mobileDetailCategory;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
@@ -293,13 +292,6 @@ class _SettingsPanelState extends State<_SettingsPanel> {
   void _selectCategory(_SettingsCategory category) {
     setState(() {
       _selectedCategory = category;
-      _mobileDetailCategory = category;
-    });
-  }
-
-  void _backToMobileList() {
-    setState(() {
-      _mobileDetailCategory = null;
     });
   }
 
@@ -337,27 +329,18 @@ class _SettingsPanelState extends State<_SettingsPanel> {
           );
         }
 
-        final detailCategory = _mobileDetailCategory;
-        if (detailCategory != null) {
-          return _SettingsMobileDetailPage(
-            category: detailCategory,
-            user: widget.user,
-            workspaceName: widget.workspaceName,
-            onLogout: widget.onLogout,
-            coreLifecycleService: widget.coreLifecycleService,
-            windowBehaviorPreferences: widget.windowBehaviorPreferences,
-            canOpenLogDirectory: _canOpenLogDirectory,
-            onBack: _backToMobileList,
-            onExportLogs: () => unawaited(_exportLogs(context)),
-            onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
-            onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
-            onCopyText: (value) => unawaited(_copyText(context, value)),
-          );
-        }
-
-        return _SettingsMobileListPage(
+        return _SettingsCompactScrollPage(
           categories: _categories,
-          onSelect: _selectCategory,
+          user: widget.user,
+          workspaceName: widget.workspaceName,
+          onLogout: widget.onLogout,
+          coreLifecycleService: widget.coreLifecycleService,
+          windowBehaviorPreferences: widget.windowBehaviorPreferences,
+          canOpenLogDirectory: _canOpenLogDirectory,
+          onExportLogs: () => unawaited(_exportLogs(context)),
+          onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
+          onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
+          onCopyText: (value) => unawaited(_copyText(context, value)),
         );
       },
     );
@@ -579,96 +562,28 @@ class _SettingsSectionHeader extends StatelessWidget {
   }
 }
 
-class _SettingsMobileListPage extends StatelessWidget {
-  const _SettingsMobileListPage({
+class _SettingsCompactScrollPage extends StatelessWidget {
+  const _SettingsCompactScrollPage({
     required this.categories,
-    required this.onSelect,
-  });
-
-  final List<_SettingsCategory> categories;
-  final ValueChanged<_SettingsCategory> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SettingsSectionHeader(title: '设置'),
-          const SizedBox(height: 20),
-          FCard.raw(
-            child: Column(
-              children: [
-                for (var i = 0; i < categories.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                  _SettingsMobileListTile(
-                    category: categories[i],
-                    onTap: () => onSelect(categories[i]),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsMobileListTile extends StatelessWidget {
-  const _SettingsMobileListTile({
-    required this.category,
-    required this.onTap,
-  });
-
-  final _SettingsCategory category;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return FTile(
-      prefix: Icon(category.icon, size: 22, color: const Color(0xFF3C3C43)),
-      title: Text(
-        category.title,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      suffix: const Icon(
-        Icons.chevron_right,
-        size: 20,
-        color: Color(0xFF9CA3AF),
-      ),
-      onPress: onTap,
-    );
-  }
-}
-
-class _SettingsMobileDetailPage extends StatelessWidget {
-  const _SettingsMobileDetailPage({
-    required this.category,
     required this.user,
     required this.workspaceName,
     required this.onLogout,
     required this.coreLifecycleService,
     required this.windowBehaviorPreferences,
     required this.canOpenLogDirectory,
-    required this.onBack,
     required this.onExportLogs,
     required this.onOpenLogDirectory,
     required this.onShowLogsDialog,
     required this.onCopyText,
   });
 
-  final _SettingsCategory category;
+  final List<_SettingsCategory> categories;
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
   final CoreLifecycleService coreLifecycleService;
   final WindowBehaviorPreferences windowBehaviorPreferences;
   final bool canOpenLogDirectory;
-  final VoidCallback onBack;
   final VoidCallback onExportLogs;
   final VoidCallback onOpenLogDirectory;
   final VoidCallback onShowLogsDialog;
@@ -681,42 +596,27 @@ class _SettingsMobileDetailPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _ControlSelectionBoundary(
-                child: FButton(
-                  variant: .ghost,
-                  size: .sm,
-                  onPress: onBack,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.arrow_back_ios, size: 14),
-                      SizedBox(width: 4),
-                      Text('设置'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _SettingsSectionHeader(title: category.title),
-          const SizedBox(height: 12),
-          _SettingsDetailPane.buildSectionContent(
-            context: context,
-            category: category,
-            user: user,
-            workspaceName: workspaceName,
-            onLogout: onLogout,
-            coreLifecycleService: coreLifecycleService,
-            windowBehaviorPreferences: windowBehaviorPreferences,
-            canOpenLogDirectory: canOpenLogDirectory,
-            onExportLogs: onExportLogs,
-            onOpenLogDirectory: onOpenLogDirectory,
-            onShowLogsDialog: onShowLogsDialog,
-            onCopyText: onCopyText,
-          ),
+          _SettingsSectionHeader(title: '设置'),
+          const SizedBox(height: 20),
+          for (var i = 0; i < categories.length; i++) ...[
+            if (i > 0) const SizedBox(height: 24),
+            _SettingsSectionHeader(title: categories[i].title),
+            const SizedBox(height: 12),
+            _SettingsDetailPane.buildSectionContent(
+              context: context,
+              category: categories[i],
+              user: user,
+              workspaceName: workspaceName,
+              onLogout: onLogout,
+              coreLifecycleService: coreLifecycleService,
+              windowBehaviorPreferences: windowBehaviorPreferences,
+              canOpenLogDirectory: canOpenLogDirectory,
+              onExportLogs: onExportLogs,
+              onOpenLogDirectory: onOpenLogDirectory,
+              onShowLogsDialog: onShowLogsDialog,
+              onCopyText: onCopyText,
+            ),
+          ],
         ],
       ),
     );
