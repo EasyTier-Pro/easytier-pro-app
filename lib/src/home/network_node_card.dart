@@ -21,7 +21,7 @@ class _NodeCardState extends State<_NodeCard> {
     final peer = widget.peer;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: AnimatedSize(
         duration: appMotionMedium,
         curve: appMotionCurve,
@@ -46,7 +46,7 @@ class _NodeCardState extends State<_NodeCard> {
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -62,7 +62,7 @@ class _NodeCardState extends State<_NodeCard> {
                         online: isOnline,
                         isLocal: isLocal,
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Align(
                           alignment: Alignment.centerLeft,
@@ -108,7 +108,7 @@ class _NodeCardState extends State<_NodeCard> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   // 技术信息行：IPv4 + 本机 + 快捷指标
                   _NodeMetaLine(
                     ipv4: widget.node.ipv4,

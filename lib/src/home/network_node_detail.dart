@@ -26,8 +26,8 @@ class _NodeDetailPanel extends StatelessWidget {
           )
         else
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 10,
+            runSpacing: 10,
             children: [
               if (p.peerId.isNotEmpty)
                 _DetailChip(

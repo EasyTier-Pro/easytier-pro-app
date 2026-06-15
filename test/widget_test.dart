@@ -4357,8 +4357,13 @@ Future<void> _openSettingsFromUserMenu(WidgetTester tester) async {
 }
 
 Future<void> _tapSettingsCategory(WidgetTester tester, String title) async {
-  await tester.tap(find.text(title));
-  await tester.pumpAndSettle();
+  final sidebarKey = find.byKey(
+    ValueKey<String>('settings-sidebar-item-$title'),
+  );
+  if (tester.any(sidebarKey)) {
+    await tester.tap(sidebarKey);
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _openNetworkDeleteDialog(WidgetTester tester) async {

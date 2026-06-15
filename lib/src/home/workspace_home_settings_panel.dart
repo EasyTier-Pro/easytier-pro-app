@@ -49,13 +49,16 @@ class _SettingsPanelState extends State<_SettingsPanel> {
   late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   bool _checkingForUpdates = false;
   _SettingsCategory _selectedCategory = _SettingsCategory.account;
-  _SettingsCategory? _mobileDetailCategory;
+  final ScrollController _scrollController = ScrollController();
+  final Map<_SettingsCategory, GlobalKey> _categoryKeys = {};
+  bool _isScrollingToCategory = false;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
   );
   static const double _sidebarWidth = 220;
   static const double _splitBreakpoint = 720;
+  static const double _categoryScrollAlignment = 0.05;
 
   bool get _canOpenLogDirectory =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -358,17 +361,106 @@ class _SettingsPanelState extends State<_SettingsPanel> {
     );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    for (final category in _categories) {
+      _categoryKeys[category] = GlobalKey();
+    }
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _selectCategory(_SettingsCategory category) {
-    setState(() {
-      _selectedCategory = category;
-      _mobileDetailCategory = category;
+    _scrollToCategory(category);
+  }
+
+  void _scrollToCategory(_SettingsCategory category) {
+    final key = _categoryKeys[category];
+    if (key == null) {
+      return;
+    }
+    final context = key.currentContext;
+    if (context == null) {
+      setState(() {
+        _selectedCategory = category;
+      });
+      return;
+    }
+    _isScrollingToCategory = true;
+    Scrollable.ensureVisible(
+      context,
+      duration: appMotionMedium,
+      curve: appMotionCurve,
+      alignment: _categoryScrollAlignment,
+    ).whenComplete(() {
+      if (mounted) {
+        setState(() {
+          _isScrollingToCategory = false;
+          _selectedCategory = category;
+        });
+      }
     });
   }
 
-  void _backToMobileList() {
-    setState(() {
-      _mobileDetailCategory = null;
-    });
+  void _onScroll() {
+    if (_isScrollingToCategory) {
+      return;
+    }
+    final scrollPosition = _scrollController.position;
+    final viewportDimension = scrollPosition.viewportDimension;
+    if (viewportDimension <= 0) {
+      return;
+    }
+    final viewportTop = scrollPosition.pixels;
+    final viewportCenter = viewportTop + (viewportDimension * 0.35);
+
+    _SettingsCategory? closestCategory;
+    var closestDistance = double.infinity;
+    for (final category in _categories) {
+      final key = _categoryKeys[category];
+      if (key == null) {
+        continue;
+      }
+      final context = key.currentContext;
+      if (context == null) {
+        continue;
+      }
+      final renderBox = context.findRenderObject();
+      if (renderBox is! RenderBox) {
+        continue;
+      }
+      final scrollable = Scrollable.maybeOf(context);
+      if (scrollable == null) {
+        continue;
+      }
+      final scrollablePosition = scrollable.position;
+      final scrollableBox = scrollable.context.findRenderObject();
+      if (scrollableBox is! RenderBox) {
+        continue;
+      }
+      final categoryOffset = renderBox.localToGlobal(Offset.zero);
+      final scrollableOffset = scrollableBox.localToGlobal(Offset.zero);
+      final categoryTop =
+          categoryOffset.dy - scrollableOffset.dy + scrollablePosition.pixels;
+      final distance = (categoryTop - viewportCenter).abs();
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestCategory = category;
+      }
+    }
+
+    if (closestCategory != null && closestCategory != _selectedCategory) {
+      setState(() {
+        _selectedCategory = closestCategory!;
+      });
+    }
   }
 
   @override
@@ -388,7 +480,9 @@ class _SettingsPanelState extends State<_SettingsPanel> {
               ),
               Expanded(
                 child: _SettingsDetailPane(
-                  category: _selectedCategory,
+                  categories: _categories,
+                  categoryKeys: _categoryKeys,
+                  scrollController: _scrollController,
                   user: widget.user,
                   workspaceName: widget.workspaceName,
                   onLogout: widget.onLogout,
@@ -408,30 +502,21 @@ class _SettingsPanelState extends State<_SettingsPanel> {
           );
         }
 
-        final detailCategory = _mobileDetailCategory;
-        if (detailCategory != null) {
-          return _SettingsMobileDetailPage(
-            category: detailCategory,
-            user: widget.user,
-            workspaceName: widget.workspaceName,
-            onLogout: widget.onLogout,
-            coreLifecycleService: widget.coreLifecycleService,
-            windowBehaviorPreferences: widget.windowBehaviorPreferences,
-            packageInfo: _packageInfo,
-            checkingForUpdates: _checkingForUpdates,
-            canOpenLogDirectory: _canOpenLogDirectory,
-            onBack: _backToMobileList,
-            onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
-            onExportLogs: () => unawaited(_exportLogs(context)),
-            onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
-            onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
-            onCopyText: (value) => unawaited(_copyText(context, value)),
-          );
-        }
-
-        return _SettingsMobileListPage(
+        return _SettingsCompactScrollPage(
           categories: _categories,
-          onSelect: _selectCategory,
+          user: widget.user,
+          workspaceName: widget.workspaceName,
+          onLogout: widget.onLogout,
+          coreLifecycleService: widget.coreLifecycleService,
+          windowBehaviorPreferences: widget.windowBehaviorPreferences,
+          packageInfo: _packageInfo,
+          checkingForUpdates: _checkingForUpdates,
+          canOpenLogDirectory: _canOpenLogDirectory,
+          onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
+          onExportLogs: () => unawaited(_exportLogs(context)),
+          onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
+          onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
+          onCopyText: (value) => unawaited(_copyText(context, value)),
         );
       },
     );
@@ -500,6 +585,7 @@ class _SettingsSidebarItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
+        key: ValueKey<String>('settings-sidebar-item-${category.title}'),
         color: selected ? const Color(0xFF007AFF) : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         clipBehavior: Clip.antiAlias,
@@ -544,7 +630,9 @@ class _SettingsSidebarItem extends StatelessWidget {
 
 class _SettingsDetailPane extends StatelessWidget {
   const _SettingsDetailPane({
-    required this.category,
+    required this.categories,
+    required this.categoryKeys,
+    required this.scrollController,
     required this.user,
     required this.workspaceName,
     required this.onLogout,
@@ -560,7 +648,9 @@ class _SettingsDetailPane extends StatelessWidget {
     required this.onCopyText,
   });
 
-  final _SettingsCategory category;
+  final List<_SettingsCategory> categories;
+  final Map<_SettingsCategory, GlobalKey> categoryKeys;
+  final ScrollController scrollController;
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
@@ -578,31 +668,43 @@ class _SettingsDetailPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      controller: scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SettingsSectionHeader(title: category.title),
-            const SizedBox(height: 20),
-            buildSectionContent(
-              context: context,
-              category: category,
-              user: user,
-              workspaceName: workspaceName,
-              onLogout: onLogout,
-              coreLifecycleService: coreLifecycleService,
-              windowBehaviorPreferences: windowBehaviorPreferences,
-              packageInfo: packageInfo,
-              checkingForUpdates: checkingForUpdates,
-              canOpenLogDirectory: canOpenLogDirectory,
-              onCheckForUpdates: onCheckForUpdates,
-              onExportLogs: onExportLogs,
-              onOpenLogDirectory: onOpenLogDirectory,
-              onShowLogsDialog: onShowLogsDialog,
-              onCopyText: onCopyText,
-            ),
+            for (var i = 0; i < categories.length; i++) ...[
+              if (i > 0) const SizedBox(height: 24),
+              KeyedSubtree(
+                key: categoryKeys[categories[i]],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SettingsSectionHeader(title: categories[i].title),
+                    const SizedBox(height: 16),
+                    buildSectionContent(
+                      context: context,
+                      category: categories[i],
+                      user: user,
+                      workspaceName: workspaceName,
+                      onLogout: onLogout,
+                      coreLifecycleService: coreLifecycleService,
+                      windowBehaviorPreferences: windowBehaviorPreferences,
+                      packageInfo: packageInfo,
+                      checkingForUpdates: checkingForUpdates,
+                      canOpenLogDirectory: canOpenLogDirectory,
+                      onCheckForUpdates: onCheckForUpdates,
+                      onExportLogs: onExportLogs,
+                      onOpenLogDirectory: onOpenLogDirectory,
+                      onShowLogsDialog: onShowLogsDialog,
+                      onCopyText: onCopyText,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -670,75 +772,9 @@ class _SettingsSectionHeader extends StatelessWidget {
   }
 }
 
-class _SettingsMobileListPage extends StatelessWidget {
-  const _SettingsMobileListPage({
+class _SettingsCompactScrollPage extends StatelessWidget {
+  const _SettingsCompactScrollPage({
     required this.categories,
-    required this.onSelect,
-  });
-
-  final List<_SettingsCategory> categories;
-  final ValueChanged<_SettingsCategory> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SettingsSectionHeader(title: '设置'),
-          const SizedBox(height: 20),
-          FCard.raw(
-            child: Column(
-              children: [
-                for (var i = 0; i < categories.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                  _SettingsMobileListTile(
-                    category: categories[i],
-                    onTap: () => onSelect(categories[i]),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsMobileListTile extends StatelessWidget {
-  const _SettingsMobileListTile({
-    required this.category,
-    required this.onTap,
-  });
-
-  final _SettingsCategory category;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return FTile(
-      prefix: Icon(category.icon, size: 22, color: const Color(0xFF3C3C43)),
-      title: Text(
-        category.title,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      suffix: const Icon(
-        Icons.chevron_right,
-        size: 20,
-        color: Color(0xFF9CA3AF),
-      ),
-      onPress: onTap,
-    );
-  }
-}
-
-class _SettingsMobileDetailPage extends StatelessWidget {
-  const _SettingsMobileDetailPage({
-    required this.category,
     required this.user,
     required this.workspaceName,
     required this.onLogout,
@@ -747,7 +783,6 @@ class _SettingsMobileDetailPage extends StatelessWidget {
     required this.packageInfo,
     required this.checkingForUpdates,
     required this.canOpenLogDirectory,
-    required this.onBack,
     required this.onCheckForUpdates,
     required this.onExportLogs,
     required this.onOpenLogDirectory,
@@ -755,7 +790,7 @@ class _SettingsMobileDetailPage extends StatelessWidget {
     required this.onCopyText,
   });
 
-  final _SettingsCategory category;
+  final List<_SettingsCategory> categories;
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
@@ -764,7 +799,6 @@ class _SettingsMobileDetailPage extends StatelessWidget {
   final Future<PackageInfo> packageInfo;
   final bool checkingForUpdates;
   final bool canOpenLogDirectory;
-  final VoidCallback onBack;
   final VoidCallback onCheckForUpdates;
   final VoidCallback onExportLogs;
   final VoidCallback onOpenLogDirectory;
@@ -774,49 +808,34 @@ class _SettingsMobileDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _ControlSelectionBoundary(
-                child: FButton(
-                  variant: .ghost,
-                  size: .sm,
-                  onPress: onBack,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.arrow_back_ios, size: 14),
-                      SizedBox(width: 4),
-                      Text('设置'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _SettingsSectionHeader(title: category.title),
-          const SizedBox(height: 12),
-          _SettingsDetailPane.buildSectionContent(
-            context: context,
-            category: category,
-            user: user,
-            workspaceName: workspaceName,
-            onLogout: onLogout,
-            coreLifecycleService: coreLifecycleService,
-            windowBehaviorPreferences: windowBehaviorPreferences,
-            packageInfo: packageInfo,
-            checkingForUpdates: checkingForUpdates,
-            canOpenLogDirectory: canOpenLogDirectory,
-            onCheckForUpdates: onCheckForUpdates,
-            onExportLogs: onExportLogs,
-            onOpenLogDirectory: onOpenLogDirectory,
-            onShowLogsDialog: onShowLogsDialog,
-            onCopyText: onCopyText,
-          ),
+          _SettingsSectionHeader(title: '设置'),
+          const SizedBox(height: 16),
+          for (var i = 0; i < categories.length; i++) ...[
+            if (i > 0) const SizedBox(height: 24),
+            _SettingsSectionHeader(title: categories[i].title),
+            const SizedBox(height: 12),
+            _SettingsDetailPane.buildSectionContent(
+              context: context,
+              category: categories[i],
+              user: user,
+              workspaceName: workspaceName,
+              onLogout: onLogout,
+              coreLifecycleService: coreLifecycleService,
+              windowBehaviorPreferences: windowBehaviorPreferences,
+              packageInfo: packageInfo,
+              checkingForUpdates: checkingForUpdates,
+              canOpenLogDirectory: canOpenLogDirectory,
+              onCheckForUpdates: onCheckForUpdates,
+              onExportLogs: onExportLogs,
+              onOpenLogDirectory: onOpenLogDirectory,
+              onShowLogsDialog: onShowLogsDialog,
+              onCopyText: onCopyText,
+            ),
+          ],
         ],
       ),
     );

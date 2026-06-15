@@ -758,8 +758,8 @@ class _StatusBadge extends StatelessWidget {
         final statusBody = Row(
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
@@ -772,9 +772,9 @@ class _StatusBadge extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Center(child: Icon(icon, color: ringColor, size: 22)),
+              child: Center(child: Icon(icon, color: ringColor, size: 18)),
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -790,7 +790,7 @@ class _StatusBadge extends StatelessWidget {
                       letterSpacing: 0.2,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -819,7 +819,7 @@ class _StatusBadge extends StatelessWidget {
             : null;
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(16),

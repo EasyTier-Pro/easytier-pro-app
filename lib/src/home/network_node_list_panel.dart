@@ -210,7 +210,7 @@ class NetworkDetailEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
         child: Text(
           message,
           textAlign: TextAlign.center,

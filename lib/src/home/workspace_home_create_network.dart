@@ -52,7 +52,7 @@ class _CreateNetworkForm extends StatelessWidget {
             size: .sm,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _FormFieldBlock(
           icon: Icons.router_outlined,
           label: '网络地址范围',
@@ -101,7 +101,7 @@ class _CreateNetworkForm extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _FormFieldBlock(
           icon: Icons.place_outlined,
           label: '区域',
@@ -374,7 +374,7 @@ class _CreateNetworkPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return FCard.raw(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
