@@ -170,7 +170,7 @@ class _NetworkSubnetRouteCard extends StatelessWidget {
     final mapped = route.mappedCidr?.trim();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -178,7 +178,7 @@ class _NetworkSubnetRouteCard extends StatelessWidget {
           border: Border.all(color: const Color(0xFFE5E7EB)),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

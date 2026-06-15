@@ -481,14 +481,14 @@ class _SettingsDetailPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SettingsSectionHeader(title: category.title),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             buildSectionContent(
               context: context,
               category: category,
@@ -592,12 +592,12 @@ class _SettingsCompactScrollPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SettingsSectionHeader(title: '设置'),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           for (var i = 0; i < categories.length; i++) ...[
             if (i > 0) const SizedBox(height: 24),
             _SettingsSectionHeader(title: categories[i].title),

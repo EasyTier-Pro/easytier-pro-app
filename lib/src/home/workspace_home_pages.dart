@@ -62,7 +62,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
             action: FButton(onPress: _loadNetworks, child: const Text('重试')),
           )
         else if (_isLoadingNetworks && _networks.isEmpty)
-          const SizedBox(height: 260, child: Center(child: FCircularProgress()))
+          const SizedBox(height: 200, child: Center(child: FCircularProgress()))
         else if (_networks.isEmpty)
           _CreateNetworkPanel(
             nameController: _newNetworkNameController,
@@ -103,7 +103,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
   Widget _buildNetworkPage(BuildContext context) {
     if (_isLoadingNetworks) {
       return const SizedBox(
-        height: 360,
+        height: 280,
         child: Center(child: FCircularProgress()),
       );
     }
@@ -276,7 +276,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
         const SizedBox(height: 16),
         if (_deviceError != null) ...[
           SizedBox(
-            height: 120,
+            height: 100,
             child: _StateMessage(
               message: _deviceError!,
               action: FButton(
@@ -293,7 +293,7 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
         ],
         if (devices.isEmpty)
           SizedBox(
-            height: 200,
+            height: 160,
             child: _StateMessage(
               message: _isLoadingDevices ? '正在读取设备列表。' : '暂无设备数据。',
             ),

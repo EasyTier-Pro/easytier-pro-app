@@ -74,7 +74,7 @@ class _NetworkSwitchList extends StatelessWidget {
         Column(
           children: [
             for (var i = 0; i < networks.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
+              if (i > 0) const SizedBox(height: 8),
               _NetworkSwitchTile(
                 key: ValueKey<String>('network-switch-${networks[i].id}'),
                 network: networks[i],
@@ -295,7 +295,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+                        padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
                         child: Row(
                           children: [
                             Expanded(
@@ -335,7 +335,7 @@ class _NetworkSwitchTile extends StatelessWidget {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 6),
                                   if (joined &&
                                       localIpv4 != null &&
                                       localIpv4.isNotEmpty)
