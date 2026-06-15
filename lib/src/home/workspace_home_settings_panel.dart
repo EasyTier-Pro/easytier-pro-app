@@ -42,12 +42,16 @@ class _SettingsPanel extends StatefulWidget {
 
 class _SettingsPanelState extends State<_SettingsPanel> {
   _SettingsCategory _selectedCategory = _SettingsCategory.account;
+  final ScrollController _scrollController = ScrollController();
+  final Map<_SettingsCategory, GlobalKey> _categoryKeys = {};
+  bool _isScrollingToCategory = false;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
   );
   static const double _sidebarWidth = 220;
   static const double _splitBreakpoint = 720;
+  static const double _categoryScrollAlignment = 0.05;
 
   bool get _canOpenLogDirectory =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -289,10 +293,106 @@ class _SettingsPanelState extends State<_SettingsPanel> {
     );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    for (final category in _categories) {
+      _categoryKeys[category] = GlobalKey();
+    }
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _selectCategory(_SettingsCategory category) {
-    setState(() {
-      _selectedCategory = category;
+    _scrollToCategory(category);
+  }
+
+  void _scrollToCategory(_SettingsCategory category) {
+    final key = _categoryKeys[category];
+    if (key == null) {
+      return;
+    }
+    final context = key.currentContext;
+    if (context == null) {
+      setState(() {
+        _selectedCategory = category;
+      });
+      return;
+    }
+    _isScrollingToCategory = true;
+    Scrollable.ensureVisible(
+      context,
+      duration: appMotionMedium,
+      curve: appMotionCurve,
+      alignment: _categoryScrollAlignment,
+    ).whenComplete(() {
+      if (mounted) {
+        setState(() {
+          _isScrollingToCategory = false;
+          _selectedCategory = category;
+        });
+      }
     });
+  }
+
+  void _onScroll() {
+    if (_isScrollingToCategory) {
+      return;
+    }
+    final scrollPosition = _scrollController.position;
+    final viewportDimension = scrollPosition.viewportDimension;
+    if (viewportDimension <= 0) {
+      return;
+    }
+    final viewportTop = scrollPosition.pixels;
+    final viewportCenter = viewportTop + (viewportDimension * 0.35);
+
+    _SettingsCategory? closestCategory;
+    var closestDistance = double.infinity;
+    for (final category in _categories) {
+      final key = _categoryKeys[category];
+      if (key == null) {
+        continue;
+      }
+      final context = key.currentContext;
+      if (context == null) {
+        continue;
+      }
+      final renderBox = context.findRenderObject();
+      if (renderBox is! RenderBox) {
+        continue;
+      }
+      final scrollable = Scrollable.maybeOf(context);
+      if (scrollable == null) {
+        continue;
+      }
+      final scrollablePosition = scrollable.position;
+      final scrollableBox = scrollable.context.findRenderObject();
+      if (scrollableBox is! RenderBox) {
+        continue;
+      }
+      final categoryOffset = renderBox.localToGlobal(Offset.zero);
+      final scrollableOffset = scrollableBox.localToGlobal(Offset.zero);
+      final categoryTop =
+          categoryOffset.dy - scrollableOffset.dy + scrollablePosition.pixels;
+      final distance = (categoryTop - viewportCenter).abs();
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestCategory = category;
+      }
+    }
+
+    if (closestCategory != null && closestCategory != _selectedCategory) {
+      setState(() {
+        _selectedCategory = closestCategory!;
+      });
+    }
   }
 
   @override
@@ -312,7 +412,9 @@ class _SettingsPanelState extends State<_SettingsPanel> {
               ),
               Expanded(
                 child: _SettingsDetailPane(
-                  category: _selectedCategory,
+                  categories: _categories,
+                  categoryKeys: _categoryKeys,
+                  scrollController: _scrollController,
                   user: widget.user,
                   workspaceName: widget.workspaceName,
                   onLogout: widget.onLogout,
@@ -409,6 +511,7 @@ class _SettingsSidebarItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
+        key: ValueKey<String>('settings-sidebar-item-${category.title}'),
         color: selected ? const Color(0xFF007AFF) : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         clipBehavior: Clip.antiAlias,
@@ -453,7 +556,9 @@ class _SettingsSidebarItem extends StatelessWidget {
 
 class _SettingsDetailPane extends StatelessWidget {
   const _SettingsDetailPane({
-    required this.category,
+    required this.categories,
+    required this.categoryKeys,
+    required this.scrollController,
     required this.user,
     required this.workspaceName,
     required this.onLogout,
@@ -466,7 +571,9 @@ class _SettingsDetailPane extends StatelessWidget {
     required this.onCopyText,
   });
 
-  final _SettingsCategory category;
+  final List<_SettingsCategory> categories;
+  final Map<_SettingsCategory, GlobalKey> categoryKeys;
+  final ScrollController scrollController;
   final ConsoleUser user;
   final String workspaceName;
   final Future<void> Function() onLogout;
@@ -481,28 +588,40 @@ class _SettingsDetailPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSmoothScrollView(
+      controller: scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SettingsSectionHeader(title: category.title),
-            const SizedBox(height: 16),
-            buildSectionContent(
-              context: context,
-              category: category,
-              user: user,
-              workspaceName: workspaceName,
-              onLogout: onLogout,
-              coreLifecycleService: coreLifecycleService,
-              windowBehaviorPreferences: windowBehaviorPreferences,
-              canOpenLogDirectory: canOpenLogDirectory,
-              onExportLogs: onExportLogs,
-              onOpenLogDirectory: onOpenLogDirectory,
-              onShowLogsDialog: onShowLogsDialog,
-              onCopyText: onCopyText,
-            ),
+            for (var i = 0; i < categories.length; i++) ...[
+              if (i > 0) const SizedBox(height: 24),
+              KeyedSubtree(
+                key: categoryKeys[categories[i]],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SettingsSectionHeader(title: categories[i].title),
+                    const SizedBox(height: 16),
+                    buildSectionContent(
+                      context: context,
+                      category: categories[i],
+                      user: user,
+                      workspaceName: workspaceName,
+                      onLogout: onLogout,
+                      coreLifecycleService: coreLifecycleService,
+                      windowBehaviorPreferences: windowBehaviorPreferences,
+                      canOpenLogDirectory: canOpenLogDirectory,
+                      onExportLogs: onExportLogs,
+                      onOpenLogDirectory: onOpenLogDirectory,
+                      onShowLogsDialog: onShowLogsDialog,
+                      onCopyText: onCopyText,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
