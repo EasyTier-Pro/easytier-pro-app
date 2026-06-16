@@ -65,12 +65,17 @@ class _DesktopTraySupport extends TraySupport
   }
 
   @override
-  Future<void> quitApp() async {
+  Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {
     if (_quitRequested || !_isDesktopPlatform) {
       return;
     }
 
     _quitRequested = true;
+    _logger.info(
+      'tray',
+      'Quitting application',
+      context: {'reason': reason.name},
+    );
     await windowManager.setPreventClose(false);
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       await windowManager.destroy();

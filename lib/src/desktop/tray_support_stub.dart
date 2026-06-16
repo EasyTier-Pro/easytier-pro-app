@@ -10,7 +10,7 @@ class _NoopTraySupport implements TraySupport {
   Future<void> initialize() async {}
 
   @override
-  Future<void> quitApp() async {}
+  Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {}
 
   @override
   Future<void> showWindow() async {}

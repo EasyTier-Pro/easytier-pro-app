@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:auto_updater/auto_updater.dart';
 import 'package:easytier_pro_app/src/desktop/app_update_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -53,6 +54,45 @@ void main() {
         'https://gitee.com/EasyTier-Pro/easytier-pro-app/releases/download/latest/appcast.xml',
         'https://gitee.com/EasyTier-Pro/easytier-pro-app/releases/download/latest/appcast.xml',
       ]);
+    });
+
+    test('quits through configured handler before installing update', () async {
+      var quitCount = 0;
+      final updateDriver = _RecordingAppUpdateDriver();
+      final service = AppUpdateService(
+        supportedPlatformName: () => 'Windows',
+        updateDriver: updateDriver,
+        httpClient: MockClient(
+          (_) async => http.Response(
+            '<rss><channel><item><enclosure url="https://example/download" /></item></channel></rss>',
+            200,
+          ),
+        ),
+        onBeforeQuitForUpdate: () async {
+          quitCount++;
+        },
+      );
+
+      final initialize = service.initialize();
+      await updateDriver.backgroundCheckStarted.future;
+      updateDriver.backgroundCheckRelease.complete();
+      await initialize;
+
+      expect(updateDriver.listenerCount, 1);
+
+      updateDriver.emitBeforeQuitForUpdate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(quitCount, 1);
+
+      updateDriver.emitBeforeQuitForUpdate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(quitCount, 1);
+
+      service.dispose();
+
+      expect(updateDriver.listenerCount, 0);
     });
   });
 
@@ -123,9 +163,22 @@ void main() {
 
 class _RecordingAppUpdateDriver implements AppUpdateDriver {
   final List<String> calls = <String>[];
+  final List<UpdaterListener> listeners = <UpdaterListener>[];
   final Completer<void> backgroundCheckStarted = Completer<void>();
   final Completer<void> backgroundCheckRelease = Completer<void>();
   final Completer<void> manualCheckStarted = Completer<void>();
+
+  int get listenerCount => listeners.length;
+
+  @override
+  void addListener(UpdaterListener listener) {
+    listeners.add(listener);
+  }
+
+  @override
+  void removeListener(UpdaterListener listener) {
+    listeners.remove(listener);
+  }
 
   @override
   Future<void> setFeedURL(String feedUrl) async {
@@ -146,5 +199,11 @@ class _RecordingAppUpdateDriver implements AppUpdateDriver {
       return;
     }
     manualCheckStarted.complete();
+  }
+
+  void emitBeforeQuitForUpdate() {
+    for (final listener in List<UpdaterListener>.of(listeners)) {
+      listener.onUpdaterBeforeQuitForUpdate(null);
+    }
   }
 }

@@ -18,6 +18,8 @@ class TrayConnectionAction {
   final Future<void> Function()? onSelected;
 }
 
+enum AppExitReason { user, update }
+
 abstract class TraySupport {
   Future<void> initialize();
 
@@ -25,7 +27,7 @@ abstract class TraySupport {
 
   Future<void> showWindow();
 
-  Future<void> quitApp();
+  Future<void> quitApp({AppExitReason reason = AppExitReason.user});
 
   Future<void> updateCoreStatus(CoreRunStatus status);
 

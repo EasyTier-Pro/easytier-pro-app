@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
@@ -19,23 +20,29 @@ const List<String> _defaultAppcastFeedUrls = [
   'https://github.com/EasyTier-Pro/easytier-pro-app/releases/latest/download/appcast.xml',
 ];
 
-class AppUpdateService {
+class AppUpdateService implements UpdaterListener {
   AppUpdateService({
     this.httpClient,
     this.updateDriver = const AutoUpdaterDriver(),
     String? Function()? supportedPlatformName,
+    this.onBeforeQuitForUpdate,
   }) : _supportedPlatformNameOverride = supportedPlatformName;
 
   final http.Client? httpClient;
   final AppUpdateDriver updateDriver;
+  final Future<void> Function()? onBeforeQuitForUpdate;
   final String? Function()? _supportedPlatformNameOverride;
+  final AppLogger _logger = AppLogger.instance;
   Future<void> _updateOperation = Future<void>.value();
+  bool _listeningForUpdateEvents = false;
+  bool _quitForUpdateRequested = false;
 
   Future<void> initialize() async {
     final platform = _supportedPlatformName;
     if (platform == null) {
       return;
     }
+    _ensureListeningForUpdateEvents();
 
     await _runSerialized(
       () async {
@@ -146,11 +153,74 @@ class AppUpdateService {
         AppUpdateCheckStatus.unsupportedPlatform,
       );
     }
+    _ensureListeningForUpdateEvents();
 
     return _runSerializedCheck(
       () => _checkForUpdatesOnSupportedPlatform(platform),
     );
   }
+
+  void dispose() {
+    if (!_listeningForUpdateEvents) {
+      return;
+    }
+
+    updateDriver.removeListener(this);
+    _listeningForUpdateEvents = false;
+  }
+
+  void _ensureListeningForUpdateEvents() {
+    if (_listeningForUpdateEvents) {
+      return;
+    }
+
+    updateDriver.addListener(this);
+    _listeningForUpdateEvents = true;
+  }
+
+  @override
+  void onUpdaterBeforeQuitForUpdate(AppcastItem? appcastItem) {
+    if (_quitForUpdateRequested) {
+      return;
+    }
+
+    final quitForUpdate = onBeforeQuitForUpdate;
+    if (quitForUpdate == null) {
+      _logger.warn(
+        'app.update',
+        'Update requested application quit but no quit handler is configured',
+      );
+      return;
+    }
+
+    _quitForUpdateRequested = true;
+    _logger.info('app.update', 'Quitting application before installing update');
+    unawaited(
+      quitForUpdate().catchError((Object error, StackTrace stack) {
+        _quitForUpdateRequested = false;
+        _logger.error(
+          'app.update',
+          'Failed to quit application before installing update',
+          context: {'error': error.toString(), 'stack': stack.toString()},
+        );
+      }),
+    );
+  }
+
+  @override
+  void onUpdaterCheckingForUpdate(Appcast? appcast) {}
+
+  @override
+  void onUpdaterError(UpdaterError? error) {}
+
+  @override
+  void onUpdaterUpdateAvailable(AppcastItem? appcastItem) {}
+
+  @override
+  void onUpdaterUpdateDownloaded(AppcastItem? appcastItem) {}
+
+  @override
+  void onUpdaterUpdateNotAvailable(UpdaterError? error) {}
 
   int get _normalizedCheckIntervalSeconds {
     if (_updateCheckIntervalSeconds == 0) {
@@ -251,6 +321,10 @@ class AppUpdateService {
 }
 
 abstract class AppUpdateDriver {
+  void addListener(UpdaterListener listener);
+
+  void removeListener(UpdaterListener listener);
+
   Future<void> setFeedURL(String feedUrl);
 
   Future<void> setScheduledCheckInterval(int interval);
@@ -260,6 +334,16 @@ abstract class AppUpdateDriver {
 
 class AutoUpdaterDriver implements AppUpdateDriver {
   const AutoUpdaterDriver();
+
+  @override
+  void addListener(UpdaterListener listener) {
+    autoUpdater.addListener(listener);
+  }
+
+  @override
+  void removeListener(UpdaterListener listener) {
+    autoUpdater.removeListener(listener);
+  }
 
   @override
   Future<void> setFeedURL(String feedUrl) {

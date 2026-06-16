@@ -62,10 +62,13 @@ Future<void> main() async {
     authService: authService,
     appClientReporter: appClientReporter,
   );
-  final appUpdateService = AppUpdateService();
   final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
   final traySupport = createTraySupport(
     windowBehaviorPreferences: windowBehaviorPreferences,
+  );
+  final appUpdateService = AppUpdateService(
+    onBeforeQuitForUpdate: () =>
+        traySupport.quitApp(reason: AppExitReason.update),
   );
 
   await traySupport.initialize();
@@ -124,6 +127,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
+    widget.appUpdateService.dispose();
     unawaited(widget.traySupport.dispose());
     super.dispose();
   }
