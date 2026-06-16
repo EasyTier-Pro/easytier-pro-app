@@ -67,6 +67,38 @@ class _DesktopCoreStatus {
   }
 }
 
+enum CoreEngineVersionRelation {
+  unknown,
+  current,
+  updateAvailable,
+  aheadOfConsole,
+}
+
+class CoreEngineVersionStatus {
+  const CoreEngineVersionStatus({
+    required this.relation,
+    this.installedVersion,
+    this.consoleVersion,
+    this.checkedAt,
+  });
+
+  final CoreEngineVersionRelation relation;
+  final String? installedVersion;
+  final String? consoleVersion;
+  final DateTime? checkedAt;
+
+  bool get updateAvailable =>
+      relation == CoreEngineVersionRelation.updateAvailable;
+
+  bool get hasVersionInfo =>
+      installedVersion?.isNotEmpty == true ||
+      consoleVersion?.isNotEmpty == true;
+
+  static const CoreEngineVersionStatus unknown = CoreEngineVersionStatus(
+    relation: CoreEngineVersionRelation.unknown,
+  );
+}
+
 class CoreNetworkTrafficTotals {
   const CoreNetworkTrafficTotals({
     required this.runtimeNetworkName,

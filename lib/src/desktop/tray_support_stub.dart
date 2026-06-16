@@ -20,6 +20,9 @@ class _NoopTraySupport implements TraySupport {
 
   @override
   void setConnectionAction(TrayConnectionAction? action) {}
+
+  @override
+  void setEngineAction(TrayEngineAction? action) {}
 }
 
 TraySupport createPlatformTraySupport({

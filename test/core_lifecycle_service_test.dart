@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:easytier_pro_app/src/auth/console_auth_service.dart';
 import 'package:easytier_pro_app/src/core/core_peer_status.dart';
@@ -44,6 +46,426 @@ void main() {
       expect(runtime.ensureRunningCount, 1);
       expect(service.status.value.phase, CoreRunPhase.error);
       expect(service.status.value.message, '当前账号未绑定工作区');
+    });
+
+    test('clears engine version status when workspace switch fails', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.3';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.updateAvailable,
+      );
+
+      runtime.ensureRunningError = StateError('install failed');
+      await service.bindSession(_session('tenant-2'));
+
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.unknown,
+      );
+      expect(service.engineVersionStatus.value.installedVersion, isNull);
+      expect(service.engineVersionStatus.value.consoleVersion, isNull);
+    });
+  });
+
+  group('CoreLifecycleService engine version', () {
+    test('desktop version probe sends sigkill on POSIX timeout', () async {
+      final owner = CoreLifecycleService(
+        authService: _LifecycleAuthService(),
+        runtime: _LifecycleRuntime(),
+      );
+      addTearDown(owner.dispose);
+
+      final process = _VersionProbeProcess(terminateOnSigterm: false);
+      final runtime = DesktopCoreRuntime(
+        owner,
+        processStarter: (_, _) async => process,
+        isWindows: false,
+        versionProbeTimeout: const Duration(milliseconds: 1),
+        versionProbeTerminateTimeout: const Duration(milliseconds: 1),
+      );
+
+      final version = await runtime.readInstalledVersion();
+
+      expect(version, isNull);
+      expect(process.killSignals, [
+        ProcessSignal.sigterm,
+        ProcessSignal.sigkill,
+      ]);
+      expect(process.exited, isTrue);
+    });
+
+    test('desktop version probe uses taskkill on Windows timeout', () async {
+      final owner = CoreLifecycleService(
+        authService: _LifecycleAuthService(),
+        runtime: _LifecycleRuntime(),
+      );
+      addTearDown(owner.dispose);
+
+      final forcedPids = <int>[];
+      final process = _VersionProbeProcess(terminateOnSigterm: false);
+      final runtime = DesktopCoreRuntime(
+        owner,
+        processStarter: (_, _) async => process,
+        windowsProcessTreeKiller: (pid) async {
+          forcedPids.add(pid);
+          process.complete(exitCode: -1);
+          return 0;
+        },
+        isWindows: true,
+        versionProbeTimeout: const Duration(milliseconds: 1),
+        versionProbeTerminateTimeout: const Duration(milliseconds: 1),
+      );
+
+      final version = await runtime.readInstalledVersion();
+
+      expect(version, isNull);
+      expect(process.killSignals, [ProcessSignal.sigterm]);
+      expect(forcedPids, [4242]);
+      expect(process.exited, isTrue);
+    });
+
+    test('compares normalized core versions', () {
+      expect(CoreLifecycleService.compareCoreVersions('v2.6.3', '2.6.4'), -1);
+      expect(
+        CoreLifecycleService.compareCoreVersions('EasyTier 2.6.4', 'v2.6.4'),
+        0,
+      );
+      expect(CoreLifecycleService.compareCoreVersions('v2.7.0', 'v2.6.4'), 1);
+      expect(
+        CoreLifecycleService.compareCoreVersions('unknown', 'v2.6.4'),
+        isNull,
+      );
+    });
+
+    test('publishes update available when console version is newer', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.3';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.updateAvailable);
+      expect(versionStatus.installedVersion, 'v2.6.3');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
+      expect(runtime.ensureRunningCount, 0);
+    });
+
+    test('repair publishes current console version after reinstall', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.3';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.updateAvailable,
+      );
+
+      await service.repair();
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.current);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
+      expect(runtime.ensureRunningCount, 1);
+    });
+
+    test('version check uses read-only console version lookup', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      authService.bootstrapVersion = '2.6.5';
+      runtime.installedVersion = '2.6.4';
+      await service.checkEngineVersion();
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(authService.prepareBootstrapCount, 1);
+      expect(authService.fetchVersionCount, 1);
+      expect(versionStatus.relation, CoreEngineVersionRelation.updateAvailable);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.5');
+    });
+
+    test('version check does not reuse stale installed version', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.3';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.updateAvailable,
+      );
+
+      authService.bootstrapVersion = '2.6.5';
+      runtime.connected = false;
+      await service.checkEngineVersion();
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.unknown);
+      expect(versionStatus.installedVersion, isNull);
+      expect(versionStatus.consoleVersion, 'v2.6.5');
+    });
+
+    test('version check does not block repair lifecycle action', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      authService.versionCompleter = Completer<String>();
+      unawaited(service.checkEngineVersion());
+      await Future<void>.delayed(Duration.zero);
+
+      final repair = service.repair();
+      await repair.timeout(const Duration(seconds: 1));
+
+      expect(runtime.ensureRunningCount, 1);
+      authService.versionCompleter!.complete('2.6.4');
+      await service.checkEngineVersion();
+    });
+
+    test(
+      'pending version check is ignored after repair publishes version',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime()
+          ..connected = true
+          ..installedVersion = '2.6.3';
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+          engineVersionCheckInterval: Duration.zero,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+
+        final staleVersion = Completer<String>();
+        authService.versionCompleter = staleVersion;
+        final check = service.checkEngineVersion();
+        await Future<void>.delayed(Duration.zero);
+
+        authService.versionCompleter = null;
+        await service.repair();
+        staleVersion.complete('2.6.5');
+        await check;
+
+        final versionStatus = service.engineVersionStatus.value;
+        expect(versionStatus.relation, CoreEngineVersionRelation.current);
+        expect(versionStatus.installedVersion, 'v2.6.4');
+        expect(versionStatus.consoleVersion, 'v2.6.4');
+      },
+    );
+
+    test('version check started during repair is ignored', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.3';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      final repairGate = Completer<void>();
+      runtime.ensureRunningCompleter = repairGate;
+      final repair = service.repair();
+      await _waitUntil(() => runtime.ensureRunningCount == 1);
+
+      final staleVersion = Completer<String>();
+      authService.versionCompleter = staleVersion;
+      final check = service.checkEngineVersion();
+      await Future<void>.delayed(Duration.zero);
+
+      repairGate.complete();
+      await repair;
+      staleVersion.complete('2.6.5');
+      await check;
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.current);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
+    });
+
+    test('pending version check is ignored after logout', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      final staleVersion = Completer<String>();
+      authService.versionCompleter = staleVersion;
+      final check = service.checkEngineVersion();
+      await Future<void>.delayed(Duration.zero);
+
+      await service.onLogout();
+      authService.versionCompleter!.complete('2.6.5');
+      await check;
+
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.unknown,
+      );
+      expect(service.engineVersionStatus.value.consoleVersion, isNull);
+    });
+
+    test('pending version check is ignored after workspace switch', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      final staleVersion = Completer<String>();
+      authService.versionCompleter = staleVersion;
+      final check = service.checkEngineVersion();
+      await Future<void>.delayed(Duration.zero);
+
+      authService.versionCompleter = null;
+      authService.bootstrapVersion = '2.6.4';
+      await service.bindSession(_session('tenant-2'));
+
+      staleVersion.complete('2.6.5');
+      await check;
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.current);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
+    });
+
+    test('timed out version check cannot publish late result', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+        engineVersionCheckTimeout: const Duration(milliseconds: 1),
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      authService.bootstrapVersion = '2.6.5';
+      authService.versionCompleter = Completer<String>();
+      await service.checkEngineVersion();
+
+      authService.versionCompleter!.complete('2.6.5');
+      await Future<void>.delayed(Duration.zero);
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.current);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
+    });
+
+    test('old timeout does not invalidate newer version check', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+        engineVersionCheckTimeout: const Duration(milliseconds: 1),
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      final oldVersion = Completer<String>();
+      authService.bootstrapVersion = '2.6.5';
+      authService.versionCompleter = oldVersion;
+      await service.checkEngineVersion();
+
+      authService.versionCompleter = null;
+      authService.bootstrapVersion = '2.6.4';
+      await service.checkEngineVersion();
+
+      oldVersion.complete('2.6.5');
+      await Future<void>.delayed(Duration.zero);
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(versionStatus.relation, CoreEngineVersionRelation.current);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.4');
     });
   });
 
@@ -203,6 +625,52 @@ void main() {
       expect(runtime.forceReinstallValues, [false, true]);
       expect(service.status.value.phase, CoreRunPhase.running);
     });
+
+    test(
+      'pending version check is ignored after elevated repair publishes version',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime()
+          ..connected = true
+          ..installedVersion = '2.6.3'
+          ..supportsElevationRepairValue = true;
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+          engineVersionCheckInterval: Duration.zero,
+          elevatedRepairRunner: (bootstrap) async {
+            return const <String, dynamic>{
+              'event': 'finished',
+              'data': <String, dynamic>{
+                'machine_id': 'machine-1',
+                'cli_path': '/usr/local/bin/easytier-cli',
+              },
+            };
+          },
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        expect(
+          service.engineVersionStatus.value.relation,
+          CoreEngineVersionRelation.updateAvailable,
+        );
+
+        final staleVersion = Completer<String>();
+        authService.versionCompleter = staleVersion;
+        final check = service.checkEngineVersion();
+        await Future<void>.delayed(Duration.zero);
+
+        await service.repairWithElevation();
+        staleVersion.complete('2.6.5');
+        await check;
+
+        final versionStatus = service.engineVersionStatus.value;
+        expect(versionStatus.relation, CoreEngineVersionRelation.current);
+        expect(versionStatus.installedVersion, 'v2.6.4');
+        expect(versionStatus.consoleVersion, 'v2.6.4');
+      },
+    );
   });
 
   group('CoreLifecycleService auth invalidation', () {
@@ -725,10 +1193,17 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   var ensureRunningCount = 0;
   var readStatusCount = 0;
   var stopCount = 0;
+  var installedVersion = '2.6.4';
+  Object? ensureRunningError;
+  Completer<void>? ensureRunningCompleter;
+  var supportsElevationRepairValue = false;
   final forceReinstallValues = <bool>[];
 
   @override
   Stream<CoreRuntimeEvent> get events => _events.stream;
+
+  @override
+  bool get supportsElevationRepair => supportsElevationRepairValue;
 
   void emit(CoreRuntimeEvent event) {
     _events.add(event);
@@ -742,11 +1217,12 @@ class _LifecycleRuntime extends CorePlatformRuntime {
     if (!connected) {
       return null;
     }
-    return const CoreRuntimeStartResult(
+    return CoreRuntimeStartResult(
       phase: CoreRunPhase.running,
       message: '连接引擎运行中',
       machineId: 'machine-1',
-      details: 'EasyTier 2.6.4',
+      details: 'EasyTier $installedVersion',
+      coreVersion: installedVersion,
     );
   }
 
@@ -757,13 +1233,28 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   }) async {
     ensureRunningCount++;
     forceReinstallValues.add(forceReinstall);
+    final completer = ensureRunningCompleter;
+    if (completer != null) {
+      await completer.future;
+    }
+    final error = ensureRunningError;
+    if (error != null) {
+      throw error;
+    }
     connected = true;
-    return const CoreRuntimeStartResult(
+    installedVersion = bootstrap.version;
+    return CoreRuntimeStartResult(
       phase: CoreRunPhase.running,
       message: '连接引擎运行中',
       machineId: 'machine-1',
-      details: 'EasyTier 2.6.4',
+      details: 'EasyTier $installedVersion',
+      coreVersion: installedVersion,
     );
+  }
+
+  @override
+  Future<String?> readInstalledVersion() async {
+    return connected ? installedVersion : null;
   }
 
   @override
@@ -796,8 +1287,69 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   }
 }
 
+class _VersionProbeProcess implements Process {
+  _VersionProbeProcess({this.terminateOnSigterm = true});
+
+  final bool terminateOnSigterm;
+  final killSignals = <ProcessSignal>[];
+  final _exitCode = Completer<int>();
+  final _stdout = StreamController<List<int>>();
+  final _stderr = StreamController<List<int>>();
+  final _stdin = StreamController<List<int>>();
+
+  bool get exited => _exitCode.isCompleted;
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  int get pid => 4242;
+
+  @override
+  IOSink get stdin => IOSink(_stdin.sink);
+
+  @override
+  Stream<List<int>> get stderr => _stderr.stream;
+
+  @override
+  Stream<List<int>> get stdout => _stdout.stream;
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    killSignals.add(signal);
+    final shouldExit = signal == ProcessSignal.sigkill || terminateOnSigterm;
+    if (shouldExit) {
+      complete(exitCode: -1);
+    }
+    return true;
+  }
+
+  void complete({
+    required int exitCode,
+    String stdoutText = '',
+    String stderrText = '',
+  }) {
+    if (_exitCode.isCompleted) {
+      return;
+    }
+    if (stdoutText.isNotEmpty) {
+      _stdout.add(utf8.encode(stdoutText));
+    }
+    if (stderrText.isNotEmpty) {
+      _stderr.add(utf8.encode(stderrText));
+    }
+    unawaited(_stdout.close());
+    unawaited(_stderr.close());
+    unawaited(_stdin.close());
+    _exitCode.complete(exitCode);
+  }
+}
+
 class _LifecycleAuthService implements AuthService {
   var prepareBootstrapCount = 0;
+  var fetchVersionCount = 0;
+  var bootstrapVersion = '2.6.4';
+  Completer<String>? versionCompleter;
   Object? bootstrapError;
   final workspaceIds = <String>[];
 
@@ -916,6 +1468,24 @@ class _LifecycleAuthService implements AuthService {
   }
 
   @override
+  Future<String> fetchRecommendedCoreVersion({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    fetchVersionCount++;
+    workspaceIds.add(workspaceId);
+    final error = bootstrapError;
+    if (error != null) {
+      throw error;
+    }
+    final completer = versionCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
+    return bootstrapVersion;
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -926,9 +1496,9 @@ class _LifecycleAuthService implements AuthService {
     if (error != null) {
       throw error;
     }
-    return const CoreBootstrapConfig(
+    return CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
-      version: '2.6.4',
+      version: bootstrapVersion,
       configServer: 'tcp://127.0.0.1:22020',
     );
   }

@@ -258,11 +258,10 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                                   ),
                                   title: Text(
                                     '导出诊断日志',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
                                   ),
                                   onPress: () {
                                     unawaited(controller.hide());
@@ -278,11 +277,12 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                                     ),
                                     title: Text(
                                       '打开日志目录',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                     onPress: () {
                                       unawaited(controller.hide());
@@ -342,17 +342,17 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                         child: SingleChildScrollView(
                           child: SelectableText(
                             entries.map((entry) => entry.humanLine).join('\n'),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontFamily: 'monospace',
-                              color: const Color(0xFF374151),
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  color: const Color(0xFF374151),
+                                ),
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-
               ],
             ),
           ),
@@ -493,7 +493,8 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                   canOpenLogDirectory: _canOpenLogDirectory,
                   onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
                   onExportLogs: () => unawaited(_exportLogs(context)),
-                  onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
+                  onOpenLogDirectory: () =>
+                      unawaited(_openLogDirectory(context)),
                   onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
                   onCopyText: (value) => unawaited(_copyText(context, value)),
                 ),
@@ -552,9 +553,9 @@ class _SettingsSidebar extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12, bottom: 12),
             child: Text(
               '设置',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
           for (final category in categories)
@@ -613,7 +614,9 @@ class _SettingsSidebarItem extends StatelessWidget {
                     child: Text(
                       category.title,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: selected ? Colors.white : const Color(0xFF1C1C1E),
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFF1C1C1E),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -765,9 +768,9 @@ class _SettingsSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-        fontWeight: FontWeight.w800,
-      ),
+      style: Theme.of(
+        context,
+      ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 }
@@ -915,174 +918,260 @@ class _CoreSettingsSection extends StatelessWidget {
     return ValueListenableBuilder<CoreRunStatus>(
       valueListenable: coreLifecycleService.status,
       builder: (context, status, _) {
-        final running = status.phase == CoreRunPhase.running;
-        final needsVpnPermission =
-            status.phase == CoreRunPhase.needsVpnPermission;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FCard.raw(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+        return ValueListenableBuilder<CoreEngineVersionStatus>(
+          valueListenable: coreLifecycleService.engineVersionStatus,
+          builder: (context, engineVersionStatus, _) {
+            final running = status.phase == CoreRunPhase.running;
+            final needsVpnPermission =
+                status.phase == CoreRunPhase.needsVpnPermission;
+            final versionHint = _coreEngineVersionHint(engineVersionStatus);
+            final actionLabel = _coreEngineSettingsActionLabel(
+              engineVersionStatus,
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FCard.raw(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _StatusDot(
-                          online: running,
-                          color:
-                              status.phase == CoreRunPhase.needsElevation ||
+                        Row(
+                          children: [
+                            _StatusDot(
+                              online: running,
+                              color:
+                                  status.phase == CoreRunPhase.needsElevation ||
                                       needsVpnPermission
                                   ? const Color(0xFFF59E0B)
                                   : null,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            status.message,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (status.machineId != null &&
-                        status.machineId!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _SettingsInfoRow(
-                        label: '设备 ID',
-                        value: status.machineId!,
-                        onCopy: onCopyText,
-                      ),
-                    ],
-                    if (status.lastError != null &&
-                        status.lastError!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8F9FB),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '错误信息',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFF737373)),
                             ),
-                            const SizedBox(height: 4),
-                            Row(
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                status.message,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (status.machineId != null &&
+                            status.machineId!.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _SettingsInfoRow(
+                            label: '设备 ID',
+                            value: status.machineId!,
+                            onCopy: onCopyText,
+                          ),
+                        ],
+                        if (engineVersionStatus.installedVersion != null) ...[
+                          const SizedBox(height: 12),
+                          _SettingsInfoRow(
+                            label: '当前版本',
+                            value: engineVersionStatus.installedVersion!,
+                            onCopy: onCopyText,
+                          ),
+                        ],
+                        if (engineVersionStatus.consoleVersion != null) ...[
+                          const SizedBox(height: 12),
+                          _SettingsInfoRow(
+                            label: '控制台版本',
+                            value: engineVersionStatus.consoleVersion!,
+                            onCopy: onCopyText,
+                          ),
+                        ],
+                        if (versionHint != null) ...[
+                          const SizedBox(height: 12),
+                          _CoreEngineVersionNotice(
+                            status: engineVersionStatus,
+                            message: versionHint,
+                          ),
+                        ],
+                        if (status.lastError != null &&
+                            status.lastError!.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8F9FB),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
+                              ),
+                            ),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    status.lastError!,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color:
-                                              status.phase ==
+                                Text(
+                                  '错误信息',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF737373),
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        status.lastError!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  status.phase ==
                                                           CoreRunPhase
                                                               .needsElevation ||
                                                       needsVpnPermission
                                                   ? const Color(0xFFB45309)
                                                   : const Color(0xFFDC2626),
-                                        ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                _ControlSelectionBoundary(
-                                  child: FTooltip(
-                                    tipBuilder:
-                                        (context, controller) =>
-                                            const Text('复制错误'),
-                                    child: FButton(
-                                      key: const ValueKey<String>(
-                                        'settings-core-error-copy',
+                                            ),
                                       ),
-                                      variant: .ghost,
-                                      size: .xs,
-                                      style: const .delta(
-                                        contentStyle: .delta(
-                                          padding: .value(EdgeInsets.zero),
-                                        ),
-                                      ),
-                                      onPress: () => onCopyText(status.lastError!),
-                                      child: const Icon(Icons.copy, size: 14),
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    _ControlSelectionBoundary(
+                                      child: FTooltip(
+                                        tipBuilder: (context, controller) =>
+                                            const Text('复制错误'),
+                                        child: FButton(
+                                          key: const ValueKey<String>(
+                                            'settings-core-error-copy',
+                                          ),
+                                          variant: .ghost,
+                                          size: .xs,
+                                          style: const .delta(
+                                            contentStyle: .delta(
+                                              padding: .value(EdgeInsets.zero),
+                                            ),
+                                          ),
+                                          onPress: () =>
+                                              onCopyText(status.lastError!),
+                                          child: const Icon(
+                                            Icons.copy,
+                                            size: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (status.phase == CoreRunPhase.needsElevation ||
-                        needsVpnPermission) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        needsVpnPermission
-                            ? '需要 VPN 授权'
-                            : '需要管理员权限安装引擎',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF737373),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                if (status.phase == CoreRunPhase.needsElevation) ...[
-                  _ControlSelectionBoundary(
-                    child: FButton(
-                      onPress: () => unawaited(
-                        coreLifecycleService.repairWithElevation(),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.admin_panel_settings, size: 16),
-                          SizedBox(width: 8),
-                          Text('以管理员身份运行'),
+                          ),
                         ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                _ControlSelectionBoundary(
-                  child: FButton(
-                    variant: .outline,
-                    onPress: () => unawaited(coreLifecycleService.repair()),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.refresh, size: 16),
-                        SizedBox(width: 8),
-                        Text('重试 / 修复'),
+                        if (status.phase == CoreRunPhase.needsElevation ||
+                            needsVpnPermission) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            needsVpnPermission ? '需要 VPN 授权' : '需要管理员权限安装引擎',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFF737373)),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    if (status.phase == CoreRunPhase.needsElevation) ...[
+                      _ControlSelectionBoundary(
+                        child: FButton(
+                          onPress: () => unawaited(
+                            coreLifecycleService.repairWithElevation(),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.admin_panel_settings, size: 16),
+                              SizedBox(width: 8),
+                              Text('以管理员身份运行'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    _ControlSelectionBoundary(
+                      child: FButton(
+                        variant: .outline,
+                        onPress: () => unawaited(coreLifecycleService.repair()),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.refresh, size: 16),
+                            const SizedBox(width: 8),
+                            Text(actionLabel),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
+    );
+  }
+}
+
+class _CoreEngineVersionNotice extends StatelessWidget {
+  const _CoreEngineVersionNotice({required this.status, required this.message});
+
+  final CoreEngineVersionStatus status;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final updateAvailable = status.updateAvailable;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: updateAvailable
+            ? const Color(0xFFFFF7ED)
+            : const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: updateAvailable
+              ? const Color(0xFFFED7AA)
+              : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            updateAvailable ? Icons.system_update_alt : Icons.info_outline,
+            size: 16,
+            color: updateAvailable
+                ? const Color(0xFFC2410C)
+                : const Color(0xFF737373),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: updateAvailable
+                    ? const Color(0xFF9A3412)
+                    : const Color(0xFF737373),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1131,9 +1220,9 @@ class _AppSettingsSection extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   _updateSupportHint(),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF737373),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 _ControlSelectionBoundary(
@@ -1307,15 +1396,15 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
           ),
           title: Text(
             '查看日志',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
             '在弹窗中查看最近的应用日志',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF737373),
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
           ),
           suffix: const Icon(
             Icons.chevron_right,
@@ -1332,15 +1421,15 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
           ),
           title: Text(
             '导出诊断日志',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
             '将日志打包为文件以便分享',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF737373),
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
           ),
           suffix: const Icon(
             Icons.chevron_right,
@@ -1358,15 +1447,15 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
             ),
             title: Text(
               '打开日志目录',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
               '在文件管理器中查看日志文件夹',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF737373),
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
             ),
             suffix: const Icon(
               Icons.chevron_right,

@@ -1,9 +1,45 @@
 part of 'core_lifecycle_service.dart';
 
+typedef DesktopProcessStarter =
+    Future<Process> Function(String executable, List<String> arguments);
+
+typedef DesktopProcessTreeKiller = Future<int> Function(int pid);
+
 class DesktopCoreRuntime extends CorePlatformRuntime {
-  DesktopCoreRuntime(this._owner);
+  DesktopCoreRuntime(
+    this._owner, {
+    DesktopProcessStarter? processStarter,
+    DesktopProcessTreeKiller? windowsProcessTreeKiller,
+    bool? isWindows,
+    this.versionProbeTimeout = const Duration(seconds: 10),
+    this.versionProbeTerminateTimeout = const Duration(seconds: 1),
+    this.versionProbeForceKillTimeout = const Duration(seconds: 2),
+  }) : _processStarter = processStarter ?? _startProcess,
+       _windowsProcessTreeKiller =
+           windowsProcessTreeKiller ?? _killWindowsProcessTree,
+       _isWindowsOverride = isWindows;
 
   final CoreLifecycleService _owner;
+  final DesktopProcessStarter _processStarter;
+  final DesktopProcessTreeKiller _windowsProcessTreeKiller;
+  final bool? _isWindowsOverride;
+  final Duration versionProbeTimeout;
+  final Duration versionProbeTerminateTimeout;
+  final Duration versionProbeForceKillTimeout;
+
+  bool get _isWindows => _isWindowsOverride ?? Platform.isWindows;
+
+  static Future<Process> _startProcess(
+    String executable,
+    List<String> arguments,
+  ) {
+    return Process.start(executable, arguments);
+  }
+
+  static Future<int> _killWindowsProcessTree(int pid) async {
+    final result = await Process.run('taskkill', ['/PID', '$pid', '/T', '/F']);
+    return result.exitCode;
+  }
 
   @override
   bool get supportsElevationRepair =>
@@ -26,6 +62,7 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
         message: '本机设备已就绪',
         machineId: machineId,
         details: 'EasyTier ${desktopStatus?.version ?? bootstrap.version}',
+        coreVersion: desktopStatus?.version ?? bootstrap.version,
       );
     }
     return null;
@@ -77,7 +114,111 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
       message: machineId == null || machineId.isEmpty ? '连接引擎运行中' : '本机设备已就绪',
       machineId: machineId,
       details: 'EasyTier ${bootstrap.version}',
+      coreVersion: bootstrap.version,
     );
+  }
+
+  @override
+  Future<String?> readInstalledVersion() async {
+    final cliExecutable = _owner._resolveCliExecutable();
+    _owner._logger.debug(
+      'core.version',
+      'Reading EasyTier CLI version',
+      context: {'executable': cliExecutable},
+    );
+    Process? process;
+    try {
+      process = await _processStarter(cliExecutable, const ['--version']);
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        versionProbeTimeout,
+        onTimeout: () async {
+          await _terminateTimedOutVersionProbe(process!);
+          throw TimeoutException('读取 EasyTier CLI 版本超时');
+        },
+      );
+      final output = [
+        (await stdoutFuture).trim(),
+        (await stderrFuture).trim(),
+      ].where((line) => line.isNotEmpty).join('\n');
+      if (exitCode != 0) {
+        _owner._logger.warn(
+          'core.version',
+          'EasyTier CLI version command failed',
+          context: {'exit_code': exitCode, 'output': output},
+        );
+        return null;
+      }
+      return output;
+    } catch (error) {
+      _owner._logger.warn(
+        'core.version',
+        'Failed to read EasyTier CLI version',
+        context: {'error': error.toString()},
+      );
+      return null;
+    }
+  }
+
+  Future<void> _terminateTimedOutVersionProbe(Process process) async {
+    process.kill();
+    if (await _waitForVersionProbeExit(process)) {
+      return;
+    }
+
+    if (_isWindows) {
+      await _forceKillWindowsVersionProbe(process);
+      if (await _waitForVersionProbeExit(process)) {
+        return;
+      }
+      _owner._logger.warn(
+        'core.version',
+        'EasyTier CLI version process did not exit after taskkill',
+        context: {'pid': process.pid},
+      );
+      return;
+    }
+
+    process.kill(ProcessSignal.sigkill);
+    if (!await _waitForVersionProbeExit(process)) {
+      _owner._logger.warn(
+        'core.version',
+        'EasyTier CLI version process did not exit after SIGKILL',
+        context: {'pid': process.pid},
+      );
+    }
+  }
+
+  Future<bool> _waitForVersionProbeExit(Process process) async {
+    try {
+      await process.exitCode.timeout(versionProbeTerminateTimeout);
+      return true;
+    } on TimeoutException {
+      return false;
+    }
+  }
+
+  Future<void> _forceKillWindowsVersionProbe(Process process) async {
+    try {
+      final exitCode = await _windowsProcessTreeKiller(
+        process.pid,
+      ).timeout(versionProbeForceKillTimeout);
+      if (exitCode == 0) {
+        return;
+      }
+      _owner._logger.warn(
+        'core.version',
+        'taskkill failed for EasyTier CLI version process',
+        context: {'pid': process.pid, 'exit_code': exitCode},
+      );
+    } catch (error) {
+      _owner._logger.warn(
+        'core.version',
+        'Failed to taskkill EasyTier CLI version process',
+        context: {'pid': process.pid, 'error': error.toString()},
+      );
+    }
   }
 
   @override

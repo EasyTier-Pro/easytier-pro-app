@@ -23,6 +23,7 @@ class _DesktopTraySupport extends TraySupport
   bool _quitRequested = false;
   bool _trayMenuVisible = false;
   TrayConnectionAction? _connectionAction;
+  TrayEngineAction? _engineAction;
   final AppLogger _logger = AppLogger.instance;
   final WindowBehaviorPreferences _windowBehaviorPreferences;
 
@@ -115,6 +116,14 @@ class _DesktopTraySupport extends TraySupport
   }
 
   @override
+  void setEngineAction(TrayEngineAction? action) {
+    _engineAction = action;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
+
+  @override
   void onTrayIconMouseDown() {
     unawaited(showWindow());
   }
@@ -162,6 +171,7 @@ class _DesktopTraySupport extends TraySupport
           workspaceName: '未登录',
         );
     final workspaceName = connectionAction.workspaceName?.trim();
+    final engineAction = _engineAction;
 
     await trayManager.setContextMenu(
       Menu(
@@ -183,6 +193,24 @@ class _DesktopTraySupport extends TraySupport
           ),
           if (workspaceName != null && workspaceName.isNotEmpty)
             MenuItem(label: '工作区：$workspaceName', disabled: true),
+          if (engineAction != null) ...[
+            MenuItem.separator(),
+            MenuItem(
+              label: engineAction.label,
+              disabled: !engineAction.enabled,
+              onClick: (_) {
+                _logger.info(
+                  'tray',
+                  'Engine action clicked from tray',
+                  context: {'label': engineAction.label},
+                );
+                final onSelected = engineAction.onSelected;
+                if (engineAction.enabled && onSelected != null) {
+                  unawaited(onSelected());
+                }
+              },
+            ),
+          ],
           MenuItem.separator(),
           MenuItem(
             label: '显示主窗口',

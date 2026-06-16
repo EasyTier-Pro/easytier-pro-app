@@ -50,6 +50,8 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
       children: [
         _StatusBadge(
           statusListenable: widget.coreLifecycleService.status,
+          engineVersionListenable:
+              widget.coreLifecycleService.engineVersionStatus,
           joinedCount: joinedNetworks.length,
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,

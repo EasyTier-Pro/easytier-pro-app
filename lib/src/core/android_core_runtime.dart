@@ -104,6 +104,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         message: 'Android 连接引擎运行中',
         machineId: machineId,
         details: 'EasyTier ${bootstrap.version}',
+        coreVersion: bootstrap.version,
       );
     } on PlatformException catch (error) {
       if (error.code == 'JNI_UNAVAILABLE') {
@@ -147,6 +148,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         machineId: machineId,
         details: 'EasyTier ${bootstrap.version}',
         lastError: 'Android 需要用户授权后才能建立虚拟网卡',
+        coreVersion: bootstrap.version,
       );
     }
     unawaited(_startPendingVpns());
@@ -156,6 +158,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       message: 'Android 连接引擎运行中',
       machineId: machineId,
       details: 'EasyTier ${bootstrap.version}',
+      coreVersion: bootstrap.version,
     );
   }
 

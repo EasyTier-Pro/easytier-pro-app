@@ -15,26 +15,47 @@ part 'core_platform_runtime.dart';
 part 'desktop_core_runtime.dart';
 part 'android_core_runtime.dart';
 
+@visibleForTesting
+typedef CoreElevatedRepairRunner =
+    Future<Map<String, dynamic>> Function(CoreBootstrapConfig bootstrap);
+
 class CoreLifecycleService {
   CoreLifecycleService({
     required this.authService,
     CorePlatformRuntime? runtime,
     this.appClientReporter,
-  }) : status = ValueNotifier<CoreRunStatus>(CoreRunStatus.signedOut) {
+    @visibleForTesting CoreElevatedRepairRunner? elevatedRepairRunner,
+    this.engineVersionCheckInterval = const Duration(hours: 1),
+    this.engineVersionCheckTimeout = const Duration(seconds: 20),
+  }) : status = ValueNotifier<CoreRunStatus>(CoreRunStatus.signedOut),
+       engineVersionStatus = ValueNotifier<CoreEngineVersionStatus>(
+         CoreEngineVersionStatus.unknown,
+       ) {
+    _elevatedRepairRunner = elevatedRepairRunner;
     _runtime = runtime ?? CorePlatformRuntime.current(this);
     _runtimeEvents = _runtime.events.listen(_handleRuntimeEvent);
   }
 
   final AuthService authService;
   final ValueNotifier<CoreRunStatus> status;
+  final ValueNotifier<CoreEngineVersionStatus> engineVersionStatus;
   final AppLogger _logger = AppLogger.instance;
   final AppClientReporter? appClientReporter;
+  final Duration engineVersionCheckInterval;
+  final Duration engineVersionCheckTimeout;
 
   late final CorePlatformRuntime _runtime;
   late final StreamSubscription<CoreRuntimeEvent> _runtimeEvents;
   AuthSession? _session;
   Future<void> _serial = Future<void>.value();
   String? _cliPath;
+  Timer? _engineVersionCheckTimer;
+  Future<void>? _engineVersionCheckInFlight;
+  int _engineVersionCheckGeneration = 0;
+  int _engineVersionCheckPauseDepth = 0;
+  late final CoreElevatedRepairRunner? _elevatedRepairRunner;
+
+  bool get _engineVersionChecksPaused => _engineVersionCheckPauseDepth > 0;
 
   Duration get networkTrafficPollInterval =>
       _runtime.networkTrafficPollInterval;
@@ -45,12 +66,19 @@ class CoreLifecycleService {
     return _enqueue(() async {
       final previousWorkspace = _session?.user.currentWorkspace?.id;
       final nextWorkspace = session.user.currentWorkspace?.id;
+      final versionScopeChanged =
+          _engineVersionScopeForSession(_session) !=
+          _engineVersionScopeForSession(session);
       final workspaceChanged =
           previousWorkspace != null &&
           nextWorkspace != null &&
           previousWorkspace != nextWorkspace;
 
       _session = session;
+      _invalidateEngineVersionChecks();
+      if (versionScopeChanged) {
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+      }
       _logger.info(
         'core',
         'Binding session',
@@ -68,12 +96,18 @@ class CoreLifecycleService {
         );
       }
       await _ensureRunning(forceReinstall: workspaceChanged);
+      if (_session?.user.currentWorkspace != null) {
+        _startEngineVersionCheckTimer();
+      }
     });
   }
 
   Future<void> onLogout() {
     return _enqueue(() async {
       _session = null;
+      _invalidateEngineVersionChecks();
+      _stopEngineVersionCheckTimer();
+      engineVersionStatus.value = CoreEngineVersionStatus.unknown;
       _logger.info('core', 'Logout flow: stopping local engine binding');
       status.value = const CoreRunStatus(
         phase: CoreRunPhase.repairing,
@@ -108,214 +142,253 @@ class CoreLifecycleService {
       if (session == null) {
         _logger.warn('core', 'Repair requested without active session');
         status.value = CoreRunStatus.signedOut;
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
         return;
       }
       _logger.info('core', 'Manual repair requested');
+      _invalidateEngineVersionChecks();
       await _ensureRunning(forceReinstall: true);
     });
   }
 
   Future<void> dispose() async {
+    _invalidateEngineVersionChecks();
+    _stopEngineVersionCheckTimer();
     await _runtimeEvents.cancel();
     await _runtime.dispose();
+    engineVersionStatus.dispose();
     status.dispose();
+  }
+
+  Future<void> checkEngineVersion() {
+    return _startEngineVersionCheck();
   }
 
   Future<void> repairWithElevation() {
     return _enqueue(() async {
-      final session = _session;
-      if (session == null) {
-        _logger.warn(
-          'core',
-          'Elevation repair requested without active session',
-        );
-        status.value = CoreRunStatus.signedOut;
-        return;
-      }
-      if (!_runtime.supportsElevationRepair) {
-        _logger.warn(
-          'core',
-          'Elevation repair is not supported by current runtime',
-          context: {'runtime': _runtime.runtimeType.toString()},
-        );
-        await _ensureRunning(forceReinstall: true);
-        return;
-      }
-
-      final workspace = session.user.currentWorkspace;
-      if (workspace == null) {
-        status.value = const CoreRunStatus(
-          phase: CoreRunPhase.error,
-          message: '当前账号未绑定工作区',
-        );
-        return;
-      }
-
-      status.value = const CoreRunStatus(
-        phase: CoreRunPhase.repairing,
-        message: '正在以管理员身份安装连接引擎...',
-      );
-      _logger.info('core', 'Elevation repair requested');
-
-      File? inputFile;
-      File? outputFile;
-      File? errorFile;
-      File? commandFile;
-      Directory? elevationTempDir;
+      _pauseEngineVersionChecks();
       try {
-        final bootstrap = await authService.prepareCoreBootstrap(
-          accessToken: session.tokenSet.accessToken,
-          workspaceId: workspace.id,
-        );
-
-        elevationTempDir = await Directory.systemTemp.createTemp(
-          'easytier_pro_elevated_',
-        );
-        await _restrictOwnerOnlyPermissions(
-          elevationTempDir,
-          ownerExecutable: true,
-        );
-        inputFile = File(_joinPath(elevationTempDir.path, 'bootstrap.json'));
-        outputFile = File(_joinPath(elevationTempDir.path, 'output.json'));
-        errorFile = File(_joinPath(elevationTempDir.path, 'error.json'));
-
-        final request = {
-          'bootstrap_token': bootstrap.bootstrapToken,
-          'version': bootstrap.version,
-          'config_server': bootstrap.configServer,
-        };
-        await inputFile.writeAsString(jsonEncode(request), encoding: utf8);
-        await _restrictOwnerOnlyPermissions(inputFile);
-
-        final installerPath = _resolveInstallerExecutable();
-        commandFile = await _writeElevatedInstallCommandFile(
-          tempDir: elevationTempDir,
-          installerPath: installerPath,
-          inputFile: inputFile,
-          outputFile: outputFile,
-          errorFile: errorFile,
-        );
-
-        _logger.info(
-          'core.desktop',
-          'Launching elevated installer',
-          context: {
-            'command_file': commandFile.path,
-            'installer': installerPath,
-            'platform': Platform.operatingSystem,
-          },
-        );
-
-        final elevationResult = await _runElevatedInstaller(commandFile.path);
-        _logger.info(
-          'core.desktop',
-          'Elevated installer process completed',
-          context: {
-            'exit_code': elevationResult,
-            'output_exists': outputFile.existsSync(),
-            'error_exists': errorFile.existsSync(),
-          },
-        );
-
-        if (outputFile.existsSync()) {
-          final outputText = await outputFile.readAsString();
-          final lines = const LineSplitter().convert(outputText);
-          final events = lines
-              .where((line) => line.trim().isNotEmpty)
-              .map((line) {
-                try {
-                  final decoded = jsonDecode(line);
-                  if (decoded is Map<String, dynamic>) {
-                    return decoded;
-                  }
-                } catch (_) {
-                  // ignore
-                }
-                return null;
-              })
-              .whereType<Map<String, dynamic>>()
-              .toList(growable: false);
-
-          if (events.isNotEmpty) {
-            final errorEvent = events.firstWhere(
-              (event) => event['event'] == 'error',
-              orElse: () => const <String, dynamic>{},
-            );
-            if (errorEvent.isNotEmpty) {
-              final data =
-                  errorEvent['data'] as Map<String, dynamic>? ?? const {};
-              final message = data['message']?.toString() ?? '提权安装返回错误';
-              if (_isElevationRequired(
-                0,
-                message,
-                includeUnixPermissionErrors: true,
-              )) {
-                throw _ElevationRequiredException(message);
-              }
-              throw StateError(message);
-            }
-
-            for (var index = events.length - 1; index >= 0; index--) {
-              final event = events[index];
-              if (event['event'] == 'finished') {
-                final machineId = parseMachineIdFromDesktopEvent(event);
-                _rememberCliPath(parseCliPathFromDesktopEvent(event));
-                _logger.info(
-                  'core',
-                  'Elevated install completed',
-                  context: {'machine_id': machineId ?? ''},
-                );
-                status.value = CoreRunStatus(
-                  phase: CoreRunPhase.running,
-                  message: machineId == null || machineId.isEmpty
-                      ? '连接引擎运行中'
-                      : '本机设备已就绪',
-                  machineId: machineId,
-                  details: 'EasyTier ${bootstrap.version}',
-                );
-                _reportMachineReady(session, machineId);
-                return;
-              }
-            }
-          }
+        final session = _session;
+        if (session == null) {
+          _logger.warn(
+            'core',
+            'Elevation repair requested without active session',
+          );
+          status.value = CoreRunStatus.signedOut;
+          return;
+        }
+        if (!_runtime.supportsElevationRepair) {
+          _logger.warn(
+            'core',
+            'Elevation repair is not supported by current runtime',
+            context: {'runtime': _runtime.runtimeType.toString()},
+          );
+          await _ensureRunning(forceReinstall: true);
+          return;
         }
 
-        final errorText = errorFile.existsSync()
-            ? await errorFile.readAsString()
-            : '';
-        if (errorText.isNotEmpty) {
-          throw StateError(errorText);
-        }
-        throw StateError('提权安装没有返回有效结果');
-      } catch (error) {
-        _logger.error(
-          'core',
-          'Elevation repair failed',
-          context: {'error': error.toString()},
-        );
-        if (error is _ElevationRequiredException) {
-          status.value = CoreRunStatus(
-            phase: CoreRunPhase.needsElevation,
-            message: '需要管理员权限以安装连接引擎',
-            lastError: _elevationLastError(error),
+        final workspace = session.user.currentWorkspace;
+        if (workspace == null) {
+          status.value = const CoreRunStatus(
+            phase: CoreRunPhase.error,
+            message: '当前账号未绑定工作区',
           );
           return;
         }
-        status.value = CoreRunStatus(
-          phase: CoreRunPhase.error,
-          message: '连接引擎启动失败',
-          lastError: _normalizeError(error),
+
+        status.value = const CoreRunStatus(
+          phase: CoreRunPhase.repairing,
+          message: '正在以管理员身份安装连接引擎...',
         );
+        _logger.info('core', 'Elevation repair requested');
+
+        File? inputFile;
+        File? outputFile;
+        File? errorFile;
+        File? commandFile;
+        Directory? elevationTempDir;
+        try {
+          final bootstrap = await authService.prepareCoreBootstrap(
+            accessToken: session.tokenSet.accessToken,
+            workspaceId: workspace.id,
+          );
+
+          final elevatedRepairRunner = _elevatedRepairRunner;
+          if (elevatedRepairRunner != null) {
+            final event = await elevatedRepairRunner(bootstrap);
+            _completeElevatedInstall(
+              session: session,
+              bootstrap: bootstrap,
+              event: event,
+            );
+            return;
+          }
+
+          elevationTempDir = await Directory.systemTemp.createTemp(
+            'easytier_pro_elevated_',
+          );
+          await _restrictOwnerOnlyPermissions(
+            elevationTempDir,
+            ownerExecutable: true,
+          );
+          inputFile = File(_joinPath(elevationTempDir.path, 'bootstrap.json'));
+          outputFile = File(_joinPath(elevationTempDir.path, 'output.json'));
+          errorFile = File(_joinPath(elevationTempDir.path, 'error.json'));
+
+          final request = {
+            'bootstrap_token': bootstrap.bootstrapToken,
+            'version': bootstrap.version,
+            'config_server': bootstrap.configServer,
+          };
+          await inputFile.writeAsString(jsonEncode(request), encoding: utf8);
+          await _restrictOwnerOnlyPermissions(inputFile);
+
+          final installerPath = _resolveInstallerExecutable();
+          commandFile = await _writeElevatedInstallCommandFile(
+            tempDir: elevationTempDir,
+            installerPath: installerPath,
+            inputFile: inputFile,
+            outputFile: outputFile,
+            errorFile: errorFile,
+          );
+
+          _logger.info(
+            'core.desktop',
+            'Launching elevated installer',
+            context: {
+              'command_file': commandFile.path,
+              'installer': installerPath,
+              'platform': Platform.operatingSystem,
+            },
+          );
+
+          final elevationResult = await _runElevatedInstaller(commandFile.path);
+          _logger.info(
+            'core.desktop',
+            'Elevated installer process completed',
+            context: {
+              'exit_code': elevationResult,
+              'output_exists': outputFile.existsSync(),
+              'error_exists': errorFile.existsSync(),
+            },
+          );
+
+          if (outputFile.existsSync()) {
+            final outputText = await outputFile.readAsString();
+            final lines = const LineSplitter().convert(outputText);
+            final events = lines
+                .where((line) => line.trim().isNotEmpty)
+                .map((line) {
+                  try {
+                    final decoded = jsonDecode(line);
+                    if (decoded is Map<String, dynamic>) {
+                      return decoded;
+                    }
+                  } catch (_) {
+                    // ignore
+                  }
+                  return null;
+                })
+                .whereType<Map<String, dynamic>>()
+                .toList(growable: false);
+
+            if (events.isNotEmpty) {
+              final errorEvent = events.firstWhere(
+                (event) => event['event'] == 'error',
+                orElse: () => const <String, dynamic>{},
+              );
+              if (errorEvent.isNotEmpty) {
+                final data =
+                    errorEvent['data'] as Map<String, dynamic>? ?? const {};
+                final message = data['message']?.toString() ?? '提权安装返回错误';
+                if (_isElevationRequired(
+                  0,
+                  message,
+                  includeUnixPermissionErrors: true,
+                )) {
+                  throw _ElevationRequiredException(message);
+                }
+                throw StateError(message);
+              }
+
+              for (var index = events.length - 1; index >= 0; index--) {
+                final event = events[index];
+                if (event['event'] == 'finished') {
+                  _completeElevatedInstall(
+                    session: session,
+                    bootstrap: bootstrap,
+                    event: event,
+                  );
+                  return;
+                }
+              }
+            }
+          }
+
+          final errorText = errorFile.existsSync()
+              ? await errorFile.readAsString()
+              : '';
+          if (errorText.isNotEmpty) {
+            throw StateError(errorText);
+          }
+          throw StateError('提权安装没有返回有效结果');
+        } catch (error) {
+          _logger.error(
+            'core',
+            'Elevation repair failed',
+            context: {'error': error.toString()},
+          );
+          if (error is _ElevationRequiredException) {
+            status.value = CoreRunStatus(
+              phase: CoreRunPhase.needsElevation,
+              message: '需要管理员权限以安装连接引擎',
+              lastError: _elevationLastError(error),
+            );
+            return;
+          }
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.error,
+            message: '连接引擎启动失败',
+            lastError: _normalizeError(error),
+          );
+        } finally {
+          await _cleanupElevationTempFiles([
+            ?inputFile,
+            ?outputFile,
+            ?errorFile,
+            ?commandFile,
+          ]);
+          await _cleanupElevationTempDirectory(elevationTempDir);
+        }
       } finally {
-        await _cleanupElevationTempFiles([
-          ?inputFile,
-          ?outputFile,
-          ?errorFile,
-          ?commandFile,
-        ]);
-        await _cleanupElevationTempDirectory(elevationTempDir);
+        _resumeEngineVersionChecks();
       }
     });
+  }
+
+  void _completeElevatedInstall({
+    required AuthSession session,
+    required CoreBootstrapConfig bootstrap,
+    required Map<String, dynamic> event,
+  }) {
+    final machineId = parseMachineIdFromDesktopEvent(event);
+    _rememberCliPath(parseCliPathFromDesktopEvent(event));
+    _logger.info(
+      'core',
+      'Elevated install completed',
+      context: {'machine_id': machineId ?? ''},
+    );
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: machineId == null || machineId.isEmpty ? '连接引擎运行中' : '本机设备已就绪',
+      machineId: machineId,
+      details: 'EasyTier ${bootstrap.version}',
+    );
+    _publishEngineVersionStatus(
+      installedVersion: bootstrap.version,
+      consoleVersion: bootstrap.version,
+    );
+    _reportMachineReady(session, machineId);
   }
 
   Future<File> _writeElevatedInstallCommandFile({
@@ -516,118 +589,135 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   }
 
   Future<void> _ensureRunning({required bool forceReinstall}) async {
-    final session = _session;
-    if (session == null) {
-      status.value = CoreRunStatus.signedOut;
-      return;
-    }
-    if (session.tokenSet.isExpired) {
-      await _stopRuntimeForAuthInvalid(const AuthException('当前登录态已失效，请重新登录。'));
-      return;
-    }
-    final workspace = session.user.currentWorkspace;
-    if (workspace == null) {
-      _logger.error('core', 'No workspace available for lifecycle binding');
-      if (status.value.phase != CoreRunPhase.signedOut) {
-        await _stopRuntimeForMissingWorkspace();
-      }
-      status.value = const CoreRunStatus(
-        phase: CoreRunPhase.error,
-        message: '当前账号未绑定工作区',
-      );
-      return;
-    }
-
-    status.value = const CoreRunStatus(
-      phase: CoreRunPhase.checking,
-      message: '正在检查连接引擎状态...',
-    );
-    _logger.info(
-      'core',
-      'Ensure running start',
-      context: {
-        'force_reinstall': forceReinstall,
-        'workspace_id': workspace.id,
-      },
-    );
-
+    _pauseEngineVersionChecks();
     try {
-      final bootstrap = await authService.prepareCoreBootstrap(
-        accessToken: session.tokenSet.accessToken,
-        workspaceId: workspace.id,
-      );
-      if (!forceReinstall) {
-        final runtimeStatus = await _runtime.readStatus(bootstrap);
-        final machineId = runtimeStatus?.machineId;
-        if (runtimeStatus != null) {
-          _reportMachineReady(session, machineId);
-          if (runtimeStatus.phase == CoreRunPhase.running &&
-              machineId != null &&
-              machineId.isNotEmpty) {
-            _logger.info(
-              'core',
-              'Existing runtime service is ready',
-              context: {
-                'machine_id': machineId,
-                'runtime': _runtime.runtimeType.toString(),
-              },
-            );
-            status.value = runtimeStatus.toStatus();
-            return;
-          }
-        }
+      final session = _session;
+      if (session == null) {
+        status.value = CoreRunStatus.signedOut;
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+        return;
       }
-      if (forceReinstall) {
-        status.value = CoreRunStatus(
-          phase: CoreRunPhase.repairing,
-          message: '正在重装连接引擎...',
+      if (session.tokenSet.isExpired) {
+        await _stopRuntimeForAuthInvalid(
+          const AuthException('当前登录态已失效，请重新登录。'),
         );
-      } else {
+        return;
+      }
+      final workspace = session.user.currentWorkspace;
+      if (workspace == null) {
+        _logger.error('core', 'No workspace available for lifecycle binding');
+        if (status.value.phase != CoreRunPhase.signedOut) {
+          await _stopRuntimeForMissingWorkspace();
+        }
         status.value = const CoreRunStatus(
-          phase: CoreRunPhase.repairing,
-          message: '正在检查并应用连接引擎配置...',
+          phase: CoreRunPhase.error,
+          message: '当前账号未绑定工作区',
         );
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+        return;
       }
 
-      final result = await _runtime.ensureRunning(
-        bootstrap,
-        forceReinstall: forceReinstall,
+      status.value = const CoreRunStatus(
+        phase: CoreRunPhase.checking,
+        message: '正在检查连接引擎状态...',
       );
       _logger.info(
         'core',
-        'Runtime ensure completed',
+        'Ensure running start',
         context: {
           'force_reinstall': forceReinstall,
-          'runtime': _runtime.runtimeType.toString(),
-          'phase': result.phase.name,
-          'machine_id': result.machineId ?? '',
+          'workspace_id': workspace.id,
         },
       );
-      status.value = result.toStatus();
-      _reportMachineReady(session, result.machineId);
-    } catch (error) {
-      _logger.error(
-        'core',
-        'Ensure running failed',
-        context: {'error': error.toString()},
-      );
-      if (_isAuthInvalidError(error)) {
-        await _stopRuntimeForAuthInvalid(error);
-        return;
-      }
-      if (error is _ElevationRequiredException) {
-        status.value = CoreRunStatus(
-          phase: CoreRunPhase.needsElevation,
-          message: '需要管理员权限以安装连接引擎',
-          lastError: _elevationLastError(error),
+
+      try {
+        final bootstrap = await authService.prepareCoreBootstrap(
+          accessToken: session.tokenSet.accessToken,
+          workspaceId: workspace.id,
         );
-        return;
+        if (!forceReinstall) {
+          final runtimeStatus = await _runtime.readStatus(bootstrap);
+          final machineId = runtimeStatus?.machineId;
+          if (runtimeStatus != null) {
+            _publishEngineVersionStatus(
+              installedVersion: _coreVersionFromResult(runtimeStatus),
+              consoleVersion: bootstrap.version,
+            );
+            _reportMachineReady(session, machineId);
+            if (runtimeStatus.phase == CoreRunPhase.running &&
+                machineId != null &&
+                machineId.isNotEmpty) {
+              _logger.info(
+                'core',
+                'Existing runtime service is ready',
+                context: {
+                  'machine_id': machineId,
+                  'runtime': _runtime.runtimeType.toString(),
+                },
+              );
+              status.value = runtimeStatus.toStatus();
+              return;
+            }
+          }
+        }
+        if (forceReinstall) {
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.repairing,
+            message: '正在重装连接引擎...',
+          );
+        } else {
+          status.value = const CoreRunStatus(
+            phase: CoreRunPhase.repairing,
+            message: '正在检查并应用连接引擎配置...',
+          );
+        }
+
+        final result = await _runtime.ensureRunning(
+          bootstrap,
+          forceReinstall: forceReinstall,
+        );
+        _publishEngineVersionStatus(
+          installedVersion: _coreVersionFromResult(result) ?? bootstrap.version,
+          consoleVersion: bootstrap.version,
+        );
+        _logger.info(
+          'core',
+          'Runtime ensure completed',
+          context: {
+            'force_reinstall': forceReinstall,
+            'runtime': _runtime.runtimeType.toString(),
+            'phase': result.phase.name,
+            'machine_id': result.machineId ?? '',
+          },
+        );
+        status.value = result.toStatus();
+        _reportMachineReady(session, result.machineId);
+      } catch (error) {
+        _logger.error(
+          'core',
+          'Ensure running failed',
+          context: {'error': error.toString()},
+        );
+        if (_isAuthInvalidError(error)) {
+          await _stopRuntimeForAuthInvalid(error);
+          return;
+        }
+        if (error is _ElevationRequiredException) {
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.needsElevation,
+            message: '需要管理员权限以安装连接引擎',
+            lastError: _elevationLastError(error),
+          );
+          return;
+        }
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '连接引擎启动失败',
+          lastError: _normalizeError(error),
+        );
       }
-      status.value = CoreRunStatus(
-        phase: CoreRunPhase.error,
-        message: '连接引擎启动失败',
-        lastError: _normalizeError(error),
-      );
+    } finally {
+      _resumeEngineVersionChecks();
     }
   }
 
@@ -666,6 +756,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       message: '登录态已失效，连接已停止',
       lastError: _normalizeError(error),
     );
+    engineVersionStatus.value = CoreEngineVersionStatus.unknown;
   }
 
   bool _isAuthInvalidError(Object error) {
@@ -676,6 +767,186 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return message.contains('登录态已失效') ||
         message.contains('请重新登录') ||
         message.toLowerCase().contains('unauthorized');
+  }
+
+  Future<void> _startEngineVersionCheck() {
+    if (_engineVersionChecksPaused) {
+      return Future<void>.value();
+    }
+    final inFlight = _engineVersionCheckInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    late final Future<void> tracked;
+    final current = _refreshEngineVersionStatus()
+        .timeout(engineVersionCheckTimeout)
+        .catchError((Object error, StackTrace stack) {
+          if (error is TimeoutException &&
+              identical(_engineVersionCheckInFlight, tracked)) {
+            _invalidateEngineVersionChecks();
+          }
+          _logger.warn(
+            'core.version',
+            'Core engine version check failed',
+            context: {'error': error.toString()},
+          );
+        });
+    tracked = current.whenComplete(() {
+      if (identical(_engineVersionCheckInFlight, tracked)) {
+        _engineVersionCheckInFlight = null;
+      }
+    });
+    _engineVersionCheckInFlight = tracked;
+    return tracked;
+  }
+
+  Future<void> _refreshEngineVersionStatus() async {
+    final generation = _engineVersionCheckGeneration;
+    final session = _session;
+    if (session == null) {
+      engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+      return;
+    }
+    if (session.tokenSet.isExpired) {
+      _logger.warn(
+        'core.version',
+        'Skipping version check for expired session',
+      );
+      return;
+    }
+    final workspace = session.user.currentWorkspace;
+    if (workspace == null) {
+      engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+      return;
+    }
+
+    final consoleVersion = await authService.fetchRecommendedCoreVersion(
+      accessToken: session.tokenSet.accessToken,
+      workspaceId: workspace.id,
+    );
+    final installedVersion = await _runtime.readInstalledVersion();
+    if (!_isCurrentEngineVersionCheck(
+      generation: generation,
+      session: session,
+      workspaceId: workspace.id,
+    )) {
+      _logger.debug(
+        'core.version',
+        'Ignoring stale core engine version check result',
+      );
+      return;
+    }
+    _publishEngineVersionStatus(
+      installedVersion: installedVersion,
+      consoleVersion: consoleVersion,
+    );
+    _logger.info(
+      'core.version',
+      'Core engine version checked',
+      context: {
+        'installed_version': engineVersionStatus.value.installedVersion ?? '',
+        'console_version': engineVersionStatus.value.consoleVersion ?? '',
+        'relation': engineVersionStatus.value.relation.name,
+      },
+    );
+  }
+
+  void _startEngineVersionCheckTimer() {
+    if (engineVersionCheckInterval <= Duration.zero ||
+        _engineVersionCheckTimer != null) {
+      return;
+    }
+
+    _engineVersionCheckTimer = Timer.periodic(
+      engineVersionCheckInterval,
+      (_) => unawaited(checkEngineVersion()),
+    );
+  }
+
+  void _stopEngineVersionCheckTimer() {
+    _engineVersionCheckTimer?.cancel();
+    _engineVersionCheckTimer = null;
+  }
+
+  void _invalidateEngineVersionChecks() {
+    _engineVersionCheckGeneration++;
+    _engineVersionCheckInFlight = null;
+  }
+
+  void _pauseEngineVersionChecks() {
+    _engineVersionCheckPauseDepth++;
+    _invalidateEngineVersionChecks();
+  }
+
+  void _resumeEngineVersionChecks() {
+    if (_engineVersionCheckPauseDepth <= 0) {
+      return;
+    }
+    _engineVersionCheckPauseDepth--;
+    if (_engineVersionCheckPauseDepth == 0) {
+      _invalidateEngineVersionChecks();
+    }
+  }
+
+  String? _engineVersionScopeForSession(AuthSession? session) {
+    final workspaceId = session?.user.currentWorkspace?.id;
+    if (session == null || workspaceId == null) {
+      return null;
+    }
+    return '${session.user.email}\n$workspaceId';
+  }
+
+  bool _isCurrentEngineVersionCheck({
+    required int generation,
+    required AuthSession session,
+    required String workspaceId,
+  }) {
+    final currentSession = _session;
+    return generation == _engineVersionCheckGeneration &&
+        identical(currentSession, session) &&
+        currentSession?.user.currentWorkspace?.id == workspaceId;
+  }
+
+  void _publishEngineVersionStatus({
+    required String? installedVersion,
+    required String? consoleVersion,
+  }) {
+    final relation = _coreEngineVersionRelation(
+      installedVersion: installedVersion,
+      consoleVersion: consoleVersion,
+    );
+    engineVersionStatus.value = CoreEngineVersionStatus(
+      relation: relation,
+      installedVersion: normalizeCoreVersionForDisplay(installedVersion),
+      consoleVersion: normalizeCoreVersionForDisplay(consoleVersion),
+      checkedAt: DateTime.now(),
+    );
+  }
+
+  CoreEngineVersionRelation _coreEngineVersionRelation({
+    required String? installedVersion,
+    required String? consoleVersion,
+  }) {
+    final comparison = compareCoreVersions(installedVersion, consoleVersion);
+    if (comparison == null) {
+      return CoreEngineVersionRelation.unknown;
+    }
+    if (comparison < 0) {
+      return CoreEngineVersionRelation.updateAvailable;
+    }
+    if (comparison > 0) {
+      return CoreEngineVersionRelation.aheadOfConsole;
+    }
+    return CoreEngineVersionRelation.current;
+  }
+
+  String? _coreVersionFromResult(CoreRuntimeStartResult result) {
+    final explicit = result.coreVersion?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit;
+    }
+    return _extractCoreVersion(result.details);
   }
 
   void _reportSessionEstablished(AuthSession session) {
@@ -1222,6 +1493,74 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return _cleanProcessErrorMessage(
       error.toString().replaceFirst('Exception: ', ''),
     );
+  }
+
+  @visibleForTesting
+  static int? compareCoreVersions(
+    String? installedVersion,
+    String? consoleVersion,
+  ) {
+    final installed = _parseCoreVersion(installedVersion);
+    final console = _parseCoreVersion(consoleVersion);
+    if (installed == null || console == null) {
+      return null;
+    }
+
+    final maxLength = installed.length > console.length
+        ? installed.length
+        : console.length;
+    for (var index = 0; index < maxLength; index++) {
+      final left = index < installed.length ? installed[index] : 0;
+      final right = index < console.length ? console[index] : 0;
+      if (left < right) {
+        return -1;
+      }
+      if (left > right) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  @visibleForTesting
+  static String? normalizeCoreVersionForDisplay(String? version) {
+    final extracted = _extractCoreVersion(version);
+    if (extracted == null) {
+      return null;
+    }
+    return extracted.replaceFirst(RegExp(r'^[vV]?'), 'v');
+  }
+
+  static String? _extractCoreVersion(String? version) {
+    final text = version?.trim() ?? '';
+    if (text.isEmpty) {
+      return null;
+    }
+    final match = RegExp(
+      r'[vV]?(\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?)',
+    ).firstMatch(text);
+    return match?.group(0)?.trim();
+  }
+
+  static List<int>? _parseCoreVersion(String? version) {
+    final extracted = _extractCoreVersion(version);
+    if (extracted == null) {
+      return null;
+    }
+    final numeric = extracted
+        .replaceFirst(RegExp(r'^[vV]'), '')
+        .split(RegExp(r'[-+]'))
+        .first;
+    final parts = numeric.split('.');
+    final values = <int>[];
+    for (final part in parts) {
+      final value = int.tryParse(part);
+      if (value == null) {
+        return null;
+      }
+      values.add(value);
+    }
+    return values;
   }
 
   static String _cleanProcessErrorMessage(String message) {

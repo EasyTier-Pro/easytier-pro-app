@@ -25,6 +25,8 @@ abstract class CorePlatformRuntime {
     required bool forceReinstall,
   });
 
+  Future<String?> readInstalledVersion() async => null;
+
   Future<void> stop();
 
   Future<Map<String, CoreNetworkTrafficTotals>> readNetworkTrafficTotals();
@@ -45,6 +47,7 @@ class CoreRuntimeStartResult {
     this.machineId,
     this.details,
     this.lastError,
+    this.coreVersion,
   });
 
   final CoreRunPhase phase;
@@ -52,6 +55,7 @@ class CoreRuntimeStartResult {
   final String? machineId;
   final String? details;
   final String? lastError;
+  final String? coreVersion;
 
   CoreRunStatus toStatus() {
     return CoreRunStatus(

@@ -18,6 +18,18 @@ class TrayConnectionAction {
   final Future<void> Function()? onSelected;
 }
 
+class TrayEngineAction {
+  const TrayEngineAction({
+    required this.label,
+    required this.enabled,
+    this.onSelected,
+  });
+
+  final String label;
+  final bool enabled;
+  final Future<void> Function()? onSelected;
+}
+
 enum AppExitReason { user, update }
 
 abstract class TraySupport {
@@ -32,6 +44,8 @@ abstract class TraySupport {
   Future<void> updateCoreStatus(CoreRunStatus status);
 
   void setConnectionAction(TrayConnectionAction? action);
+
+  void setEngineAction(TrayEngineAction? action);
 }
 
 TraySupport createTraySupport({

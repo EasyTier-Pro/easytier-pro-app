@@ -1062,7 +1062,6 @@ void main() {
     expect(nodeTop - scrollTop, lessThan(8));
   });
 
-
   testWidgets('network detail stacks safely in narrow windows', (
     WidgetTester tester,
   ) async {
@@ -1876,7 +1875,10 @@ void main() {
       const ValueKey<String>('network-detail-section-local'),
     );
     expect(
-      find.descendant(of: localSectionFinder, matching: find.text('10.144.0.2')),
+      find.descendant(
+        of: localSectionFinder,
+        matching: find.text('10.144.0.2'),
+      ),
       findsOneWidget,
     );
     expect(find.text('desktop-1'), findsWidgets);
@@ -1938,7 +1940,6 @@ void main() {
 
     expect(find.textContaining('本机尚未加入网络'), findsOneWidget);
   });
-
 
   testWidgets('refresh nodes reloads console nodes and peer status', (
     WidgetTester tester,
@@ -2641,6 +2642,97 @@ void main() {
     expect(find.text('检查更新失败，请稍后重试'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'settings shows core engine update when console version is newer',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+
+      final authService = _FakeAuthService();
+      final coreLifecycleService = _NoopCoreLifecycleService(
+        authService: authService,
+        machineId: 'machine-1',
+      );
+      coreLifecycleService.engineVersionStatus.value =
+          const CoreEngineVersionStatus(
+            relation: CoreEngineVersionRelation.updateAvailable,
+            installedVersion: 'v2.6.3',
+            consoleVersion: 'v2.6.4',
+          );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('连接引擎可更新至 v2.6.4'), findsOneWidget);
+
+      await _openSettingsFromUserMenu(tester);
+      await _tapSettingsCategory(tester, '连接引擎');
+
+      expect(find.text('当前版本'), findsOneWidget);
+      expect(find.text('控制台版本'), findsOneWidget);
+      expect(find.text('v2.6.3'), findsOneWidget);
+      expect(find.text('v2.6.4'), findsAtLeastNWidgets(1));
+      expect(find.text('更新连接引擎'), findsOneWidget);
+      expect(find.text('当前版本 v2.6.3，控制台推荐版本 v2.6.4。'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tray engine action follows core busy state', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    final traySupport = _RecordingTraySupport();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+    coreLifecycleService.engineVersionStatus.value =
+        const CoreEngineVersionStatus(
+          relation: CoreEngineVersionRelation.updateAvailable,
+          installedVersion: 'v2.6.3',
+          consoleVersion: 'v2.6.4',
+        );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: traySupport,
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(traySupport.engineAction?.label, '更新连接引擎至 v2.6.4');
+    expect(traySupport.engineAction?.enabled, isTrue);
+
+    coreLifecycleService.status.value = const CoreRunStatus(
+      phase: CoreRunPhase.repairing,
+      message: '正在重装连接引擎...',
+    );
+    await tester.pump();
+
+    expect(traySupport.engineAction?.label, '更新连接引擎至 v2.6.4');
+    expect(traySupport.engineAction?.enabled, isFalse);
+    expect(traySupport.engineAction?.onSelected, isNull);
+
+    coreLifecycleService.status.value = const CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: '本机设备已就绪',
+      machineId: 'machine-1',
+    );
+    await tester.pump();
+
+    expect(traySupport.engineAction?.enabled, isTrue);
+    expect(traySupport.engineAction?.onSelected, isNotNull);
   });
 
   testWidgets(
@@ -4563,6 +4655,14 @@ class _LoginFlowAuthService implements AuthService {
   }
 
   @override
+  Future<String> fetchRecommendedCoreVersion({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return 'v1.0.0';
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -4814,6 +4914,14 @@ class _FakeAuthService implements AuthService {
   }
 
   @override
+  Future<String> fetchRecommendedCoreVersion({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    return 'v1.0.0';
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -4915,4 +5023,34 @@ class _FakeAppUpdateService extends AppUpdateService {
     checkCount++;
     return result;
   }
+}
+
+class _RecordingTraySupport implements TraySupport {
+  TrayConnectionAction? connectionAction;
+  TrayEngineAction? engineAction;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {}
+
+  @override
+  void setConnectionAction(TrayConnectionAction? action) {
+    connectionAction = action;
+  }
+
+  @override
+  void setEngineAction(TrayEngineAction? action) {
+    engineAction = action;
+  }
+
+  @override
+  Future<void> showWindow() async {}
+
+  @override
+  Future<void> updateCoreStatus(CoreRunStatus status) async {}
 }

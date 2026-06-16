@@ -748,18 +748,31 @@ class ConsoleAuthService implements AuthService {
   }
 
   @override
-  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+  Future<String> fetchRecommendedCoreVersion({
     required String accessToken,
     required String workspaceId,
   }) async {
     _logger.info(
       'auth.bootstrap',
-      'Preparing core bootstrap payload',
+      'Fetching recommended core version',
       context: {'workspace_id': workspaceId},
     );
+    return _fetchLatestReleaseVersion();
+  }
+
+  Future<String> _fetchLatestReleaseVersion() async {
+    final releaseBody = await _fetchLatestReleaseBody(
+      operation: 'coreVersion.release',
+    );
+    return _releaseVersionFromBody(releaseBody);
+  }
+
+  Future<Map<String, dynamic>> _fetchLatestReleaseBody({
+    required String operation,
+  }) async {
     final releaseResponse = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/releases/latest'),
-      operation: 'prepareCoreBootstrap.release',
+      operation: operation,
     );
     if (!releaseResponse.statusCode.toString().startsWith('2')) {
       throw AuthException(
@@ -767,7 +780,10 @@ class ConsoleAuthService implements AuthService {
       );
     }
 
-    final releaseBody = _decodeObject(releaseResponse.body);
+    return _decodeObject(releaseResponse.body);
+  }
+
+  String _releaseVersionFromBody(Map<String, dynamic> releaseBody) {
     final stable =
         (releaseBody['stable'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
@@ -782,7 +798,23 @@ class ConsoleAuthService implements AuthService {
       );
       throw const AuthException('控制台未返回可用版本');
     }
-    final version = rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
+    return rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
+  }
+
+  @override
+  Future<CoreBootstrapConfig> prepareCoreBootstrap({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    _logger.info(
+      'auth.bootstrap',
+      'Preparing core bootstrap payload',
+      context: {'workspace_id': workspaceId},
+    );
+    final releaseBody = await _fetchLatestReleaseBody(
+      operation: 'prepareCoreBootstrap.release',
+    );
+    final version = _releaseVersionFromBody(releaseBody);
 
     final keysResponse = await _get(
       Uri.parse(
