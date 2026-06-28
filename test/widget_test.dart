@@ -271,6 +271,103 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
+  testWidgets('token mobile network nav switches running instances', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-alpha': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-alpha',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+          'nt-beta': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-beta',
+            downloadBytes: 4096,
+            uploadBytes: 8192,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('token-connect-input')),
+      'device-token',
+    );
+    final connectButton = find.widgetWithText(FButton, '连接');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-option-nt-alpha')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-option-nt-beta')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('mobile-network-option-nt-beta')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsNothing,
+    );
+    expect(find.text('nt-beta'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('mobile-network-option-nt-alpha'),
+        ),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mobile-network-option-nt-beta')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {

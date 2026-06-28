@@ -106,6 +106,7 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
     required this.onShowDevices,
     required this.onShowSettings,
     this.showDevicesNavigation = true,
+    this.preferNetworkPicker = false,
   });
 
   final HomeDashboardView activeView;
@@ -117,6 +118,7 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
   final VoidCallback onShowDevices;
   final VoidCallback onShowSettings;
   final bool showDevicesNavigation;
+  final bool preferNetworkPicker;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +168,8 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
   }
 
   void _handleNetworkNavigation(BuildContext context) {
-    if (activeView == HomeDashboardView.network && networks.length > 1) {
+    if (networks.length > 1 &&
+        (activeView == HomeDashboardView.network || preferNetworkPicker)) {
       _showNetworkPicker(context);
     } else {
       onShowNetwork();
