@@ -290,7 +290,6 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
     );
 
     final process = await Process.start(cliExecutable, [
-      '-v',
       '-o',
       'json',
       '--instance-name',
@@ -363,7 +362,8 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
       context: {'executable': cliExecutable, 'instance_name': instanceName},
     );
 
-    final process = await Process.start(cliExecutable, [
+    final process = await _processStarter(cliExecutable, [
+      '-v',
       '-o',
       'json',
       '--instance-name',

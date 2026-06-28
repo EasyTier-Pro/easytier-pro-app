@@ -162,6 +162,39 @@ void main() {
   });
 
   group('CoreLifecycleService engine version', () {
+    test('desktop peer status reads verbose peer routes', () async {
+      final owner = CoreLifecycleService(
+        authService: _LifecycleAuthService(),
+        runtime: _LifecycleRuntime(),
+      );
+      addTearDown(owner.dispose);
+
+      var recordedArguments = const <String>[];
+      final process = _VersionProbeProcess();
+      final runtime = DesktopCoreRuntime(
+        owner,
+        processStarter: (_, arguments) async {
+          recordedArguments = List<String>.of(arguments);
+          scheduleMicrotask(
+            () => process.complete(exitCode: 0, stdoutText: '[]'),
+          );
+          return process;
+        },
+      );
+
+      final statuses = await runtime.readNetworkPeerStatuses('network-a');
+
+      expect(statuses, isEmpty);
+      expect(recordedArguments, [
+        '-v',
+        '-o',
+        'json',
+        '--instance-name',
+        'network-a',
+        'peer',
+      ]);
+    });
+
     test('desktop version probe sends sigkill on POSIX timeout', () async {
       final owner = CoreLifecycleService(
         authService: _LifecycleAuthService(),
