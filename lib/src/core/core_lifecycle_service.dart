@@ -191,6 +191,7 @@ class CoreLifecycleService {
         },
       );
       await _ensureTokenConnection(forceReinstall: false);
+      _startEngineVersionCheckTimer();
     });
   }
 
@@ -952,7 +953,36 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     final generation = _engineVersionCheckGeneration;
     final session = _session;
     if (session == null) {
-      engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+      final profile = _tokenConnectionProfile;
+      if (profile == null) {
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+        return;
+      }
+      final defaults = await authService.fetchCoreBootstrapDefaults();
+      final installedVersion = await _runtime.readInstalledVersion();
+      if (!_isCurrentTokenEngineVersionCheck(
+        generation: generation,
+        profile: profile,
+      )) {
+        _logger.debug(
+          'core.version',
+          'Ignoring stale token core engine version check result',
+        );
+        return;
+      }
+      _publishEngineVersionStatus(
+        installedVersion: installedVersion,
+        consoleVersion: defaults.version,
+      );
+      _logger.info(
+        'core.version',
+        'Token core engine version checked',
+        context: {
+          'installed_version': engineVersionStatus.value.installedVersion ?? '',
+          'console_version': engineVersionStatus.value.consoleVersion ?? '',
+          'relation': engineVersionStatus.value.relation.name,
+        },
+      );
       return;
     }
     if (session.tokenSet.isExpired) {
@@ -1053,6 +1083,15 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return generation == _engineVersionCheckGeneration &&
         identical(currentSession, session) &&
         currentSession?.user.currentWorkspace?.id == workspaceId;
+  }
+
+  bool _isCurrentTokenEngineVersionCheck({
+    required int generation,
+    required TokenConnectionProfile profile,
+  }) {
+    return generation == _engineVersionCheckGeneration &&
+        _session == null &&
+        identical(_tokenConnectionProfile, profile);
   }
 
   void _publishEngineVersionStatus({

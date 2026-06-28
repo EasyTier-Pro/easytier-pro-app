@@ -832,21 +832,14 @@ class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
       sections: [
         HomeSettingsSection(
           id: 'connection',
-          title: '连接',
+          title: '连接引擎',
           icon: Icons.memory_outlined,
           builder: (context) => HomeCoreSettingsSection(
             coreLifecycleService: widget.coreLifecycleService,
             onCopyText: widget.onCopyText,
-            showVersionInfo: false,
             missingMachineIdText: '等待注册',
-            repairActionLabelBuilder: (_) => '重新连接',
-            extraInfoBuilder: (status, _) {
-              final engine = status.details?.trim();
+            extraInfoBuilder: (_, _) {
               return [
-                HomeSettingsInfoItem(
-                  label: '连接引擎',
-                  value: engine == null || engine.isEmpty ? '准备中' : engine,
-                ),
                 HomeSettingsInfoItem(
                   label: '控制服务器',
                   value: widget.profile.configServer,

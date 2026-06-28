@@ -159,6 +159,39 @@ void main() {
       expect(runtime.forceReinstallValues, [false, true]);
       expect(service.status.value.phase, CoreRunPhase.running);
     });
+
+    test('token version check uses bootstrap defaults', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..connected = true
+        ..installedVersion = '2.6.4';
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindTokenConnection(
+        TokenConnectionProfile(
+          bootstrapToken: 'device-token',
+          configServer: 'tcp://127.0.0.1:22020',
+          displayName: 'token profile',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+
+      authService.bootstrapVersion = '2.6.5';
+      runtime.installedVersion = '2.6.4';
+      await service.checkEngineVersion();
+
+      final versionStatus = service.engineVersionStatus.value;
+      expect(authService.prepareBootstrapCount, 0);
+      expect(authService.fetchVersionCount, 2);
+      expect(versionStatus.relation, CoreEngineVersionRelation.updateAvailable);
+      expect(versionStatus.installedVersion, 'v2.6.4');
+      expect(versionStatus.consoleVersion, 'v2.6.5');
+    });
   });
 
   group('CoreLifecycleService engine version', () {

@@ -275,12 +275,15 @@ void main() {
     await tester.tap(find.byIcon(Icons.settings_outlined).last);
     await tester.pumpAndSettle();
 
-    expect(find.text('连接'), findsWidgets);
+    expect(find.text('连接引擎'), findsWidgets);
     expect(find.text('登录方式'), findsWidgets);
     expect(find.text('令牌连接已建立'), findsOneWidget);
     expect(find.text('设备 ID'), findsOneWidget);
-    expect(find.text('连接引擎'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '重新连接'), findsOneWidget);
+    expect(find.text('当前版本'), findsOneWidget);
+    expect(find.text('控制台版本'), findsOneWidget);
+    expect(find.text('v2.6.4'), findsNWidgets(2));
+    expect(find.widgetWithText(FButton, '重装连接引擎'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '重新连接'), findsNothing);
     expect(find.widgetWithText(FButton, '复制诊断'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('settings-app-card')),
@@ -5518,6 +5521,11 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   @override
   Future<void> bindTokenConnection(TokenConnectionProfile profile) async {
     tokenProfile = profile;
+    engineVersionStatus.value = const CoreEngineVersionStatus(
+      relation: CoreEngineVersionRelation.current,
+      installedVersion: 'v2.6.4',
+      consoleVersion: 'v2.6.4',
+    );
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
       message: '令牌连接已建立',
