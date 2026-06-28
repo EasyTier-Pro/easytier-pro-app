@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import '../desktop/app_update_service.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
@@ -20,6 +22,7 @@ class TokenConnectionHomeView extends StatefulWidget {
     super.key,
     required this.profile,
     required this.coreLifecycleService,
+    required this.appUpdateService,
     required this.onDisconnect,
     required this.onChangeToken,
     required this.onAccountLogin,
@@ -27,6 +30,7 @@ class TokenConnectionHomeView extends StatefulWidget {
 
   final TokenConnectionProfile profile;
   final CoreLifecycleService coreLifecycleService;
+  final AppUpdateService appUpdateService;
   final Future<void> Function() onDisconnect;
   final Future<void> Function() onChangeToken;
   final Future<void> Function() onAccountLogin;
@@ -493,6 +497,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
         _TokenHomeView.settings => _TokenSettingsPanel(
           profile: widget.profile,
           coreLifecycleService: widget.coreLifecycleService,
+          appUpdateService: widget.appUpdateService,
           onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
           onCopyText: (value) => unawaited(_copyText(value)),
           onDisconnect: () => unawaited(widget.onDisconnect()),
@@ -762,10 +767,11 @@ class _TokenStatusSummary extends StatelessWidget {
   }
 }
 
-class _TokenSettingsPanel extends StatelessWidget {
+class _TokenSettingsPanel extends StatefulWidget {
   const _TokenSettingsPanel({
     required this.profile,
     required this.coreLifecycleService,
+    required this.appUpdateService,
     required this.onCopyDiagnostics,
     required this.onCopyText,
     required this.onDisconnect,
@@ -775,11 +781,59 @@ class _TokenSettingsPanel extends StatelessWidget {
 
   final TokenConnectionProfile profile;
   final CoreLifecycleService coreLifecycleService;
+  final AppUpdateService appUpdateService;
   final VoidCallback onCopyDiagnostics;
   final ValueChanged<String> onCopyText;
   final VoidCallback onDisconnect;
   final VoidCallback onChangeToken;
   final VoidCallback onAccountLogin;
+
+  @override
+  State<_TokenSettingsPanel> createState() => _TokenSettingsPanelState();
+}
+
+class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
+  bool _checkingForUpdates = false;
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingForUpdates) {
+      return;
+    }
+    setState(() {
+      _checkingForUpdates = true;
+    });
+    try {
+      final result = await widget.appUpdateService.checkForUpdates();
+      if (!mounted) {
+        return;
+      }
+      final feedback = homeAppUpdateCheckFeedback(result.status);
+      _showToast(feedback.message, destructive: feedback.destructive);
+    } catch (_) {
+      if (mounted) {
+        final feedback = homeAppUpdateCheckFeedback(
+          AppUpdateCheckStatus.failed,
+        );
+        _showToast(feedback.message, destructive: feedback.destructive);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingForUpdates = false;
+        });
+      }
+    }
+  }
+
+  void _showToast(String message, {bool destructive = false}) {
+    showRawFToast(
+      context: context,
+      variant: destructive ? FToastVariant.destructive : FToastVariant.primary,
+      duration: const Duration(seconds: 2),
+      builder: (context, entry) => FToast(title: Text(message)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -790,8 +844,8 @@ class _TokenSettingsPanel extends StatelessWidget {
           title: '连接',
           icon: Icons.memory_outlined,
           builder: (context) => HomeCoreSettingsSection(
-            coreLifecycleService: coreLifecycleService,
-            onCopyText: onCopyText,
+            coreLifecycleService: widget.coreLifecycleService,
+            onCopyText: widget.onCopyText,
             showVersionInfo: false,
             missingMachineIdText: '等待注册',
             repairActionLabelBuilder: (_) => '重新连接',
@@ -804,14 +858,14 @@ class _TokenSettingsPanel extends StatelessWidget {
                 ),
                 HomeSettingsInfoItem(
                   label: '控制服务器',
-                  value: profile.configServer,
+                  value: widget.profile.configServer,
                 ),
               ];
             },
             extraActions: [
               FButton(
                 variant: .outline,
-                onPress: onCopyDiagnostics,
+                onPress: widget.onCopyDiagnostics,
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -829,10 +883,20 @@ class _TokenSettingsPanel extends StatelessWidget {
           title: '登录方式',
           icon: Icons.vpn_key_outlined,
           builder: (context) => _TokenLoginSettingsSection(
-            profile: profile,
-            onDisconnect: onDisconnect,
-            onChangeToken: onChangeToken,
-            onAccountLogin: onAccountLogin,
+            profile: widget.profile,
+            onDisconnect: widget.onDisconnect,
+            onChangeToken: widget.onChangeToken,
+            onAccountLogin: widget.onAccountLogin,
+          ),
+        ),
+        HomeSettingsSection(
+          id: 'app',
+          title: '应用信息',
+          icon: Icons.apps_outlined,
+          builder: (context) => HomeAppSettingsSection(
+            packageInfo: _packageInfo,
+            checkingForUpdates: _checkingForUpdates,
+            onCheckForUpdates: () => unawaited(_checkForUpdates()),
           ),
         ),
       ],

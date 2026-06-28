@@ -164,8 +164,8 @@ class _SettingsPanelState extends State<_SettingsPanel> {
         return;
       }
 
-      final (:message, :destructive) = _updateCheckFeedback(result.status);
-      _showToast(context, message, destructive: destructive);
+      final feedback = homeAppUpdateCheckFeedback(result.status);
+      _showToast(context, feedback.message, destructive: feedback.destructive);
     } catch (error, stack) {
       AppLogger.instance.error(
         'settings',
@@ -173,10 +173,14 @@ class _SettingsPanelState extends State<_SettingsPanel> {
         context: {'error': error.toString(), 'stack': stack.toString()},
       );
       if (mounted && context.mounted) {
-        final (:message, :destructive) = _updateCheckFeedback(
+        final feedback = homeAppUpdateCheckFeedback(
           AppUpdateCheckStatus.failed,
         );
-        _showToast(context, message, destructive: destructive);
+        _showToast(
+          context,
+          feedback.message,
+          destructive: feedback.destructive,
+        );
       }
     } finally {
       if (mounted) {
@@ -185,30 +189,6 @@ class _SettingsPanelState extends State<_SettingsPanel> {
         });
       }
     }
-  }
-
-  ({String message, bool destructive}) _updateCheckFeedback(
-    AppUpdateCheckStatus status,
-  ) {
-    return switch (status) {
-      AppUpdateCheckStatus.started => (message: '已开始检查更新', destructive: false),
-      AppUpdateCheckStatus.unsupportedPlatform => (
-        message: '当前平台暂不支持应用内更新检查',
-        destructive: false,
-      ),
-      AppUpdateCheckStatus.noFeedConfigured => (
-        message: '暂未配置更新检查服务',
-        destructive: false,
-      ),
-      AppUpdateCheckStatus.noReachableFeed => (
-        message: '无法连接更新源，请稍后重试',
-        destructive: true,
-      ),
-      AppUpdateCheckStatus.failed => (
-        message: '检查更新失败，请稍后重试',
-        destructive: true,
-      ),
-    };
   }
 
   Future<void> _showLogsDialog(BuildContext context) async {
@@ -396,7 +376,7 @@ class _SettingsPanelState extends State<_SettingsPanel> {
       _SettingsCategory.window => _WindowBehaviorSettingsSection(
         windowBehaviorPreferences: widget.windowBehaviorPreferences,
       ),
-      _SettingsCategory.app => _AppSettingsSection(
+      _SettingsCategory.app => HomeAppSettingsSection(
         packageInfo: _packageInfo,
         checkingForUpdates: _checkingForUpdates,
         onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
@@ -467,140 +447,6 @@ class _AccountSettingsSection extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-class _AppSettingsSection extends StatelessWidget {
-  const _AppSettingsSection({
-    required this.packageInfo,
-    required this.checkingForUpdates,
-    required this.onCheckForUpdates,
-  });
-
-  final Future<PackageInfo> packageInfo;
-  final bool checkingForUpdates;
-  final VoidCallback onCheckForUpdates;
-
-  @override
-  Widget build(BuildContext context) {
-    return FCard.raw(
-      key: const ValueKey<String>('settings-app-card'),
-      child: FutureBuilder<PackageInfo>(
-        future: packageInfo,
-        builder: (context, snapshot) {
-          final info = snapshot.data;
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FItemGroup(
-                  divider: .full,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    HomeSettingsAccountItem(
-                      prefix: const Icon(Icons.apps_outlined),
-                      label: '应用',
-                      primary: _appDisplayName(info),
-                    ),
-                    HomeSettingsAccountItem(
-                      prefix: const Icon(Icons.info_outline),
-                      label: '版本',
-                      primary: _appVersionText(snapshot),
-                      secondary: _platformLabel(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  _updateSupportHint(),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF737373),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _ControlSelectionBoundary(
-                  child: FButton(
-                    variant: .outline,
-                    onPress: checkingForUpdates ? null : onCheckForUpdates,
-                    child: checkingForUpdates
-                        ? const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              FCircularProgress(size: .xs),
-                              SizedBox(width: 8),
-                              Text('正在检查...'),
-                            ],
-                          )
-                        : const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.refresh, size: 16),
-                              SizedBox(width: 8),
-                              Text('检查更新'),
-                            ],
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  String _appDisplayName(PackageInfo? info) {
-    final appName = info?.appName.trim();
-    if (appName != null && appName.isNotEmpty) {
-      return appName;
-    }
-    return 'EasyTier Pro';
-  }
-
-  String _appVersionText(AsyncSnapshot<PackageInfo> snapshot) {
-    if (snapshot.hasError) {
-      return '版本信息不可用';
-    }
-    final info = snapshot.data;
-    if (info == null) {
-      return '正在读取版本...';
-    }
-
-    final version = info.version.trim();
-    final buildNumber = info.buildNumber.trim();
-    if (version.isEmpty && buildNumber.isEmpty) {
-      return '版本信息不可用';
-    }
-    if (version.isEmpty) {
-      return 'build $buildNumber';
-    }
-
-    final displayVersion = version.startsWith('v') ? version : 'v$version';
-    if (buildNumber.isEmpty || buildNumber == version) {
-      return displayVersion;
-    }
-    return '$displayVersion (build $buildNumber)';
-  }
-
-  String _platformLabel() {
-    final platform = switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'Android',
-      TargetPlatform.iOS => 'iOS',
-      TargetPlatform.linux => 'Linux',
-      TargetPlatform.macOS => 'macOS',
-      TargetPlatform.windows => 'Windows',
-      TargetPlatform.fuchsia => 'Fuchsia',
-    };
-    return '平台：$platform';
-  }
-
-  String _updateSupportHint() {
-    if (defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.windows) {
-      return '通过已配置的更新源检查桌面客户端版本。';
-    }
-    return '当前平台暂不支持应用内更新检查。';
   }
 }
 

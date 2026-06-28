@@ -282,6 +282,11 @@ void main() {
     expect(find.text('连接引擎'), findsOneWidget);
     expect(find.widgetWithText(FButton, '重新连接'), findsOneWidget);
     expect(find.widgetWithText(FButton, '复制诊断'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('settings-app-card')),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FButton, '检查更新'), findsOneWidget);
     expect(find.widgetWithText(FButton, '更换令牌'), findsOneWidget);
     expect(find.widgetWithText(FButton, '使用账号登录'), findsOneWidget);
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);

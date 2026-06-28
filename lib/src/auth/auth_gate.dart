@@ -446,6 +446,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       return TokenConnectionHomeView(
         profile: _tokenProfile!,
         coreLifecycleService: widget.coreLifecycleService,
+        appUpdateService: widget.appUpdateService,
         onDisconnect: _disconnectTokenConnection,
         onChangeToken: _changeTokenConnection,
         onAccountLogin: _switchTokenConnectionToAccountLogin,
