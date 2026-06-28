@@ -856,23 +856,15 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
               ),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 14,
-              runSpacing: 6,
-              children: [
-                _TokenInlineAction(
-                  label: '从控制台获取接入密钥',
-                  onTap: () => unawaited(_openConsoleEnrollmentKeys()),
-                ),
-                _TokenInlineAction(
-                  label: _showAdvancedOptions ? '收起高级设置' : '高级设置',
-                  onTap: () {
-                    setState(
-                      () => _showAdvancedOptions = !_showAdvancedOptions,
-                    );
-                  },
-                ),
-              ],
+            _TokenEnrollmentKeyHint(
+              onOpenConsole: () => unawaited(_openConsoleEnrollmentKeys()),
+            ),
+            const SizedBox(height: 14),
+            _TokenAdvancedDisclosure(
+              expanded: _showAdvancedOptions,
+              onToggle: () {
+                setState(() => _showAdvancedOptions = !_showAdvancedOptions);
+              },
             ),
             if (_showAdvancedOptions) ...[
               const SizedBox(height: 14),
@@ -940,27 +932,109 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
   }
 }
 
-class _TokenInlineAction extends StatelessWidget {
-  const _TokenInlineAction({required this.label, required this.onTap});
+class _TokenEnrollmentKeyHint extends StatelessWidget {
+  const _TokenEnrollmentKeyHint({required this.onOpenConsole});
 
-  final String label;
-  final VoidCallback onTap;
+  final VoidCallback onOpenConsole;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.58);
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Icon(Icons.help_outline, size: 14, color: muted),
+        Text(
+          '还没有设备令牌？',
+          style: theme.textTheme.bodySmall?.copyWith(color: muted),
+        ),
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onOpenConsole,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '去控制台获取',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.open_in_new,
+                    size: 13,
+                    color: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TokenAdvancedDisclosure extends StatelessWidget {
+  const _TokenAdvancedDisclosure({
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.58);
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.w600,
+        onTap: onToggle,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.tune, size: 16, color: muted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '高级设置',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: muted,
+                ),
+              ],
             ),
           ),
         ),

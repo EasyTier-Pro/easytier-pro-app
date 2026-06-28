@@ -139,7 +139,10 @@ void main() {
     expect(find.text('控制服务器'), findsNothing);
     expect(find.text('主机名'), findsNothing);
     expect(find.text('连接名称'), findsNothing);
-    expect(find.text('从控制台获取接入密钥'), findsOneWidget);
+    expect(find.text('还没有设备令牌？'), findsOneWidget);
+    expect(find.text('去控制台获取'), findsOneWidget);
+    expect(find.byIcon(Icons.help_outline), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
 
     await tester.tap(find.text('高级设置'));
     await tester.pumpAndSettle();
@@ -147,6 +150,7 @@ void main() {
     expect(find.text('控制服务器'), findsOneWidget);
     expect(find.text('主机名'), findsOneWidget);
     expect(find.text('连接名称'), findsNothing);
+    expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('token-connect-input')),
