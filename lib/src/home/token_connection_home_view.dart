@@ -3,35 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_lifecycle_service.dart';
 import 'home_shell.dart';
-
-const _productionApiConsoleHost = 'api.console.easytier.net';
-const _productionWebConsoleHost = 'console.easytier.net';
-const _consoleDevicesFragment = '/devices';
-
-Uri _consoleDevicesUri() {
-  final base = Uri.tryParse(defaultConsoleBaseUrl.trim());
-  if (base == null || base.scheme.trim().isEmpty || base.host.trim().isEmpty) {
-    return Uri.https(
-      _productionWebConsoleHost,
-      '/',
-    ).replace(fragment: _consoleDevicesFragment);
-  }
-
-  final host = base.host == _productionApiConsoleHost
-      ? _productionWebConsoleHost
-      : base.host;
-  return base.replace(
-    host: host,
-    path: '/',
-    query: null,
-    fragment: _consoleDevicesFragment,
-  );
-}
 
 class TokenConnectionHomeView extends StatefulWidget {
   const TokenConnectionHomeView({
@@ -144,14 +119,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       if (!mounted) {
         return;
       }
-      if (_isNoRunningInstancesError(error)) {
-        setState(() {
-          _traffic = const <String, _TokenTrafficSnapshot>{};
-          _previousTotals = const <String, CoreNetworkTrafficTotals>{};
-          _trafficError = null;
-        });
-        return;
-      }
       setState(() {
         _trafficError = error.toString().replaceFirst('Exception: ', '');
       });
@@ -195,10 +162,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       duration: const Duration(seconds: 2),
       builder: (context, entry) => const FToast(title: Text('已复制到剪贴板')),
     );
-  }
-
-  Future<void> _openConsoleDevices() async {
-    await launchUrl(_consoleDevicesUri(), mode: LaunchMode.externalApplication);
   }
 
   void _showOverview() {
@@ -328,7 +291,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           traffic: _traffic,
           trafficError: _trafficError,
           running: status.isRunning,
-          onOpenConsoleDevices: () => unawaited(_openConsoleDevices()),
         ),
         _TokenHomeView.settings => Align(
           alignment: Alignment.topLeft,
@@ -365,14 +327,12 @@ class _TokenOverview extends StatelessWidget {
     required this.traffic,
     required this.trafficError,
     required this.running,
-    required this.onOpenConsoleDevices,
   });
 
   final CoreRunStatus status;
   final Map<String, _TokenTrafficSnapshot> traffic;
   final String? trafficError;
   final bool running;
-  final VoidCallback onOpenConsoleDevices;
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +360,6 @@ class _TokenOverview extends StatelessWidget {
           entries: entries,
           trafficError: trafficError,
           running: running,
-          onOpenConsoleDevices: onOpenConsoleDevices,
         ),
       ],
     );
@@ -435,7 +394,6 @@ class _TokenStatusSummary extends StatelessWidget {
     final needsAuthorization =
         status.phase == CoreRunPhase.needsElevation ||
         status.phase == CoreRunPhase.needsVpnPermission;
-    final awaitingAttachment = running && instanceCount == 0;
 
     final ringColor = error
         ? const Color(0xFFDC2626)
@@ -443,8 +401,6 @@ class _TokenStatusSummary extends StatelessWidget {
         ? const Color(0xFFF59E0B)
         : checking || stopped
         ? const Color(0xFF9CA3AF)
-        : awaitingAttachment
-        ? const Color(0xFFF59E0B)
         : running
         ? const Color(0xFF16A34A)
         : const Color(0xFF2563EB);
@@ -455,8 +411,6 @@ class _TokenStatusSummary extends StatelessWidget {
         ? const Color(0xFFFEF3C7)
         : checking || stopped
         ? const Color(0xFFF3F4F6)
-        : awaitingAttachment
-        ? const Color(0xFFFFFBEB)
         : running
         ? const Color(0xFFF0FDF4)
         : const Color(0xFFDBEAFE);
@@ -467,8 +421,6 @@ class _TokenStatusSummary extends StatelessWidget {
         ? const Color(0xFFFDE68A)
         : checking || stopped
         ? const Color(0xFFE5E7EB)
-        : awaitingAttachment
-        ? const Color(0xFFFDE68A)
         : running
         ? const Color(0xFFBBF7D0)
         : const Color(0xFFBFDBFE);
@@ -479,8 +431,6 @@ class _TokenStatusSummary extends StatelessWidget {
         ? Icons.verified_user_outlined
         : checking
         ? Icons.sync
-        : awaitingAttachment
-        ? Icons.add_link_outlined
         : running
         ? Icons.check
         : Icons.power_settings_new;
@@ -491,8 +441,6 @@ class _TokenStatusSummary extends StatelessWidget {
         ? '需要授权'
         : checking
         ? '正在连接'
-        : awaitingAttachment
-        ? '待挂载'
         : running
         ? '已在线'
         : '已断开';
@@ -508,7 +456,7 @@ class _TokenStatusSummary extends StatelessWidget {
         : running
         ? instanceCount > 0
               ? '$instanceCount 个网络实例'
-              : '请在控制台挂载设备到网络'
+              : '暂无网络实例'
         : status.message;
 
     final statusBody = Row(
@@ -839,13 +787,11 @@ class _TokenNetworkInstanceList extends StatelessWidget {
     required this.entries,
     required this.trafficError,
     required this.running,
-    required this.onOpenConsoleDevices,
   });
 
   final List<MapEntry<String, _TokenTrafficSnapshot>> entries;
   final String? trafficError;
   final bool running;
-  final VoidCallback onOpenConsoleDevices;
 
   @override
   Widget build(BuildContext context) {
@@ -892,7 +838,7 @@ class _TokenNetworkInstanceList extends StatelessWidget {
         else if (trafficError != null && trafficError!.isNotEmpty)
           _TokenNetworkInstanceEmpty(message: trafficError!)
         else if (entries.isEmpty)
-          _TokenNetworkInstanceAttachPrompt(onOpenConsole: onOpenConsoleDevices)
+          const _TokenNetworkInstanceEmpty(message: '暂无网络实例')
         else
           Column(
             children: [
@@ -927,78 +873,6 @@ class _TokenReadonlyHint extends StatelessWidget {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: const Color(0xFF64748B),
           fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _TokenNetworkInstanceAttachPrompt extends StatelessWidget {
-  const _TokenNetworkInstanceAttachPrompt({required this.onOpenConsole});
-
-  final VoidCallback onOpenConsole;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Icon(
-                Icons.add_link_outlined,
-                size: 18,
-                color: Color(0xFF475569),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '未挂载网络实例',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF0F172A),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '请在控制台将本机设备挂载到需要接入的网络。',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FButton(
-                    variant: .outline,
-                    size: .sm,
-                    onPress: onOpenConsole,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.open_in_new, size: 15),
-                        SizedBox(width: 6),
-                        Text('去控制台挂载设备'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1312,8 +1186,4 @@ String _formatBytes(num bytes) {
   }
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
-}
-
-bool _isNoRunningInstancesError(Object error) {
-  return error.toString().toLowerCase().contains('no running instances found');
 }
