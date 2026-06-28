@@ -214,6 +214,48 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
+  testWidgets(
+    'token connection prompts console attach when no instance exists',
+    (WidgetTester tester) async {
+      final authService = _LoginFlowAuthService();
+      final coreLifecycleService = _NoopCoreLifecycleService(
+        authService: authService,
+        machineId: 'machine-token',
+        trafficError: StateError('Error: no running instances found'),
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+          traySupport: createTraySupport(),
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('token-connect-input')),
+        'device-token',
+      );
+      final connectButton = find.widgetWithText(FButton, '连接');
+      await tester.ensureVisible(connectButton);
+      await tester.tap(connectButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('待挂载'), findsOneWidget);
+      expect(find.text('请在控制台挂载设备到网络'), findsOneWidget);
+      expect(find.text('未挂载网络实例'), findsOneWidget);
+      expect(find.text('请在控制台将本机设备挂载到需要接入的网络。'), findsOneWidget);
+      expect(find.widgetWithText(FButton, '去控制台挂载设备'), findsOneWidget);
+      expect(find.textContaining('no running instances found'), findsNothing);
+      expect(find.textContaining('Bad state'), findsNothing);
+    },
+  );
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {
@@ -5079,6 +5121,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     required this.machineId,
     this.instanceRunning = true,
     this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
+    this.trafficError,
     this.peerSamples = const <Map<String, CorePeerStatus>>[],
     this.peerError,
   });
@@ -5086,6 +5129,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   final String? machineId;
   final bool instanceRunning;
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
+  final Object? trafficError;
   final List<Map<String, CorePeerStatus>> peerSamples;
   final Object? peerError;
   TokenConnectionProfile? tokenProfile;
@@ -5128,6 +5172,10 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   @override
   Future<Map<String, CoreNetworkTrafficTotals>>
   readNetworkTrafficTotals() async {
+    final error = trafficError;
+    if (error != null) {
+      throw error;
+    }
     if (trafficSamples.isEmpty) {
       return const <String, CoreNetworkTrafficTotals>{};
     }
