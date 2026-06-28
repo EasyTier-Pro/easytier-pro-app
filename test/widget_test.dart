@@ -287,7 +287,7 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
-  testWidgets('token mobile network nav switches running instances', (
+  testWidgets('token mobile network nav matches workspace picker flow', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester, size: const Size(390, 760));
@@ -335,6 +335,15 @@ void main() {
     await tester.tap(connectButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('mobile-network-picker-sheet')),
+      findsNothing,
+    );
+    expect(find.text('nt-alpha'), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey<String>('mobile-nav-network')));
     await tester.pumpAndSettle();

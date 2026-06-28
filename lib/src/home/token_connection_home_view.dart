@@ -456,7 +456,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
         onShowDevices: () {},
         onShowSettings: _showSettings,
         showDevicesNavigation: false,
-        preferNetworkPicker: true,
       ),
       contentKey: contentKey,
       contentMode: switch (_activeView) {
