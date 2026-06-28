@@ -15,6 +15,30 @@ import '../home/token_connection_home_view.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
 
+const _productionApiConsoleHost = 'api.console.easytier.net';
+const _productionWebConsoleHost = 'console.easytier.net';
+const _consoleEnrollmentKeysFragment = '/devices?tab=keys';
+
+Uri _consoleEnrollmentKeysUri() {
+  final base = Uri.tryParse(defaultConsoleBaseUrl.trim());
+  if (base == null || base.scheme.trim().isEmpty || base.host.trim().isEmpty) {
+    return Uri.https(
+      _productionWebConsoleHost,
+      '/',
+    ).replace(fragment: _consoleEnrollmentKeysFragment);
+  }
+
+  final host = base.host == _productionApiConsoleHost
+      ? _productionWebConsoleHost
+      : base.host;
+  return base.replace(
+    host: host,
+    path: '/',
+    query: null,
+    fragment: _consoleEnrollmentKeysFragment,
+  );
+}
+
 enum AuthStage {
   checking,
   loginRequired,
@@ -758,6 +782,7 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
     text: '设备令牌连接',
   );
   bool _submitting = false;
+  bool _showAdvancedOptions = false;
 
   @override
   void dispose() {
@@ -783,6 +808,13 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
         setState(() => _submitting = false);
       }
     }
+  }
+
+  Future<void> _openConsoleEnrollmentKeys() async {
+    await launchUrl(
+      _consoleEnrollmentKeysUri(),
+      mode: LaunchMode.externalApplication,
+    );
   }
 
   @override
@@ -831,27 +863,62 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
               ),
             ),
             const SizedBox(height: 14),
-            _TokenFormField(
-              label: '控制服务器',
-              child: FTextField(
-                key: const ValueKey<String>('token-config-server-input'),
-                control: FTextFieldControl.managed(
-                  controller: _configServerController,
+            FButton(
+              variant: .outline,
+              onPress: () => unawaited(_openConsoleEnrollmentKeys()),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.open_in_new, size: 18),
+                  SizedBox(width: 8),
+                  Text('在控制台查看接入密钥'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            FButton(
+              variant: .ghost,
+              onPress: () {
+                setState(() => _showAdvancedOptions = !_showAdvancedOptions);
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _showAdvancedOptions ? Icons.expand_less : Icons.tune,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(_showAdvancedOptions ? '收起高级选项' : '高级选项'),
+                ],
+              ),
+            ),
+            if (_showAdvancedOptions) ...[
+              const SizedBox(height: 14),
+              _TokenFormField(
+                label: '控制服务器',
+                child: FTextField(
+                  key: const ValueKey<String>('token-config-server-input'),
+                  control: FTextFieldControl.managed(
+                    controller: _configServerController,
+                  ),
+                  hint: widget.defaultConfigServer,
+                  keyboardType: TextInputType.url,
                 ),
-                hint: widget.defaultConfigServer,
-                keyboardType: TextInputType.url,
               ),
-            ),
-            const SizedBox(height: 14),
-            _TokenFormField(
-              label: '连接名称',
-              child: FTextField(
-                key: const ValueKey<String>('token-display-name-input'),
-                control: FTextFieldControl.managed(controller: _nameController),
-                hint: '设备令牌连接',
-                keyboardType: TextInputType.text,
+              const SizedBox(height: 14),
+              _TokenFormField(
+                label: '主机名',
+                child: FTextField(
+                  key: const ValueKey<String>('token-display-name-input'),
+                  control: FTextFieldControl.managed(
+                    controller: _nameController,
+                  ),
+                  hint: '设备令牌连接',
+                  keyboardType: TextInputType.text,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 22),
             Row(
               children: [

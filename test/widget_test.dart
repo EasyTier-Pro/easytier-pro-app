@@ -133,6 +133,18 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
     await tester.pumpAndSettle();
 
+    expect(find.text('控制服务器'), findsNothing);
+    expect(find.text('主机名'), findsNothing);
+    expect(find.text('连接名称'), findsNothing);
+    expect(find.widgetWithText(FButton, '在控制台查看接入密钥'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FButton, '高级选项'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('控制服务器'), findsOneWidget);
+    expect(find.text('主机名'), findsOneWidget);
+    expect(find.text('连接名称'), findsNothing);
+
     await tester.enterText(
       find.byKey(const ValueKey<String>('token-connect-input')),
       'device-token',
