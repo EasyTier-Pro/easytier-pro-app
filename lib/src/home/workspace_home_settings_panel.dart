@@ -48,17 +48,10 @@ class _SettingsPanel extends StatefulWidget {
 class _SettingsPanelState extends State<_SettingsPanel> {
   late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   bool _checkingForUpdates = false;
-  _SettingsCategory _selectedCategory = _SettingsCategory.account;
-  final ScrollController _scrollController = ScrollController();
-  final Map<_SettingsCategory, GlobalKey> _categoryKeys = {};
-  bool _isScrollingToCategory = false;
 
   static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
     'net.easytier.pro/core_runtime',
   );
-  static const double _sidebarWidth = 220;
-  static const double _splitBreakpoint = 720;
-  static const double _categoryScrollAlignment = 0.05;
 
   bool get _canOpenLogDirectory =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -364,484 +357,57 @@ class _SettingsPanelState extends State<_SettingsPanel> {
   @override
   void initState() {
     super.initState();
-    for (final category in _categories) {
-      _categoryKeys[category] = GlobalKey();
-    }
-    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
     super.dispose();
   }
 
-  void _selectCategory(_SettingsCategory category) {
-    _scrollToCategory(category);
-  }
-
-  void _scrollToCategory(_SettingsCategory category) {
-    final key = _categoryKeys[category];
-    if (key == null) {
-      return;
-    }
-    final context = key.currentContext;
-    if (context == null) {
-      setState(() {
-        _selectedCategory = category;
-      });
-      return;
-    }
-    _isScrollingToCategory = true;
-    Scrollable.ensureVisible(
-      context,
-      duration: appMotionMedium,
-      curve: appMotionCurve,
-      alignment: _categoryScrollAlignment,
-    ).whenComplete(() {
-      if (mounted) {
-        setState(() {
-          _isScrollingToCategory = false;
-          _selectedCategory = category;
-        });
-      }
-    });
-  }
-
-  void _onScroll() {
-    if (_isScrollingToCategory) {
-      return;
-    }
-    final scrollPosition = _scrollController.position;
-    final viewportDimension = scrollPosition.viewportDimension;
-    if (viewportDimension <= 0) {
-      return;
-    }
-    final viewportTop = scrollPosition.pixels;
-    final viewportCenter = viewportTop + (viewportDimension * 0.35);
-
-    _SettingsCategory? closestCategory;
-    var closestDistance = double.infinity;
-    for (final category in _categories) {
-      final key = _categoryKeys[category];
-      if (key == null) {
-        continue;
-      }
-      final context = key.currentContext;
-      if (context == null) {
-        continue;
-      }
-      final renderBox = context.findRenderObject();
-      if (renderBox is! RenderBox) {
-        continue;
-      }
-      final scrollable = Scrollable.maybeOf(context);
-      if (scrollable == null) {
-        continue;
-      }
-      final scrollablePosition = scrollable.position;
-      final scrollableBox = scrollable.context.findRenderObject();
-      if (scrollableBox is! RenderBox) {
-        continue;
-      }
-      final categoryOffset = renderBox.localToGlobal(Offset.zero);
-      final scrollableOffset = scrollableBox.localToGlobal(Offset.zero);
-      final categoryTop =
-          categoryOffset.dy - scrollableOffset.dy + scrollablePosition.pixels;
-      final distance = (categoryTop - viewportCenter).abs();
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestCategory = category;
-      }
-    }
-
-    if (closestCategory != null && closestCategory != _selectedCategory) {
-      setState(() {
-        _selectedCategory = closestCategory!;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _splitBreakpoint;
-        if (wide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SettingsSidebar(
-                categories: _categories,
-                selected: _selectedCategory,
-                onSelect: _selectCategory,
-                width: _sidebarWidth,
-              ),
-              Expanded(
-                child: _SettingsDetailPane(
-                  categories: _categories,
-                  categoryKeys: _categoryKeys,
-                  scrollController: _scrollController,
-                  user: widget.user,
-                  workspaceName: widget.workspaceName,
-                  onLogout: widget.onLogout,
-                  coreLifecycleService: widget.coreLifecycleService,
-                  windowBehaviorPreferences: widget.windowBehaviorPreferences,
-                  packageInfo: _packageInfo,
-                  checkingForUpdates: _checkingForUpdates,
-                  canOpenLogDirectory: _canOpenLogDirectory,
-                  onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
-                  onExportLogs: () => unawaited(_exportLogs(context)),
-                  onOpenLogDirectory: () =>
-                      unawaited(_openLogDirectory(context)),
-                  onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
-                  onCopyText: (value) => unawaited(_copyText(context, value)),
-                ),
-              ),
-            ],
-          );
-        }
-
-        return _SettingsCompactScrollPage(
-          categories: _categories,
-          user: widget.user,
-          workspaceName: widget.workspaceName,
-          onLogout: widget.onLogout,
-          coreLifecycleService: widget.coreLifecycleService,
-          windowBehaviorPreferences: widget.windowBehaviorPreferences,
-          packageInfo: _packageInfo,
-          checkingForUpdates: _checkingForUpdates,
-          canOpenLogDirectory: _canOpenLogDirectory,
-          onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
-          onExportLogs: () => unawaited(_exportLogs(context)),
-          onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
-          onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
-          onCopyText: (value) => unawaited(_copyText(context, value)),
-        );
-      },
-    );
-  }
-}
-
-class _SettingsSidebar extends StatelessWidget {
-  const _SettingsSidebar({
-    required this.categories,
-    required this.selected,
-    required this.onSelect,
-    required this.width,
-  });
-
-  final List<_SettingsCategory> categories;
-  final _SettingsCategory selected;
-  final ValueChanged<_SettingsCategory> onSelect;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF2F2F7),
-        border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 12),
-            child: Text(
-              '设置',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
+    return HomeSettingsPage(
+      sections: [
+        for (final category in _categories)
+          HomeSettingsSection(
+            id: category.name,
+            title: category.title,
+            icon: category.icon,
+            builder: (context) => _buildSectionContent(context, category),
           ),
-          for (final category in categories)
-            _SettingsSidebarItem(
-              category: category,
-              selected: category == selected,
-              onTap: () => onSelect(category),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsSidebarItem extends StatelessWidget {
-  const _SettingsSidebarItem({
-    required this.category,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _SettingsCategory category;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        key: ValueKey<String>('settings-sidebar-item-${category.title}'),
-        color: selected ? const Color(0xFF007AFF) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          hoverColor: selected
-              ? const Color(0xFF007AFF)
-              : const Color(0xFFE5E5EA).withValues(alpha: 0.6),
-          highlightColor: selected
-              ? const Color(0xFF007AFF)
-              : const Color(0xFFE5E5EA),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 32),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              child: Row(
-                children: [
-                  Icon(
-                    category.icon,
-                    size: 18,
-                    color: selected ? Colors.white : const Color(0xFF3C3C43),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      category.title,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF1C1C1E),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsDetailPane extends StatelessWidget {
-  const _SettingsDetailPane({
-    required this.categories,
-    required this.categoryKeys,
-    required this.scrollController,
-    required this.user,
-    required this.workspaceName,
-    required this.onLogout,
-    required this.coreLifecycleService,
-    required this.windowBehaviorPreferences,
-    required this.packageInfo,
-    required this.checkingForUpdates,
-    required this.canOpenLogDirectory,
-    required this.onCheckForUpdates,
-    required this.onExportLogs,
-    required this.onOpenLogDirectory,
-    required this.onShowLogsDialog,
-    required this.onCopyText,
-  });
-
-  final List<_SettingsCategory> categories;
-  final Map<_SettingsCategory, GlobalKey> categoryKeys;
-  final ScrollController scrollController;
-  final ConsoleUser user;
-  final String workspaceName;
-  final Future<void> Function() onLogout;
-  final CoreLifecycleService coreLifecycleService;
-  final WindowBehaviorPreferences windowBehaviorPreferences;
-  final Future<PackageInfo> packageInfo;
-  final bool checkingForUpdates;
-  final bool canOpenLogDirectory;
-  final VoidCallback onCheckForUpdates;
-  final VoidCallback onExportLogs;
-  final VoidCallback onOpenLogDirectory;
-  final VoidCallback onShowLogsDialog;
-  final ValueChanged<String> onCopyText;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSmoothScrollView(
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < categories.length; i++) ...[
-              if (i > 0) const SizedBox(height: 24),
-              KeyedSubtree(
-                key: categoryKeys[categories[i]],
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _SettingsSectionHeader(title: categories[i].title),
-                    const SizedBox(height: 16),
-                    buildSectionContent(
-                      context: context,
-                      category: categories[i],
-                      user: user,
-                      workspaceName: workspaceName,
-                      onLogout: onLogout,
-                      coreLifecycleService: coreLifecycleService,
-                      windowBehaviorPreferences: windowBehaviorPreferences,
-                      packageInfo: packageInfo,
-                      checkingForUpdates: checkingForUpdates,
-                      canOpenLogDirectory: canOpenLogDirectory,
-                      onCheckForUpdates: onCheckForUpdates,
-                      onExportLogs: onExportLogs,
-                      onOpenLogDirectory: onOpenLogDirectory,
-                      onShowLogsDialog: onShowLogsDialog,
-                      onCopyText: onCopyText,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+      ],
     );
   }
 
-  static Widget buildSectionContent({
-    required BuildContext context,
-    required _SettingsCategory category,
-    required ConsoleUser user,
-    required String workspaceName,
-    required Future<void> Function() onLogout,
-    required CoreLifecycleService coreLifecycleService,
-    required WindowBehaviorPreferences windowBehaviorPreferences,
-    required Future<PackageInfo> packageInfo,
-    required bool checkingForUpdates,
-    required bool canOpenLogDirectory,
-    required VoidCallback onCheckForUpdates,
-    required VoidCallback onExportLogs,
-    required VoidCallback onOpenLogDirectory,
-    required VoidCallback onShowLogsDialog,
-    required ValueChanged<String> onCopyText,
-  }) {
+  Widget _buildSectionContent(
+    BuildContext context,
+    _SettingsCategory category,
+  ) {
     return switch (category) {
       _SettingsCategory.account => _AccountSettingsSection(
-        user: user,
-        workspaceName: workspaceName,
-        onLogout: onLogout,
+        user: widget.user,
+        workspaceName: widget.workspaceName,
+        onLogout: widget.onLogout,
       ),
-      _SettingsCategory.core => _CoreSettingsSection(
-        coreLifecycleService: coreLifecycleService,
-        onCopyText: onCopyText,
+      _SettingsCategory.core => HomeCoreSettingsSection(
+        coreLifecycleService: widget.coreLifecycleService,
+        onCopyText: (value) => unawaited(_copyText(context, value)),
       ),
       _SettingsCategory.window => _WindowBehaviorSettingsSection(
-        windowBehaviorPreferences: windowBehaviorPreferences,
+        windowBehaviorPreferences: widget.windowBehaviorPreferences,
       ),
       _SettingsCategory.app => _AppSettingsSection(
-        packageInfo: packageInfo,
-        checkingForUpdates: checkingForUpdates,
-        onCheckForUpdates: onCheckForUpdates,
+        packageInfo: _packageInfo,
+        checkingForUpdates: _checkingForUpdates,
+        onCheckForUpdates: () => unawaited(_checkForUpdates(context)),
       ),
       _SettingsCategory.diagnostics => _DiagnosticsSettingsSection(
-        canOpenLogDirectory: canOpenLogDirectory,
-        onExportLogs: onExportLogs,
-        onOpenLogDirectory: onOpenLogDirectory,
-        onShowLogsDialog: onShowLogsDialog,
+        canOpenLogDirectory: _canOpenLogDirectory,
+        onExportLogs: () => unawaited(_exportLogs(context)),
+        onOpenLogDirectory: () => unawaited(_openLogDirectory(context)),
+        onShowLogsDialog: () => unawaited(_showLogsDialog(context)),
       ),
     };
-  }
-}
-
-class _SettingsSectionHeader extends StatelessWidget {
-  const _SettingsSectionHeader({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(
-        context,
-      ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
-    );
-  }
-}
-
-class _SettingsCompactScrollPage extends StatelessWidget {
-  const _SettingsCompactScrollPage({
-    required this.categories,
-    required this.user,
-    required this.workspaceName,
-    required this.onLogout,
-    required this.coreLifecycleService,
-    required this.windowBehaviorPreferences,
-    required this.packageInfo,
-    required this.checkingForUpdates,
-    required this.canOpenLogDirectory,
-    required this.onCheckForUpdates,
-    required this.onExportLogs,
-    required this.onOpenLogDirectory,
-    required this.onShowLogsDialog,
-    required this.onCopyText,
-  });
-
-  final List<_SettingsCategory> categories;
-  final ConsoleUser user;
-  final String workspaceName;
-  final Future<void> Function() onLogout;
-  final CoreLifecycleService coreLifecycleService;
-  final WindowBehaviorPreferences windowBehaviorPreferences;
-  final Future<PackageInfo> packageInfo;
-  final bool checkingForUpdates;
-  final bool canOpenLogDirectory;
-  final VoidCallback onCheckForUpdates;
-  final VoidCallback onExportLogs;
-  final VoidCallback onOpenLogDirectory;
-  final VoidCallback onShowLogsDialog;
-  final ValueChanged<String> onCopyText;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSmoothScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SettingsSectionHeader(title: '设置'),
-          const SizedBox(height: 16),
-          for (var i = 0; i < categories.length; i++) ...[
-            if (i > 0) const SizedBox(height: 24),
-            _SettingsSectionHeader(title: categories[i].title),
-            const SizedBox(height: 12),
-            _SettingsDetailPane.buildSectionContent(
-              context: context,
-              category: categories[i],
-              user: user,
-              workspaceName: workspaceName,
-              onLogout: onLogout,
-              coreLifecycleService: coreLifecycleService,
-              windowBehaviorPreferences: windowBehaviorPreferences,
-              packageInfo: packageInfo,
-              checkingForUpdates: checkingForUpdates,
-              canOpenLogDirectory: canOpenLogDirectory,
-              onCheckForUpdates: onCheckForUpdates,
-              onExportLogs: onExportLogs,
-              onOpenLogDirectory: onOpenLogDirectory,
-              onShowLogsDialog: onShowLogsDialog,
-              onCopyText: onCopyText,
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }
 
@@ -866,13 +432,13 @@ class _AccountSettingsSection extends StatelessWidget {
             divider: .full,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _SettingsAccountItem(
+              HomeSettingsAccountItem(
                 prefix: const Icon(Icons.person_outline),
                 label: '用户',
                 primary: user.effectiveName.isEmpty ? '用户' : user.effectiveName,
                 secondary: user.email.isEmpty ? '未提供邮箱' : user.email,
               ),
-              _SettingsAccountItem(
+              HomeSettingsAccountItem(
                 prefix: const Icon(Icons.apartment_outlined),
                 label: '工作区',
                 primary: workspaceName,
@@ -900,278 +466,6 @@ class _AccountSettingsSection extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _CoreSettingsSection extends StatelessWidget {
-  const _CoreSettingsSection({
-    required this.coreLifecycleService,
-    required this.onCopyText,
-  });
-
-  final CoreLifecycleService coreLifecycleService;
-  final ValueChanged<String> onCopyText;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<CoreRunStatus>(
-      valueListenable: coreLifecycleService.status,
-      builder: (context, status, _) {
-        return ValueListenableBuilder<CoreEngineVersionStatus>(
-          valueListenable: coreLifecycleService.engineVersionStatus,
-          builder: (context, engineVersionStatus, _) {
-            final running = status.phase == CoreRunPhase.running;
-            final needsVpnPermission =
-                status.phase == CoreRunPhase.needsVpnPermission;
-            final versionHint = _coreEngineVersionHint(engineVersionStatus);
-            final actionLabel = _coreEngineSettingsActionLabel(
-              engineVersionStatus,
-            );
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FCard.raw(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            _StatusDot(
-                              online: running,
-                              color:
-                                  status.phase == CoreRunPhase.needsElevation ||
-                                      needsVpnPermission
-                                  ? const Color(0xFFF59E0B)
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                status.message,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (status.machineId != null &&
-                            status.machineId!.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          HomeSettingsInfoRow(
-                            label: '设备 ID',
-                            value: status.machineId!,
-                            onCopy: onCopyText,
-                          ),
-                        ],
-                        if (engineVersionStatus.installedVersion != null) ...[
-                          const SizedBox(height: 12),
-                          HomeSettingsInfoRow(
-                            label: '当前版本',
-                            value: engineVersionStatus.installedVersion!,
-                            onCopy: onCopyText,
-                          ),
-                        ],
-                        if (engineVersionStatus.consoleVersion != null) ...[
-                          const SizedBox(height: 12),
-                          HomeSettingsInfoRow(
-                            label: '控制台版本',
-                            value: engineVersionStatus.consoleVersion!,
-                            onCopy: onCopyText,
-                          ),
-                        ],
-                        if (versionHint != null) ...[
-                          const SizedBox(height: 12),
-                          _CoreEngineVersionNotice(
-                            status: engineVersionStatus,
-                            message: versionHint,
-                          ),
-                        ],
-                        if (status.lastError != null &&
-                            status.lastError!.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8F9FB),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '错误信息',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: const Color(0xFF737373),
-                                      ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        status.lastError!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color:
-                                                  status.phase ==
-                                                          CoreRunPhase
-                                                              .needsElevation ||
-                                                      needsVpnPermission
-                                                  ? const Color(0xFFB45309)
-                                                  : const Color(0xFFDC2626),
-                                            ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ControlSelectionBoundary(
-                                      child: FTooltip(
-                                        tipBuilder: (context, controller) =>
-                                            const Text('复制错误'),
-                                        child: FButton(
-                                          key: const ValueKey<String>(
-                                            'settings-core-error-copy',
-                                          ),
-                                          variant: .ghost,
-                                          size: .xs,
-                                          style: const .delta(
-                                            contentStyle: .delta(
-                                              padding: .value(EdgeInsets.zero),
-                                            ),
-                                          ),
-                                          onPress: () =>
-                                              onCopyText(status.lastError!),
-                                          child: const Icon(
-                                            Icons.copy,
-                                            size: 14,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        if (status.phase == CoreRunPhase.needsElevation ||
-                            needsVpnPermission) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            needsVpnPermission ? '需要 VPN 授权' : '需要管理员权限安装引擎',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFF737373)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    if (status.phase == CoreRunPhase.needsElevation) ...[
-                      _ControlSelectionBoundary(
-                        child: FButton(
-                          onPress: () => unawaited(
-                            coreLifecycleService.repairWithElevation(),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.admin_panel_settings, size: 16),
-                              SizedBox(width: 8),
-                              Text('以管理员身份运行'),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    _ControlSelectionBoundary(
-                      child: FButton(
-                        variant: .outline,
-                        onPress: () => unawaited(coreLifecycleService.repair()),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.refresh, size: 16),
-                            const SizedBox(width: 8),
-                            Text(actionLabel),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _CoreEngineVersionNotice extends StatelessWidget {
-  const _CoreEngineVersionNotice({required this.status, required this.message});
-
-  final CoreEngineVersionStatus status;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final updateAvailable = status.updateAvailable;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: updateAvailable
-            ? const Color(0xFFFFF7ED)
-            : const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: updateAvailable
-              ? const Color(0xFFFED7AA)
-              : const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            updateAvailable ? Icons.system_update_alt : Icons.info_outline,
-            size: 16,
-            color: updateAvailable
-                ? const Color(0xFFC2410C)
-                : const Color(0xFF737373),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: updateAvailable
-                    ? const Color(0xFF9A3412)
-                    : const Color(0xFF737373),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1204,12 +498,12 @@ class _AppSettingsSection extends StatelessWidget {
                   divider: .full,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    _SettingsAccountItem(
+                    HomeSettingsAccountItem(
                       prefix: const Icon(Icons.apps_outlined),
                       label: '应用',
                       primary: _appDisplayName(info),
                     ),
-                    _SettingsAccountItem(
+                    HomeSettingsAccountItem(
                       prefix: const Icon(Icons.info_outline),
                       label: '版本',
                       primary: _appVersionText(snapshot),
@@ -1465,61 +759,6 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
             onPress: onOpenLogDirectory,
           ),
       ],
-    );
-  }
-}
-
-class _SettingsAccountItem extends StatelessWidget with FItemMixin {
-  const _SettingsAccountItem({
-    required this.prefix,
-    required this.label,
-    required this.primary,
-    this.secondary,
-  });
-
-  final Widget prefix;
-  final String label;
-  final String primary;
-  final String? secondary;
-
-  @override
-  Widget build(BuildContext context) {
-    return FItem.raw(
-      prefix: prefix,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            overflow: TextOverflow.visible,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF737373),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            primary,
-            softWrap: true,
-            overflow: TextOverflow.visible,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF0F172A),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (secondary != null && secondary!.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              secondary!,
-              softWrap: true,
-              overflow: TextOverflow.visible,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

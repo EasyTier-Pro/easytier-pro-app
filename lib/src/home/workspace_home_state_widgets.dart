@@ -26,25 +26,6 @@ class _StateMessage extends StatelessWidget {
   }
 }
 
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.online, this.color});
-
-  final bool online;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: color ?? (online ? const Color(0xFF16A34A) : Colors.grey),
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
 String _approvalLabel(ManagedDevice device) {
   return switch (device.approvalState.toLowerCase()) {
     'approved' => '已批准',

@@ -276,7 +276,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('连接'), findsWidgets);
-    expect(find.text('登录方式'), findsOneWidget);
+    expect(find.text('登录方式'), findsWidgets);
     expect(find.text('令牌连接已建立'), findsOneWidget);
     expect(find.text('设备 ID'), findsOneWidget);
     expect(find.text('连接引擎'), findsOneWidget);

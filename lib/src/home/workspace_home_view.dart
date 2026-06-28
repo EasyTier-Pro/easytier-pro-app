@@ -22,6 +22,7 @@ import '../shared/selectable_text_hit_boundary.dart';
 import 'dashboard_navigation.dart';
 import 'device_os_icon.dart';
 import 'home_shell.dart';
+import 'home_settings_page.dart';
 import 'network_detail_layout.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';

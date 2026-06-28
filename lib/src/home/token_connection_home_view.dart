@@ -10,6 +10,7 @@ import '../core/core_lifecycle_service.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
+import 'home_settings_page.dart';
 import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
@@ -460,6 +461,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       contentKey: contentKey,
       contentMode: switch (_activeView) {
         _TokenHomeView.network => HomeShellContentMode.staticConstrained,
+        _TokenHomeView.settings => HomeShellContentMode.plain,
         _ => HomeShellContentMode.scrollConstrained,
       },
       onMobileSwipe: _handleMobilePageSwipe,
@@ -488,22 +490,14 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           onStaticContentShown: _handleNetworkDetailStaticViewportShown,
           onRefresh: () => unawaited(_pollSelectedPeerStatuses()),
         ),
-        _TokenHomeView.settings => Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: _TokenSettingsPanel(
-              profile: widget.profile,
-              status: status,
-              onReconnect: () =>
-                  unawaited(widget.coreLifecycleService.repair()),
-              onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
-              onCopyText: (value) => unawaited(_copyText(value)),
-              onDisconnect: () => unawaited(widget.onDisconnect()),
-              onChangeToken: () => unawaited(widget.onChangeToken()),
-              onAccountLogin: () => unawaited(widget.onAccountLogin()),
-            ),
-          ),
+        _TokenHomeView.settings => _TokenSettingsPanel(
+          profile: widget.profile,
+          coreLifecycleService: widget.coreLifecycleService,
+          onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
+          onCopyText: (value) => unawaited(_copyText(value)),
+          onDisconnect: () => unawaited(widget.onDisconnect()),
+          onChangeToken: () => unawaited(widget.onChangeToken()),
+          onAccountLogin: () => unawaited(widget.onAccountLogin()),
         ),
       },
     );
@@ -771,8 +765,7 @@ class _TokenStatusSummary extends StatelessWidget {
 class _TokenSettingsPanel extends StatelessWidget {
   const _TokenSettingsPanel({
     required this.profile,
-    required this.status,
-    required this.onReconnect,
+    required this.coreLifecycleService,
     required this.onCopyDiagnostics,
     required this.onCopyText,
     required this.onDisconnect,
@@ -781,8 +774,7 @@ class _TokenSettingsPanel extends StatelessWidget {
   });
 
   final TokenConnectionProfile profile;
-  final CoreRunStatus status;
-  final VoidCallback onReconnect;
+  final CoreLifecycleService coreLifecycleService;
   final VoidCallback onCopyDiagnostics;
   final ValueChanged<String> onCopyText;
   final VoidCallback onDisconnect;
@@ -791,153 +783,90 @@ class _TokenSettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final error = status.lastError?.trim();
-    final engine = status.details?.trim();
+    return HomeSettingsPage(
+      sections: [
+        HomeSettingsSection(
+          id: 'connection',
+          title: '连接',
+          icon: Icons.memory_outlined,
+          builder: (context) => HomeCoreSettingsSection(
+            coreLifecycleService: coreLifecycleService,
+            onCopyText: onCopyText,
+            showVersionInfo: false,
+            missingMachineIdText: '等待注册',
+            repairActionLabelBuilder: (_) => '重新连接',
+            extraInfoBuilder: (status, _) {
+              final engine = status.details?.trim();
+              return [
+                HomeSettingsInfoItem(
+                  label: '连接引擎',
+                  value: engine == null || engine.isEmpty ? '准备中' : engine,
+                ),
+                HomeSettingsInfoItem(
+                  label: '控制服务器',
+                  value: profile.configServer,
+                ),
+              ];
+            },
+            extraActions: [
+              FButton(
+                variant: .outline,
+                onPress: onCopyDiagnostics,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.content_copy, size: 16),
+                    SizedBox(width: 8),
+                    Text('复制诊断'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        HomeSettingsSection(
+          id: 'login',
+          title: '登录方式',
+          icon: Icons.vpn_key_outlined,
+          builder: (context) => _TokenLoginSettingsSection(
+            profile: profile,
+            onDisconnect: onDisconnect,
+            onChangeToken: onChangeToken,
+            onAccountLogin: onAccountLogin,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
+class _TokenLoginSettingsSection extends StatelessWidget {
+  const _TokenLoginSettingsSection({
+    required this.profile,
+    required this.onDisconnect,
+    required this.onChangeToken,
+    required this.onAccountLogin,
+  });
+
+  final TokenConnectionProfile profile;
+  final VoidCallback onDisconnect;
+  final VoidCallback onChangeToken;
+  final VoidCallback onAccountLogin;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '连接',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 16),
-        FCard.raw(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _phaseIcon(status.phase),
-                      size: 18,
-                      color: _phaseColor(status.phase),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        status.message,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                HomeSettingsInfoRow(
-                  label: '设备 ID',
-                  value: status.machineId ?? '等待注册',
-                  onCopy: onCopyText,
-                ),
-                const SizedBox(height: 12),
-                HomeSettingsInfoRow(
-                  label: '连接引擎',
-                  value: engine == null || engine.isEmpty ? '准备中' : engine,
-                  onCopy: onCopyText,
-                ),
-                const SizedBox(height: 12),
-                HomeSettingsInfoRow(
-                  label: '控制服务器',
-                  value: profile.configServer,
-                  onCopy: onCopyText,
-                ),
-                if (error != null && error.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FB),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Text(
-                      error,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _phaseColor(status.phase),
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FButton(
-                      variant: .outline,
-                      onPress: onReconnect,
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.refresh, size: 16),
-                          SizedBox(width: 8),
-                          Text('重新连接'),
-                        ],
-                      ),
-                    ),
-                    FButton(
-                      variant: .outline,
-                      onPress: onCopyDiagnostics,
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.content_copy, size: 16),
-                          SizedBox(width: 8),
-                          Text('复制诊断'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          '登录方式',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 16),
         FCard.raw(
           child: FItemGroup(
             divider: .full,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              FItem.raw(
+              HomeSettingsAccountItem(
                 prefix: const Icon(Icons.vpn_key_outlined),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '设备令牌',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      profile.effectiveDisplayName,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+                label: '设备令牌',
+                primary: profile.effectiveDisplayName,
               ),
             ],
           ),
@@ -1465,17 +1394,6 @@ String _phaseLabel(CoreRunPhase phase) {
     CoreRunPhase.error => '异常',
     CoreRunPhase.stopped => '已断开',
     CoreRunPhase.signedOut => '未连接',
-  };
-}
-
-IconData _phaseIcon(CoreRunPhase phase) {
-  return switch (phase) {
-    CoreRunPhase.running => Icons.check_circle_outline,
-    CoreRunPhase.checking || CoreRunPhase.repairing => Icons.sync,
-    CoreRunPhase.needsVpnPermission => Icons.verified_user_outlined,
-    CoreRunPhase.needsElevation => Icons.admin_panel_settings_outlined,
-    CoreRunPhase.error => Icons.error_outline,
-    CoreRunPhase.stopped || CoreRunPhase.signedOut => Icons.power_settings_new,
   };
 }
 
