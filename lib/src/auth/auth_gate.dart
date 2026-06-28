@@ -454,7 +454,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       );
     }
 
+    final showBrand =
+        _stage == AuthStage.checking || _stage == AuthStage.loginRequired;
     final content = _AuthPageShell(
+      showBrand: showBrand,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         child: switch (_stage) {
@@ -500,9 +503,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 }
 
 class _AuthPageShell extends StatelessWidget {
-  const _AuthPageShell({required this.child});
+  const _AuthPageShell({required this.child, required this.showBrand});
 
   final Widget child;
+  final bool showBrand;
 
   static const double _wideBreakpoint = 800;
   static const double _maxContentWidth = 420;
@@ -513,6 +517,22 @@ class _AuthPageShell extends StatelessWidget {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= _wideBreakpoint;
         if (isWide) {
+          if (!showBrand) {
+            return Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: _maxContentWidth,
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            );
+          }
+
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -551,9 +571,9 @@ class _AuthPageShell extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const _BrandPanel(compact: true),
+                if (showBrand) const _BrandPanel(compact: true),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  padding: EdgeInsets.fromLTRB(24, showBrand ? 8 : 32, 24, 32),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(
                       maxWidth: _maxContentWidth,

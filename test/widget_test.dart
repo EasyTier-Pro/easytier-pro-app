@@ -136,6 +136,39 @@ void main() {
     }
   });
 
+  testWidgets('auth detail steps hide brand panel', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    final launcher = _FakeUrlLauncherPlatform();
+    final authService = _LoginFlowAuthService();
+    UrlLauncherPlatform.instance = launcher;
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('EasyTier Pro'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FButton, '开始登录'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请在浏览器中完成授权'), findsOneWidget);
+      expect(find.text('EasyTier Pro'), findsNothing);
+    } finally {
+      UrlLauncherPlatform.instance = previousLauncher;
+    }
+  });
+
   testWidgets('token connection opens separate token home', (
     WidgetTester tester,
   ) async {
@@ -201,6 +234,7 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
     await tester.pumpAndSettle();
 
+    expect(find.text('EasyTier Pro'), findsNothing);
     expect(find.text('设备令牌'), findsOneWidget);
     expect(find.text('设备令牌或连接链接'), findsNothing);
     expect(find.textContaining('easytierpro://connect'), findsNothing);
