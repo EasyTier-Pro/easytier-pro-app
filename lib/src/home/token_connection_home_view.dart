@@ -9,6 +9,7 @@ import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
+import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
 
@@ -1043,17 +1044,51 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = runtimeName?.trim() ?? '';
+    final nodes = name.isEmpty
+        ? const <NetworkDevice>[]
+        : _tokenNetworkDevicesFromPeerStatuses(name, peerStatuses);
+    final downloadRate = _formatTrafficRate(snapshot?.downloadBytesPerSecond);
+    final uploadRate = _formatTrafficRate(snapshot?.uploadBytesPerSecond);
+    final header = HomeNetworkDetailHeader(
+      title: name.isEmpty ? '网络' : name,
+      subtitle: '设备令牌连接 · 只读实例',
+      totalDevices: nodes.length,
+      onlineDevices: nodes.length,
+      downloadRateText: downloadRate,
+      uploadRateText: uploadRate,
+      actions: [
+        Tooltip(
+          message: '刷新节点',
+          excludeFromSemantics: true,
+          child: FButton(
+            variant: .ghost,
+            size: .sm,
+            onPress: name.isEmpty ? null : onRefresh,
+            mainAxisSize: MainAxisSize.min,
+            child: const Icon(Icons.refresh, size: 16),
+          ),
+        ),
+      ],
+    );
+
     if (name.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _TokenNetworkSectionTitle(
-            title: '网络',
-            countLabel: '0',
-            icon: Icons.hub_outlined,
-            trailing: const _TokenReadonlyHint(),
-          ),
+          header,
           const SizedBox(height: 12),
+          HomeNetworkDetailSectionTabs(
+            selectedIndex: 0,
+            onChanged: (_) {},
+            tabs: const [
+              HomeNetworkDetailSectionTab(
+                icon: Icons.devices_other_outlined,
+                label: '节点 0',
+                compactLabel: '节点',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           const Expanded(
             child: Center(
               child: _TokenNetworkInstanceEmpty(
@@ -1065,28 +1100,23 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
       );
     }
 
-    final nodes = _tokenNetworkDevicesFromPeerStatuses(name, peerStatuses);
-    final downloadRate = _formatTrafficRate(snapshot?.downloadBytesPerSecond);
-    final uploadRate = _formatTrafficRate(snapshot?.uploadBytesPerSecond);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TokenNetworkInstanceDetailHeader(
-          runtimeName: name,
-          nodeCount: nodes.length,
-          downloadRate: downloadRate,
-          uploadRate: uploadRate,
-          onRefresh: onRefresh,
-        ),
+        header,
         const SizedBox(height: 12),
-        _TokenNetworkSectionTitle(
-          title: '节点',
-          countLabel: '${nodes.length}',
-          icon: Icons.devices_outlined,
-          trailing: const _TokenReadonlyHint(),
+        HomeNetworkDetailSectionTabs(
+          selectedIndex: 0,
+          onChanged: (_) {},
+          tabs: [
+            HomeNetworkDetailSectionTab(
+              icon: Icons.devices_other_outlined,
+              label: '节点 ${nodes.length}',
+              compactLabel: '节点',
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Expanded(
           child: NetworkNodeListViewport(
             nodes: nodes,
@@ -1095,136 +1125,6 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TokenNetworkSectionTitle extends StatelessWidget {
-  const _TokenNetworkSectionTitle({
-    required this.title,
-    required this.countLabel,
-    required this.icon,
-    this.trailing,
-  });
-
-  final String title;
-  final String countLabel;
-  final IconData icon;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withAlpha(8),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 18, color: const Color(0xFF334155)),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF0F172A),
-            fontSize: 18,
-          ),
-        ),
-        const SizedBox(width: 8),
-        HomeStatusChip(label: countLabel, active: countLabel != '0'),
-        const Spacer(),
-        ?trailing,
-      ],
-    );
-  }
-}
-
-class _TokenNetworkInstanceDetailHeader extends StatelessWidget {
-  const _TokenNetworkInstanceDetailHeader({
-    required this.runtimeName,
-    required this.nodeCount,
-    required this.downloadRate,
-    required this.uploadRate,
-    required this.onRefresh,
-  });
-
-  final String runtimeName;
-  final int nodeCount;
-  final String downloadRate;
-  final String uploadRate;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(bottom: 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  runtimeName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: const Color(0xFF0F172A),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Tooltip(
-                message: '刷新节点',
-                excludeFromSemantics: true,
-                child: FButton(
-                  variant: .ghost,
-                  size: .sm,
-                  onPress: onRefresh,
-                  mainAxisSize: MainAxisSize.min,
-                  child: const Icon(Icons.refresh, size: 16),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '设备令牌连接 · 只读实例',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF94A3B8),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              const HomeStatusChip(label: '已连接', active: true),
-              HomeStatusChip(label: '$nodeCount 个节点', active: nodeCount > 0),
-              HomeMiniTrafficPill(
-                icon: Icons.arrow_downward,
-                label: downloadRate,
-                color: const Color(0xFF16A34A),
-              ),
-              HomeMiniTrafficPill(
-                icon: Icons.arrow_upward,
-                label: uploadRate,
-                color: const Color(0xFF2563EB),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

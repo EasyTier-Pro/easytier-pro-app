@@ -221,7 +221,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('设备令牌连接 · 只读实例'), findsOneWidget);
-    expect(find.text('节点'), findsOneWidget);
+    expect(find.textContaining('节点'), findsWidgets);
     expect(find.text('token-peer'), findsOneWidget);
     expect(find.textContaining('10.147.0.2'), findsOneWidget);
     expect(coreLifecycleService.peerReadCount, greaterThan(0));

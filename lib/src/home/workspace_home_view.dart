@@ -22,6 +22,7 @@ import '../shared/selectable_text_hit_boundary.dart';
 import 'dashboard_navigation.dart';
 import 'device_os_icon.dart';
 import 'home_shell.dart';
+import 'network_detail_layout.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
 
@@ -96,8 +97,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   _NetworkDetailSection _networkDetailSection = _NetworkDetailSection.nodes;
   double _networkDetailHeaderCollapseOffset = 0;
   final _networkDetailHeaderCollapse =
-      ValueNotifier<_NetworkDetailHeaderCollapse>(
-        const _NetworkDetailHeaderCollapse(progress: 0, animate: false),
+      ValueNotifier<HomeNetworkDetailHeaderCollapse>(
+        const HomeNetworkDetailHeaderCollapse(progress: 0, animate: false),
       );
   String _newNetworkName = '我的网络';
   String _newNetworkIPv4Cidr = '';
@@ -244,7 +245,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     if (!reachedEdge && (notifiedOffset - nextOffset).abs() < 0.5) {
       return;
     }
-    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+    _networkDetailHeaderCollapse.value = HomeNetworkDetailHeaderCollapse(
       progress: _networkDetailHeaderCollapseProgress,
       animate: animate,
     );
@@ -255,7 +256,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       return;
     }
     _networkDetailHeaderCollapseOffset = 0;
-    _networkDetailHeaderCollapse.value = _NetworkDetailHeaderCollapse(
+    _networkDetailHeaderCollapse.value = HomeNetworkDetailHeaderCollapse(
       progress: 0,
       animate: animate,
     );
