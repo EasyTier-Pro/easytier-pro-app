@@ -823,12 +823,25 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
           children: [
             Row(
               children: [
-                Icon(Icons.vpn_key_outlined, color: theme.colorScheme.primary),
-                const SizedBox(width: 10),
+                Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.vpn_key_outlined,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     '设备令牌连接',
-                    style: theme.textTheme.headlineSmall?.copyWith(
+                    style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -838,13 +851,17 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
             const SizedBox(height: 8),
             Text(
               '用控制台生成的设备令牌接入本机',
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 20),
             _TokenFormField(
               label: '设备令牌',
+              trailing: _TokenLabelLink(
+                label: '获取接入密钥',
+                onTap: () => unawaited(_openConsoleEnrollmentKeys()),
+              ),
               child: FTextField(
                 key: const ValueKey<String>('token-connect-input'),
                 control: FTextFieldControl.managed(
@@ -852,14 +869,10 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
                 ),
                 hint: 'etk_...',
                 keyboardType: TextInputType.text,
-                maxLines: 2,
+                maxLines: 1,
               ),
             ),
-            const SizedBox(height: 8),
-            _TokenEnrollmentKeyHint(
-              onOpenConsole: () => unawaited(_openConsoleEnrollmentKeys()),
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 6),
             _TokenAdvancedDisclosure(
               expanded: _showAdvancedOptions,
               onToggle: () {
@@ -867,7 +880,7 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
               },
             ),
             if (_showAdvancedOptions) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               _TokenFormField(
                 label: '控制服务器',
                 child: FTextField(
@@ -879,7 +892,7 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
                   keyboardType: TextInputType.url,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               _TokenFormField(
                 label: '主机名',
                 child: FTextField(
@@ -892,10 +905,11 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
                 ),
               ),
             ],
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
             Row(
               children: [
                 FButton(
+                  size: .sm,
                   onPress: _submitting ? null : () => unawaited(_submit()),
                   child: _submitting
                       ? const Row(
@@ -906,18 +920,12 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
                             Text('正在连接...'),
                           ],
                         )
-                      : const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.play_arrow, size: 18),
-                            SizedBox(width: 8),
-                            Text('连接'),
-                          ],
-                        ),
+                      : const Text('连接'),
                 ),
                 const SizedBox(width: 8),
                 FButton(
                   variant: .ghost,
+                  size: .sm,
                   onPress: _submitting
                       ? null
                       : () => unawaited(widget.onBack()),
@@ -932,55 +940,42 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
   }
 }
 
-class _TokenEnrollmentKeyHint extends StatelessWidget {
-  const _TokenEnrollmentKeyHint({required this.onOpenConsole});
+class _TokenLabelLink extends StatelessWidget {
+  const _TokenLabelLink({required this.label, required this.onTap});
 
-  final VoidCallback onOpenConsole;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.58);
-
-    return Wrap(
-      spacing: 4,
-      runSpacing: 2,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Icon(Icons.help_outline, size: 14, color: muted),
-        Text(
-          '还没有设备令牌？',
-          style: theme.textTheme.bodySmall?.copyWith(color: muted),
-        ),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onOpenConsole,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '去控制台获取',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  Icon(
-                    Icons.open_in_new,
-                    size: 13,
-                    color: theme.colorScheme.primary,
-                  ),
-                ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
+              const SizedBox(width: 3),
+              Icon(
+                Icons.open_in_new,
+                size: 12,
+                color: theme.colorScheme.primary,
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -997,41 +992,31 @@ class _TokenAdvancedDisclosure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.58);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.45);
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onToggle,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggle,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.tune, size: 16, color: muted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '高级设置',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: muted,
-                      fontWeight: FontWeight.w700,
-                    ),
+                Text(
+                  '高级设置',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: muted,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(width: 2),
                 Icon(
-                  expanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: 18,
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
                   color: muted,
                 ),
               ],
@@ -1044,21 +1029,34 @@ class _TokenAdvancedDisclosure extends StatelessWidget {
 }
 
 class _TokenFormField extends StatelessWidget {
-  const _TokenFormField({required this.label, required this.child});
+  const _TokenFormField({
+    required this.label,
+    required this.child,
+    this.trailing,
+  });
 
   final String label;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            ?trailing,
+          ],
         ),
         const SizedBox(height: 6),
         child,
