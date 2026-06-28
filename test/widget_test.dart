@@ -21,6 +21,7 @@ import 'package:easytier_pro_app/src/core/core_lifecycle_service.dart';
 import 'package:easytier_pro_app/src/desktop/app_update_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 import 'package:easytier_pro_app/src/desktop/window_behavior_preferences.dart';
+import 'package:easytier_pro_app/src/home/network_detail_layout.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
@@ -74,6 +75,30 @@ void main() {
       UrlLauncherPlatform.instance = previousLauncher;
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  test('network detail collapse controller coordinates list scroll', () {
+    final controller = HomeNetworkDetailHeaderCollapseController();
+    final metrics = FixedScrollMetrics(
+      minScrollExtent: 0,
+      maxScrollExtent: 0,
+      pixels: 0,
+      viewportDimension: 400,
+      axisDirection: AxisDirection.down,
+      devicePixelRatio: 1,
+    );
+
+    expect(controller.value.progress, 0);
+    expect(controller.coordinateScrollDelta(48, metrics), 0);
+    expect(controller.value.progress, closeTo(0.5, 0.001));
+    expect(controller.coordinateScrollDelta(120, metrics), closeTo(72, 0.001));
+    expect(controller.value.progress, 1);
+    expect(controller.coordinateScrollDelta(-36, metrics), 0);
+    expect(controller.value.progress, closeTo(0.625, 0.001));
+
+    controller.reset();
+    expect(controller.value.progress, 0);
+    controller.dispose();
   });
 
   testWidgets('device auth return route is consumed without replacing app', (

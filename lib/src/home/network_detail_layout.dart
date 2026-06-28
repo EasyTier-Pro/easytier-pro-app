@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
 import '../shared/app_motion.dart';
+import '../shared/app_smooth_scroll_view.dart';
 
 class HomeNetworkDetailHeaderCollapse {
   const HomeNetworkDetailHeaderCollapse({
@@ -12,6 +15,79 @@ class HomeNetworkDetailHeaderCollapse {
 
   final double progress;
   final bool animate;
+}
+
+class HomeNetworkDetailHeaderCollapseController
+    extends ValueNotifier<HomeNetworkDetailHeaderCollapse> {
+  HomeNetworkDetailHeaderCollapseController({this.distance = 96})
+    : super(const HomeNetworkDetailHeaderCollapse(progress: 0, animate: false));
+
+  final double distance;
+  double _offset = 0;
+
+  double coordinateScrollDelta(
+    double delta,
+    ScrollMetrics metrics, {
+    AppScrollDeltaSource source = AppScrollDeltaSource.pointerSignal,
+  }) {
+    if (delta == 0) {
+      return 0;
+    }
+
+    var nextOffset = _offset;
+    var remainingDelta = delta;
+    final remainingCollapse = distance - _offset;
+    final cannotScroll =
+        metrics.maxScrollExtent <= metrics.minScrollExtent + 0.5;
+    if (delta > 0 && remainingCollapse > 0) {
+      final consumed = math.min(delta, remainingCollapse);
+      nextOffset += consumed;
+      remainingDelta -= consumed;
+    } else if (delta < 0 &&
+        _offset > 0 &&
+        (cannotScroll || metrics.pixels <= metrics.minScrollExtent + 0.5)) {
+      final consumed = math.min(-delta, _offset);
+      nextOffset -= consumed;
+      remainingDelta += consumed;
+    }
+
+    setOffset(
+      nextOffset,
+      animate: source == AppScrollDeltaSource.pointerSignal,
+    );
+    return remainingDelta;
+  }
+
+  void reset({bool animate = false}) {
+    if (_offset == 0) {
+      return;
+    }
+    _offset = 0;
+    value = HomeNetworkDetailHeaderCollapse(progress: 0, animate: animate);
+  }
+
+  void syncStaticViewportShown() {
+    reset();
+  }
+
+  void setOffset(double offset, {required bool animate}) {
+    final nextOffset = offset.clamp(0.0, distance).toDouble();
+    final notifiedOffset = value.progress * distance;
+    if ((_offset - nextOffset).abs() < 0.001) {
+      return;
+    }
+    _offset = nextOffset;
+    final reachedEdge = nextOffset == 0 || nextOffset == distance;
+    if (!reachedEdge && (notifiedOffset - nextOffset).abs() < 0.5) {
+      return;
+    }
+    value = HomeNetworkDetailHeaderCollapse(
+      progress: distance == 0
+          ? 1
+          : (_offset / distance).clamp(0.0, 1.0).toDouble(),
+      animate: animate,
+    );
+  }
 }
 
 class HomeNetworkDetailHeader extends StatelessWidget {

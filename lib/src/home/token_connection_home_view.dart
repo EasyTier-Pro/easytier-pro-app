@@ -7,6 +7,7 @@ import 'package:forui/forui.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
 import 'network_detail_layout.dart';
@@ -52,6 +53,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   Map<String, String> _peerStatusErrorsByRuntime = const <String, String>{};
   String? _trafficError;
   String? _selectedRuntimeName;
+  final _networkDetailHeaderCollapse =
+      HomeNetworkDetailHeaderCollapseController();
 
   List<MapEntry<String, _TokenTrafficSnapshot>> get _sortedTrafficEntries {
     return _traffic.entries.toList()
@@ -86,6 +89,24 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     return ids.length;
   }
 
+  double _coordinateNetworkDetailScrollDelta(
+    double delta,
+    ScrollMetrics metrics, {
+    AppScrollDeltaSource source = AppScrollDeltaSource.pointerSignal,
+  }) => _networkDetailHeaderCollapse.coordinateScrollDelta(
+    delta,
+    metrics,
+    source: source,
+  );
+
+  void _resetNetworkDetailScrollOffset({bool animate = false}) {
+    _networkDetailHeaderCollapse.reset(animate: animate);
+  }
+
+  void _handleNetworkDetailStaticViewportShown() {
+    _networkDetailHeaderCollapse.syncStaticViewportShown();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -110,6 +131,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   void dispose() {
     _trafficTimer?.cancel();
     _peerStatusTimer?.cancel();
+    _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     super.dispose();
   }
@@ -224,7 +246,11 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
             (_selectedRuntimeName == null ||
                 !_traffic.containsKey(_selectedRuntimeName))) {
           final entries = _sortedTrafficEntries;
-          _selectedRuntimeName = entries.isEmpty ? null : entries.first.key;
+          final nextRuntimeName = entries.isEmpty ? null : entries.first.key;
+          if (_selectedRuntimeName != nextRuntimeName) {
+            _selectedRuntimeName = nextRuntimeName;
+            _resetNetworkDetailScrollOffset();
+          }
         }
       });
     } catch (error) {
@@ -288,11 +314,17 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
 
   void _showNetwork() {
     if (_activeView == _TokenHomeView.network) {
+      setState(() {
+        _selectedRuntimeName ??= _fallbackRuntimeName;
+        _resetNetworkDetailScrollOffset();
+      });
+      _refreshPeerStatusPolling();
       return;
     }
     setState(() {
       _selectedRuntimeName ??= _fallbackRuntimeName;
       _activeView = _TokenHomeView.network;
+      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerStatusPolling();
   }
@@ -301,6 +333,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     setState(() {
       _selectedRuntimeName = runtimeName;
       _activeView = _TokenHomeView.network;
+      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerStatusPolling();
   }
@@ -319,6 +352,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     setState(() {
       _selectedRuntimeName = runtimeName;
       _activeView = _TokenHomeView.network;
+      _resetNetworkDetailScrollOffset();
     });
     _refreshPeerStatusPolling();
   }
@@ -445,6 +479,9 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           peerStatusError: selectedRuntimeName == null
               ? _trafficError
               : _peerStatusErrorsByRuntime[selectedRuntimeName],
+          collapse: _networkDetailHeaderCollapse,
+          scrollDeltaCoordinator: _coordinateNetworkDetailScrollDelta,
+          onStaticContentShown: _handleNetworkDetailStaticViewportShown,
           onRefresh: () => unawaited(_pollSelectedPeerStatuses()),
         ),
         _TokenHomeView.settings => Align(
@@ -1032,6 +1069,9 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
     required this.snapshot,
     required this.peerStatuses,
     required this.peerStatusError,
+    required this.collapse,
+    required this.scrollDeltaCoordinator,
+    required this.onStaticContentShown,
     required this.onRefresh,
   });
 
@@ -1039,6 +1079,9 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
   final _TokenTrafficSnapshot? snapshot;
   final Map<String, CorePeerStatus> peerStatuses;
   final String? peerStatusError;
+  final HomeNetworkDetailHeaderCollapseController collapse;
+  final AppScrollDeltaCoordinator scrollDeltaCoordinator;
+  final VoidCallback onStaticContentShown;
   final VoidCallback onRefresh;
 
   @override
@@ -1056,6 +1099,7 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
       onlineDevices: nodes.length,
       downloadRateText: downloadRate,
       uploadRateText: uploadRate,
+      collapse: collapse,
       actions: [
         Tooltip(
           message: '刷新节点',
@@ -1122,6 +1166,8 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
             nodes: nodes,
             peerStatusesByIpv4: peerStatuses,
             runtimeError: peerStatusError,
+            scrollDeltaCoordinator: scrollDeltaCoordinator,
+            onStaticContentShown: onStaticContentShown,
           ),
         ),
       ],
