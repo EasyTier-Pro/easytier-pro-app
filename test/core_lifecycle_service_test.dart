@@ -77,6 +77,59 @@ void main() {
       expect(service.engineVersionStatus.value.installedVersion, isNull);
       expect(service.engineVersionStatus.value.consoleVersion, isNull);
     });
+
+    test('binds token connection without workspace bootstrap', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindTokenConnection(
+        TokenConnectionProfile(
+          bootstrapToken: 'device-token',
+          configServer: 'tcp://127.0.0.1:22020',
+          displayName: 'token profile',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+
+      expect(authService.prepareBootstrapCount, 0);
+      expect(authService.fetchVersionCount, 1);
+      expect(authService.workspaceIds, isEmpty);
+      expect(runtime.ensureRunningCount, 1);
+      expect(runtime.forceReinstallValues, [false]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+      expect(service.status.value.machineId, 'machine-1');
+    });
+
+    test('repair rebuilds active token connection', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindTokenConnection(
+        TokenConnectionProfile(
+          bootstrapToken: 'device-token',
+          configServer: 'tcp://127.0.0.1:22020',
+          displayName: 'token profile',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await service.repair();
+
+      expect(authService.prepareBootstrapCount, 0);
+      expect(authService.fetchVersionCount, 2);
+      expect(runtime.ensureRunningCount, 2);
+      expect(runtime.forceReinstallValues, [false, true]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
   });
 
   group('CoreLifecycleService engine version', () {
@@ -1474,6 +1527,20 @@ class _LifecycleAuthService implements AuthService {
   }) async {
     fetchVersionCount++;
     workspaceIds.add(workspaceId);
+    final error = bootstrapError;
+    if (error != null) {
+      throw error;
+    }
+    final completer = versionCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
+    return bootstrapVersion;
+  }
+
+  @override
+  Future<String> fetchLatestCoreVersion() async {
+    fetchVersionCount++;
     final error = bootstrapError;
     if (error != null) {
       throw error;

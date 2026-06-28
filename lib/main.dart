@@ -57,6 +57,7 @@ Future<void> main() async {
   final authService = ConsoleAuthService(
     tokenStore: OAuthTokenStore(preferences),
   );
+  final tokenConnectionProfileStore = TokenConnectionProfileStore(preferences);
   final appClientReporter = AppClientReporter(preferences: preferences);
   final coreLifecycleService = CoreLifecycleService(
     authService: authService,
@@ -78,6 +79,7 @@ Future<void> main() async {
   runApp(
     MyApp(
       authService: authService,
+      tokenConnectionProfileStore: tokenConnectionProfileStore,
       traySupport: traySupport,
       coreLifecycleService: coreLifecycleService,
       appUpdateService: appUpdateService,
@@ -93,14 +95,18 @@ class MyApp extends StatefulWidget {
     required this.traySupport,
     required this.coreLifecycleService,
     AppUpdateService? appUpdateService,
+    TokenConnectionProfileStore? tokenConnectionProfileStore,
     this.windowBehaviorPreferences,
     this.androidMvpSingleActiveNetworkOverride,
-  }) : appUpdateService = appUpdateService ?? AppUpdateService();
+  }) : appUpdateService = appUpdateService ?? AppUpdateService(),
+       tokenConnectionProfileStore =
+           tokenConnectionProfileStore ?? TokenConnectionProfileStore.memory();
 
   final AuthService authService;
   final TraySupport traySupport;
   final CoreLifecycleService coreLifecycleService;
   final AppUpdateService appUpdateService;
+  final TokenConnectionProfileStore tokenConnectionProfileStore;
   final WindowBehaviorPreferences? windowBehaviorPreferences;
   final bool? androidMvpSingleActiveNetworkOverride;
 
@@ -182,6 +188,7 @@ class _MyAppState extends State<MyApp> {
       ),
       home: AuthGate(
         authService: widget.authService,
+        tokenConnectionProfileStore: widget.tokenConnectionProfileStore,
         coreLifecycleService: widget.coreLifecycleService,
         traySupport: widget.traySupport,
         appUpdateService: widget.appUpdateService,

@@ -69,6 +69,8 @@ abstract class AuthService {
     required String workspaceId,
   });
 
+  Future<String> fetchLatestCoreVersion();
+
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,

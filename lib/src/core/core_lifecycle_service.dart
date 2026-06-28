@@ -47,6 +47,7 @@ class CoreLifecycleService {
   late final CorePlatformRuntime _runtime;
   late final StreamSubscription<CoreRuntimeEvent> _runtimeEvents;
   AuthSession? _session;
+  TokenConnectionProfile? _tokenConnectionProfile;
   Future<void> _serial = Future<void>.value();
   String? _cliPath;
   Timer? _engineVersionCheckTimer;
@@ -75,6 +76,7 @@ class CoreLifecycleService {
           previousWorkspace != nextWorkspace;
 
       _session = session;
+      _tokenConnectionProfile = null;
       _invalidateEngineVersionChecks();
       if (versionScopeChanged) {
         engineVersionStatus.value = CoreEngineVersionStatus.unknown;
@@ -105,6 +107,7 @@ class CoreLifecycleService {
   Future<void> onLogout() {
     return _enqueue(() async {
       _session = null;
+      _tokenConnectionProfile = null;
       _invalidateEngineVersionChecks();
       _stopEngineVersionCheckTimer();
       engineVersionStatus.value = CoreEngineVersionStatus.unknown;
@@ -140,7 +143,14 @@ class CoreLifecycleService {
     return _enqueue(() async {
       final session = _session;
       if (session == null) {
-        _logger.warn('core', 'Repair requested without active session');
+        final profile = _tokenConnectionProfile;
+        if (profile != null) {
+          _logger.info('core', 'Manual token connection repair requested');
+          _invalidateEngineVersionChecks();
+          await _ensureTokenConnection(forceReinstall: true);
+          return;
+        }
+        _logger.warn('core', 'Repair requested without active connection');
         status.value = CoreRunStatus.signedOut;
         engineVersionStatus.value = CoreEngineVersionStatus.unknown;
         return;
@@ -164,12 +174,40 @@ class CoreLifecycleService {
     return _startEngineVersionCheck();
   }
 
+  Future<void> bindTokenConnection(TokenConnectionProfile profile) {
+    return _enqueue(() async {
+      _session = null;
+      _tokenConnectionProfile = profile;
+      _invalidateEngineVersionChecks();
+      _stopEngineVersionCheckTimer();
+      engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+      _logger.info(
+        'core',
+        'Binding token connection',
+        context: {
+          'display_name': profile.effectiveDisplayName,
+          'config_server': _redactConfigServer(profile.configServer),
+        },
+      );
+      await _ensureTokenConnection(forceReinstall: false);
+    });
+  }
+
   Future<void> repairWithElevation() {
     return _enqueue(() async {
       _pauseEngineVersionChecks();
       try {
         final session = _session;
         if (session == null) {
+          final profile = _tokenConnectionProfile;
+          if (profile != null) {
+            _logger.info(
+              'core',
+              'Elevation repair requested for token connection; using token repair path',
+            );
+            await _ensureTokenConnection(forceReinstall: true);
+            return;
+          }
           _logger.warn(
             'core',
             'Elevation repair requested without active session',
@@ -713,6 +751,106 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
         status.value = CoreRunStatus(
           phase: CoreRunPhase.error,
           message: '连接引擎启动失败',
+          lastError: _normalizeError(error),
+        );
+      }
+    } finally {
+      _resumeEngineVersionChecks();
+    }
+  }
+
+  Future<void> _ensureTokenConnection({required bool forceReinstall}) async {
+    _pauseEngineVersionChecks();
+    try {
+      final profile = _tokenConnectionProfile;
+      if (profile == null) {
+        status.value = CoreRunStatus.signedOut;
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+        return;
+      }
+
+      status.value = const CoreRunStatus(
+        phase: CoreRunPhase.checking,
+        message: '正在检查令牌连接状态...',
+      );
+      _logger.info(
+        'core',
+        'Ensure token connection start',
+        context: {
+          'force_reinstall': forceReinstall,
+          'config_server': _redactConfigServer(profile.configServer),
+        },
+      );
+
+      try {
+        final version = await authService.fetchLatestCoreVersion();
+        final bootstrap = profile.toBootstrap(version: version);
+        if (!forceReinstall) {
+          final runtimeStatus = await _runtime.readStatus(bootstrap);
+          final machineId = runtimeStatus?.machineId;
+          if (runtimeStatus != null) {
+            _publishEngineVersionStatus(
+              installedVersion: _coreVersionFromResult(runtimeStatus),
+              consoleVersion: bootstrap.version,
+            );
+            if (runtimeStatus.phase == CoreRunPhase.running &&
+                machineId != null &&
+                machineId.isNotEmpty) {
+              _logger.info(
+                'core',
+                'Existing token runtime service is ready',
+                context: {
+                  'machine_id': machineId,
+                  'runtime': _runtime.runtimeType.toString(),
+                },
+              );
+              status.value = runtimeStatus.toStatus();
+              return;
+            }
+          }
+        }
+
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.repairing,
+          message: forceReinstall ? '正在重建令牌连接...' : '正在建立令牌连接...',
+        );
+
+        final result = await _runtime.ensureRunning(
+          bootstrap,
+          forceReinstall: forceReinstall,
+        );
+        _publishEngineVersionStatus(
+          installedVersion: _coreVersionFromResult(result) ?? bootstrap.version,
+          consoleVersion: bootstrap.version,
+        );
+        _logger.info(
+          'core',
+          'Token runtime ensure completed',
+          context: {
+            'force_reinstall': forceReinstall,
+            'runtime': _runtime.runtimeType.toString(),
+            'phase': result.phase.name,
+            'machine_id': result.machineId ?? '',
+          },
+        );
+        status.value = result.toStatus();
+      } catch (error) {
+        _logger.error(
+          'core',
+          'Ensure token connection failed',
+          context: {'error': error.toString()},
+        );
+        if (error is _ElevationRequiredException) {
+          status.value = CoreRunStatus(
+            phase: CoreRunPhase.needsElevation,
+            message: '需要管理员权限以安装连接引擎',
+            lastError: _elevationLastError(error),
+          );
+          return;
+        }
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '令牌连接启动失败',
           lastError: _normalizeError(error),
         );
       }
@@ -1489,6 +1627,15 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     return "'${value.replaceAll("'", "'\"'\"'")}'";
   }
 
+  static String _redactConfigServer(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || !uri.hasScheme) {
+      return '<configured>';
+    }
+    final port = uri.hasPort ? ':${uri.port}' : '';
+    return '${uri.scheme}://${uri.host}$port';
+  }
+
   String _normalizeError(Object error) {
     return _cleanProcessErrorMessage(
       error.toString().replaceFirst('Exception: ', ''),
@@ -1709,17 +1856,17 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       );
     }
     if (event.type == CoreRuntimeEventTypes.vpnPermissionGranted &&
-        _session != null &&
+        _hasActiveConnection &&
         status.value.phase == CoreRunPhase.needsVpnPermission) {
       unawaited(
         _enqueue(() async {
-          await _ensureRunning(forceReinstall: false);
+          await _ensureActiveConnection(forceReinstall: false);
         }),
       );
       return;
     }
     if (event.type == CoreRuntimeEventTypes.vpnPermissionDenied &&
-        _session != null) {
+        _hasActiveConnection) {
       final current = status.value;
       status.value = CoreRunStatus(
         phase: CoreRunPhase.needsVpnPermission,
@@ -1818,7 +1965,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
     );
     unawaited(
       _enqueue(() async {
-        await _ensureRunning(forceReinstall: false);
+        await _ensureActiveConnection(forceReinstall: false);
       }),
     );
   }
@@ -1831,7 +1978,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   }
 
   void _restoreRunningStatusAfterVpnRecovery() {
-    if (_session == null) {
+    if (!_hasActiveConnection) {
       return;
     }
     final current = status.value;
@@ -1848,7 +1995,7 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   }
 
   bool _shouldReconnectAfterRuntimeStop() {
-    if (_session == null) {
+    if (!_hasActiveConnection) {
       return false;
     }
     return switch (status.value.phase) {
@@ -1860,6 +2007,16 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       CoreRunPhase.error ||
       CoreRunPhase.needsElevation => false,
     };
+  }
+
+  bool get _hasActiveConnection =>
+      _session != null || _tokenConnectionProfile != null;
+
+  Future<void> _ensureActiveConnection({required bool forceReinstall}) {
+    if (_session != null) {
+      return _ensureRunning(forceReinstall: forceReinstall);
+    }
+    return _ensureTokenConnection(forceReinstall: forceReinstall);
   }
 
   Map<String, Object?> _runtimeEventPayload(CoreRuntimeEvent event) {

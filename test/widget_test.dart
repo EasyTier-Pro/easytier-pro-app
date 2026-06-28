@@ -111,6 +111,44 @@ void main() {
     }
   });
 
+  testWidgets('token connection opens separate token home', (
+    WidgetTester tester,
+  ) async {
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('token-connect-input')),
+      'device-token',
+    );
+    final connectButton = find.widgetWithText(FButton, '连接');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(coreLifecycleService.tokenProfile?.bootstrapToken, 'device-token');
+    expect(coreLifecycleService.tokenProfile?.configServer, contains('22020'));
+    expect(find.text('令牌连接已建立'), findsOneWidget);
+    expect(find.text('登录控制台'), findsNothing);
+  });
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {
@@ -3584,6 +3622,25 @@ void main() {
     );
   });
 
+  test('token connection profile parses token and connection link', () {
+    final plain = TokenConnectionProfile.fromInput(
+      input: '  device-token  ',
+      defaultConfigServer: 'tcp://console.test:22020/',
+      displayName: '办公令牌',
+    );
+    final link = TokenConnectionProfile.fromInput(
+      input:
+          'easytierpro://connect?token=link-token&server=tcp%3A%2F%2Fedge.test%3A22020',
+      defaultConfigServer: 'tcp://console.test:22020',
+    );
+
+    expect(plain.bootstrapToken, 'device-token');
+    expect(plain.configServer, 'tcp://console.test:22020');
+    expect(plain.effectiveDisplayName, '办公令牌');
+    expect(link.bootstrapToken, 'link-token');
+    expect(link.configServer, 'tcp://edge.test:22020');
+  });
+
   test(
     'console service includes app return URI in Android device auth request',
     () async {
@@ -4663,6 +4720,11 @@ class _LoginFlowAuthService implements AuthService {
   }
 
   @override
+  Future<String> fetchLatestCoreVersion() async {
+    return 'v1.0.0';
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -4922,6 +4984,11 @@ class _FakeAuthService implements AuthService {
   }
 
   @override
+  Future<String> fetchLatestCoreVersion() async {
+    return 'v1.0.0';
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -4949,6 +5016,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
   final List<Map<String, CorePeerStatus>> peerSamples;
   final Object? peerError;
+  TokenConnectionProfile? tokenProfile;
   int _trafficReadCount = 0;
   int peerReadCount = 0;
 
@@ -4957,6 +5025,16 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
       message: '本机设备已就绪',
+      machineId: machineId,
+    );
+  }
+
+  @override
+  Future<void> bindTokenConnection(TokenConnectionProfile profile) async {
+    tokenProfile = profile;
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: '令牌连接已建立',
       machineId: machineId,
     );
   }

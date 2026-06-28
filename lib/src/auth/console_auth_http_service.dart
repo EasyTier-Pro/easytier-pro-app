@@ -760,6 +760,11 @@ class ConsoleAuthService implements AuthService {
     return _fetchLatestReleaseVersion();
   }
 
+  @override
+  Future<String> fetchLatestCoreVersion() {
+    return _fetchLatestReleaseVersion();
+  }
+
   Future<String> _fetchLatestReleaseVersion() async {
     final releaseBody = await _fetchLatestReleaseBody(
       operation: 'coreVersion.release',
@@ -1139,12 +1144,7 @@ class ConsoleAuthService implements AuthService {
   }
 
   String _fallbackConfigServerUrl() {
-    final uri = Uri.tryParse(consoleBaseUrl.trim());
-    final host = uri?.host.trim() ?? '';
-    if (host.isEmpty || host.endsWith('console.easytier.net')) {
-      return 'tcp://api.console.easytier.net:22020';
-    }
-    return 'tcp://$host:22020';
+    return defaultConfigServerUrlForConsoleBaseUrl(consoleBaseUrl);
   }
 
   static String _enrollmentKeyDisplayName() {

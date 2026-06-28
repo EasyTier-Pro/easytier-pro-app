@@ -11,6 +11,7 @@ import '../desktop/app_update_service.dart';
 import '../desktop/tray_support.dart';
 import '../desktop/window_behavior_preferences.dart';
 import '../logging/app_logger.dart';
+import '../home/token_connection_home_view.dart';
 import '../home/workspace_home_view.dart';
 import 'console_auth_service.dart';
 
@@ -20,6 +21,8 @@ enum AuthStage {
   requestingCode,
   waitingForApproval,
   authenticated,
+  tokenConnect,
+  tokenConnected,
   error,
 }
 
@@ -27,6 +30,7 @@ class AuthGate extends StatefulWidget {
   const AuthGate({
     super.key,
     required this.authService,
+    required this.tokenConnectionProfileStore,
     required this.coreLifecycleService,
     required this.traySupport,
     required this.appUpdateService,
@@ -35,6 +39,7 @@ class AuthGate extends StatefulWidget {
   });
 
   final AuthService authService;
+  final TokenConnectionProfileStore tokenConnectionProfileStore;
   final CoreLifecycleService coreLifecycleService;
   final TraySupport traySupport;
   final AppUpdateService appUpdateService;
@@ -50,7 +55,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   DeviceAuthInfo? _deviceAuthInfo;
   DeviceAuthInfo? _pendingApprovalInfo;
   AuthSession? _session;
+  TokenConnectionProfile? _tokenProfile;
   String? _statusMessage;
+  String _errorTitle = '登录失败';
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   bool _approvalWaitInFlight = false;
   bool _waitForBrowserReturn = false;
@@ -91,6 +98,12 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       final session = await widget.authService.restoreSession();
       if (session != null) {
         _setSession(session);
+        return;
+      }
+
+      final tokenProfile = await widget.tokenConnectionProfileStore.load();
+      if (tokenProfile != null) {
+        _setTokenConnection(tokenProfile);
         return;
       }
 
@@ -220,12 +233,84 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
     setState(() {
       _session = null;
+      _tokenProfile = null;
       _deviceAuthInfo = null;
       _pendingApprovalInfo = null;
       _approvalWaitInFlight = false;
       _waitForBrowserReturn = false;
       _approvalGeneration++;
       _stage = AuthStage.loginRequired;
+    });
+  }
+
+  Future<void> _startTokenConnection({
+    required String input,
+    required String configServer,
+    required String displayName,
+  }) async {
+    _logger.info('auth.gate', 'Starting token connection');
+    try {
+      final profile = TokenConnectionProfile.fromInput(
+        input: input,
+        defaultConfigServer: configServer.trim().isEmpty
+            ? defaultConfigServerUrlForConsoleBaseUrl(defaultConsoleBaseUrl)
+            : configServer,
+        displayName: displayName,
+      );
+      await widget.tokenConnectionProfileStore.save(profile);
+      _setTokenConnection(profile);
+    } catch (error) {
+      _logger.error(
+        'auth.gate',
+        'Token connection failed to start',
+        context: {'error': error.toString()},
+      );
+      _setError(error.toString(), title: '令牌连接失败');
+    }
+  }
+
+  Future<void> _disconnectTokenConnection() async {
+    _logger.info('auth.gate', 'Token connection disconnect requested');
+    await widget.coreLifecycleService.onLogout();
+    await widget.tokenConnectionProfileStore.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = null;
+      _tokenProfile = null;
+      _stage = AuthStage.loginRequired;
+      _statusMessage = null;
+    });
+  }
+
+  Future<void> _changeTokenConnection() async {
+    _logger.info('auth.gate', 'Token connection change requested');
+    await widget.coreLifecycleService.onLogout();
+    await widget.tokenConnectionProfileStore.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = null;
+      _tokenProfile = null;
+      _stage = AuthStage.tokenConnect;
+      _statusMessage = null;
+    });
+  }
+
+  Future<void> _switchTokenConnectionToAccountLogin() async {
+    _logger.info('auth.gate', 'Switching token connection to account login');
+    await widget.coreLifecycleService.onLogout();
+    await widget.tokenConnectionProfileStore.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = null;
+      _tokenProfile = null;
+      _stage = AuthStage.loginRequired;
+      _statusMessage = null;
     });
   }
 
@@ -244,6 +329,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     setState(() {
       _stage = AuthStage.authenticated;
       _session = session;
+      _tokenProfile = null;
       _deviceAuthInfo = null;
       _pendingApprovalInfo = null;
       _approvalWaitInFlight = false;
@@ -252,7 +338,31 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     });
   }
 
-  void _setError(String message) {
+  void _setTokenConnection(TokenConnectionProfile profile) {
+    if (!mounted) {
+      return;
+    }
+
+    _logger.info(
+      'auth.gate',
+      'Token connection profile established',
+      context: {'display_name': profile.effectiveDisplayName},
+    );
+    unawaited(widget.coreLifecycleService.bindTokenConnection(profile));
+
+    setState(() {
+      _stage = AuthStage.tokenConnected;
+      _session = null;
+      _tokenProfile = profile;
+      _deviceAuthInfo = null;
+      _pendingApprovalInfo = null;
+      _approvalWaitInFlight = false;
+      _waitForBrowserReturn = false;
+      _statusMessage = null;
+    });
+  }
+
+  void _setError(String message, {String title = '登录失败'}) {
     if (!mounted) {
       return;
     }
@@ -264,6 +374,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     );
     setState(() {
       _stage = AuthStage.error;
+      _errorTitle = title;
       _pendingApprovalInfo = null;
       _approvalWaitInFlight = false;
       _waitForBrowserReturn = false;
@@ -307,6 +418,16 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       );
     }
 
+    if (_stage == AuthStage.tokenConnected && _tokenProfile != null) {
+      return TokenConnectionHomeView(
+        profile: _tokenProfile!,
+        coreLifecycleService: widget.coreLifecycleService,
+        onDisconnect: _disconnectTokenConnection,
+        onChangeToken: _changeTokenConnection,
+        onAccountLogin: _switchTokenConnectionToAccountLogin,
+      );
+    }
+
     final content = _AuthPageShell(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
@@ -318,6 +439,15 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
           AuthStage.loginRequired => _LoginRequiredView(
             key: const ValueKey<String>('login-required'),
             onLogin: _startLogin,
+            onTokenConnect: () async => _setStage(AuthStage.tokenConnect),
+          ),
+          AuthStage.tokenConnect => _TokenConnectionView(
+            key: const ValueKey<String>('token-connect'),
+            defaultConfigServer: defaultConfigServerUrlForConsoleBaseUrl(
+              defaultConsoleBaseUrl,
+            ),
+            onConnect: _startTokenConnection,
+            onBack: () async => _setStage(AuthStage.loginRequired),
           ),
           AuthStage.waitingForApproval => _DeviceAuthView(
             key: const ValueKey<String>('device-auth'),
@@ -325,23 +455,21 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
             statusMessage: _statusMessage,
             onOpenBrowser: _deviceAuthInfo == null
                 ? null
-                : () => _openBrowser(
-                    _deviceAuthInfo!.verificationUriComplete,
-                  ),
+                : () => _openBrowser(_deviceAuthInfo!.verificationUriComplete),
           ),
           AuthStage.error => _ErrorView(
             key: const ValueKey<String>('auth-error'),
+            title: _errorTitle,
             message: _statusMessage ?? '登录失败',
             onRetry: () async => _setStage(AuthStage.loginRequired),
           ),
           AuthStage.authenticated => const SizedBox.shrink(),
+          AuthStage.tokenConnected => const SizedBox.shrink(),
         },
       ),
     );
 
-    return FScaffold(
-      child: content,
-    );
+    return FScaffold(child: content);
   }
 }
 
@@ -362,10 +490,7 @@ class _AuthPageShell extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Expanded(
-                flex: 5,
-                child: _BrandPanel(),
-              ),
+              const Expanded(flex: 5, child: _BrandPanel()),
               Expanded(
                 flex: 5,
                 child: SingleChildScrollView(
@@ -489,7 +614,11 @@ class _BrandFooterLinks extends StatelessWidget {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Widget _link(BuildContext context, {required String label, required String url}) {
+  Widget _link(
+    BuildContext context, {
+    required String label,
+    required String url,
+  }) {
     final theme = Theme.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -528,9 +657,14 @@ class _BrandFooterLinks extends StatelessWidget {
 }
 
 class _LoginRequiredView extends StatelessWidget {
-  const _LoginRequiredView({super.key, required this.onLogin});
+  const _LoginRequiredView({
+    super.key,
+    required this.onLogin,
+    required this.onTokenConnect,
+  });
 
   final Future<void> Function() onLogin;
+  final Future<void> Function() onTokenConnect;
 
   @override
   Widget build(BuildContext context) {
@@ -568,6 +702,19 @@ class _LoginRequiredView extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            FButton(
+              variant: .outline,
+              onPress: () => unawaited(onTokenConnect()),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.vpn_key_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('使用设备令牌连接'),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             Text(
               '登录即表示你同意将本设备注册到所选工作区。',
@@ -578,6 +725,193 @@ class _LoginRequiredView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TokenConnectionView extends StatefulWidget {
+  const _TokenConnectionView({
+    super.key,
+    required this.defaultConfigServer,
+    required this.onConnect,
+    required this.onBack,
+  });
+
+  final String defaultConfigServer;
+  final Future<void> Function({
+    required String input,
+    required String configServer,
+    required String displayName,
+  })
+  onConnect;
+  final Future<void> Function() onBack;
+
+  @override
+  State<_TokenConnectionView> createState() => _TokenConnectionViewState();
+}
+
+class _TokenConnectionViewState extends State<_TokenConnectionView> {
+  late final TextEditingController _tokenController = TextEditingController();
+  late final TextEditingController _configServerController =
+      TextEditingController(text: widget.defaultConfigServer);
+  late final TextEditingController _nameController = TextEditingController(
+    text: '设备令牌连接',
+  );
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    _configServerController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await widget.onConnect(
+        input: _tokenController.text,
+        configServer: _configServerController.text,
+        displayName: _nameController.text,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.vpn_key_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '设备令牌连接',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '用控制台生成的设备令牌接入本机，不进入工作区管理界面。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _TokenFormField(
+              label: '设备令牌或连接链接',
+              child: FTextField(
+                key: const ValueKey<String>('token-connect-input'),
+                control: FTextFieldControl.managed(
+                  controller: _tokenController,
+                ),
+                hint: 'etk_... 或 easytierpro://connect?...',
+                keyboardType: TextInputType.text,
+                maxLines: 3,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _TokenFormField(
+              label: '控制服务器',
+              child: FTextField(
+                key: const ValueKey<String>('token-config-server-input'),
+                control: FTextFieldControl.managed(
+                  controller: _configServerController,
+                ),
+                hint: widget.defaultConfigServer,
+                keyboardType: TextInputType.url,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _TokenFormField(
+              label: '连接名称',
+              child: FTextField(
+                key: const ValueKey<String>('token-display-name-input'),
+                control: FTextFieldControl.managed(controller: _nameController),
+                hint: '设备令牌连接',
+                keyboardType: TextInputType.text,
+              ),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                FButton(
+                  onPress: _submitting ? null : () => unawaited(_submit()),
+                  child: _submitting
+                      ? const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FCircularProgress(size: .xs),
+                            SizedBox(width: 8),
+                            Text('正在连接...'),
+                          ],
+                        )
+                      : const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.play_arrow, size: 18),
+                            SizedBox(width: 8),
+                            Text('连接'),
+                          ],
+                        ),
+                ),
+                const SizedBox(width: 8),
+                FButton(
+                  variant: .ghost,
+                  onPress: _submitting
+                      ? null
+                      : () => unawaited(widget.onBack()),
+                  child: const Text('返回'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenFormField extends StatelessWidget {
+  const _TokenFormField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        child,
+      ],
     );
   }
 }
@@ -655,8 +989,14 @@ class _DeviceAuthViewState extends State<_DeviceAuthView> {
     if (remaining.isNegative) {
       return '已过期';
     }
-    final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final minutes = remaining.inMinutes
+        .remainder(60)
+        .toString()
+        .padLeft(2, '0');
+    final seconds = remaining.inSeconds
+        .remainder(60)
+        .toString()
+        .padLeft(2, '0');
     return '$minutes:$seconds';
   }
 
@@ -809,7 +1149,9 @@ class _AuthCodeBlock extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.5,
+            ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: theme.colorScheme.outline.withValues(alpha: 0.15),
@@ -849,8 +1191,14 @@ class _AuthCodeBlock extends StatelessWidget {
 }
 
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({super.key, required this.message, required this.onRetry});
+  const _ErrorView({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.onRetry,
+  });
 
+  final String title;
   final String message;
   final Future<void> Function() onRetry;
 
@@ -875,7 +1223,7 @@ class _ErrorView extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '登录失败',
+                    title,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
