@@ -783,8 +783,14 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       );
 
       try {
-        final version = await authService.fetchLatestCoreVersion();
-        final bootstrap = profile.toBootstrap(version: version);
+        final defaults = await authService.fetchCoreBootstrapDefaults();
+        final bootstrap = profile.toBootstrap(
+          version: defaults.version,
+          configServerOverride: _tokenConfigServerOverride(
+            configured: profile.configServer,
+            releaseConfigServer: defaults.configServer,
+          ),
+        );
         if (!forceReinstall) {
           final runtimeStatus = await _runtime.readStatus(bootstrap);
           final machineId = runtimeStatus?.machineId;
@@ -1085,6 +1091,23 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
       return explicit;
     }
     return _extractCoreVersion(result.details);
+  }
+
+  String? _tokenConfigServerOverride({
+    required String configured,
+    required String releaseConfigServer,
+  }) {
+    final release = releaseConfigServer.trim();
+    if (release.isEmpty) {
+      return null;
+    }
+    if (isDefaultConfigServerUrlForConsoleBaseUrl(
+      configured,
+      defaultConsoleBaseUrl,
+    )) {
+      return release;
+    }
+    return null;
   }
 
   void _reportSessionEstablished(AuthSession session) {

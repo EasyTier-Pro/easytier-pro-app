@@ -4234,7 +4234,7 @@ void main() {
   );
 
   test(
-    'console service derives local config server fallback from console host',
+    'console service derives config server fallback from console host',
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -4274,7 +4274,7 @@ void main() {
       );
       expect(
         await prepareConfigServer('https://api.console.easytier.net'),
-        'tcp://api.console.easytier.net:22020',
+        'tcp://et-web.console.easytier.net:22020',
       );
     },
   );
@@ -4797,6 +4797,14 @@ class _LoginFlowAuthService implements AuthService {
   }
 
   @override
+  Future<CoreBootstrapDefaults> fetchCoreBootstrapDefaults() async {
+    return const CoreBootstrapDefaults(
+      version: 'v1.0.0',
+      configServer: 'tcp://et-web.console.easytier.net:22020',
+    );
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -4804,7 +4812,7 @@ class _LoginFlowAuthService implements AuthService {
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
       version: 'v1.0.0',
-      configServer: 'tcp://api.console.easytier.net:22020',
+      configServer: 'tcp://et-web.console.easytier.net:22020',
     );
   }
 }
@@ -5061,6 +5069,14 @@ class _FakeAuthService implements AuthService {
   }
 
   @override
+  Future<CoreBootstrapDefaults> fetchCoreBootstrapDefaults() async {
+    return const CoreBootstrapDefaults(
+      version: 'v1.0.0',
+      configServer: 'tcp://et-web.console.easytier.net:22020',
+    );
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -5068,7 +5084,7 @@ class _FakeAuthService implements AuthService {
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
       version: 'v1.0.0',
-      configServer: 'tcp://api.console.easytier.net:22020',
+      configServer: 'tcp://et-web.console.easytier.net:22020',
     );
   }
 }

@@ -105,6 +105,35 @@ void main() {
       expect(service.status.value.machineId, 'machine-1');
     });
 
+    test(
+      'token connection uses release config server for default profiles',
+      () async {
+        final authService = _LifecycleAuthService()
+          ..bootstrapConfigServer = 'tcp://et-web.console.easytier.net:22020';
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindTokenConnection(
+          TokenConnectionProfile(
+            bootstrapToken: 'device-token',
+            configServer: 'tcp://api.console.easytier.net:22020',
+            displayName: 'token profile',
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        );
+
+        expect(authService.prepareBootstrapCount, 0);
+        expect(
+          runtime.ensureRunningBootstraps.single.configServer,
+          'tcp://et-web.console.easytier.net:22020',
+        );
+      },
+    );
+
     test('repair rebuilds active token connection', () async {
       final authService = _LifecycleAuthService();
       final runtime = _LifecycleRuntime();
@@ -1251,6 +1280,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   Completer<void>? ensureRunningCompleter;
   var supportsElevationRepairValue = false;
   final forceReinstallValues = <bool>[];
+  final ensureRunningBootstraps = <CoreBootstrapConfig>[];
 
   @override
   Stream<CoreRuntimeEvent> get events => _events.stream;
@@ -1286,6 +1316,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   }) async {
     ensureRunningCount++;
     forceReinstallValues.add(forceReinstall);
+    ensureRunningBootstraps.add(bootstrap);
     final completer = ensureRunningCompleter;
     if (completer != null) {
       await completer.future;
@@ -1402,6 +1433,7 @@ class _LifecycleAuthService implements AuthService {
   var prepareBootstrapCount = 0;
   var fetchVersionCount = 0;
   var bootstrapVersion = '2.6.4';
+  var bootstrapConfigServer = 'tcp://127.0.0.1:22020';
   Completer<String>? versionCompleter;
   Object? bootstrapError;
   final workspaceIds = <String>[];
@@ -1553,6 +1585,26 @@ class _LifecycleAuthService implements AuthService {
   }
 
   @override
+  Future<CoreBootstrapDefaults> fetchCoreBootstrapDefaults() async {
+    fetchVersionCount++;
+    final error = bootstrapError;
+    if (error != null) {
+      throw error;
+    }
+    final completer = versionCompleter;
+    if (completer != null) {
+      return CoreBootstrapDefaults(
+        version: await completer.future,
+        configServer: bootstrapConfigServer,
+      );
+    }
+    return CoreBootstrapDefaults(
+      version: bootstrapVersion,
+      configServer: bootstrapConfigServer,
+    );
+  }
+
+  @override
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
@@ -1566,7 +1618,7 @@ class _LifecycleAuthService implements AuthService {
     return CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
       version: bootstrapVersion,
-      configServer: 'tcp://127.0.0.1:22020',
+      configServer: bootstrapConfigServer,
     );
   }
 

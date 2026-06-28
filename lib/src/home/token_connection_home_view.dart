@@ -7,6 +7,7 @@ import 'package:forui/forui.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_lifecycle_service.dart';
 import 'home_shell.dart';
+import 'network_switch_tile.dart';
 
 class TokenConnectionHomeView extends StatefulWidget {
   const TokenConnectionHomeView({
@@ -906,110 +907,30 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final downloadRate = _formatTrafficRate(snapshot.downloadBytesPerSecond);
     final uploadRate = _formatTrafficRate(snapshot.uploadBytesPerSecond);
 
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A),
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          runtimeName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: const Color(0xFF0F172A),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const _TokenReadonlySwitch(value: true),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      const _TokenInstanceStateBadge(),
-                      _RateBadge(icon: Icons.south_west, value: downloadRate),
-                      _RateBadge(icon: Icons.north_east, value: uploadRate),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+    return HomeNetworkSwitchTile(
+      title: runtimeName,
+      joined: true,
+      locallyConnected: true,
+      failed: false,
+      metaChildren: [
+        const HomeStatusChip(label: '已连接', active: true),
+        HomeMiniTrafficPill(
+          icon: Icons.arrow_downward,
+          label: downloadRate,
+          color: const Color(0xFF16A34A),
         ),
-      ),
-    );
-  }
-}
-
-class _TokenReadonlySwitch extends StatelessWidget {
-  const _TokenReadonlySwitch({required this.value});
-
-  final bool value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '设备令牌连接由控制台下发，客户端仅展示状态。',
-      excludeFromSemantics: true,
-      child: FSwitch(value: value, enabled: false, onChange: null),
-    );
-  }
-}
-
-class _TokenInstanceStateBadge extends StatelessWidget {
-  const _TokenInstanceStateBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFFDF4),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFBBF7D0)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.check_circle_outline,
-            size: 13,
-            color: Color(0xFF16A34A),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '已连接',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF15803D),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
+        HomeMiniTrafficPill(
+          icon: Icons.arrow_upward,
+          label: uploadRate,
+          color: const Color(0xFF2563EB),
+        ),
+      ],
+      switchValue: true,
+      switchLoading: false,
+      switchTooltip: '设备令牌连接由控制台下发，客户端仅展示状态。',
     );
   }
 }
@@ -1051,40 +972,6 @@ class _TokenMutedText extends StatelessWidget {
       text,
       style: theme.textTheme.bodySmall?.copyWith(
         color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-      ),
-    );
-  }
-}
-
-class _RateBadge extends StatelessWidget {
-  const _RateBadge({required this.icon, required this.value});
-
-  final IconData icon;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 76),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: const Color(0xFF475569)),
-          const SizedBox(width: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF334155),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }

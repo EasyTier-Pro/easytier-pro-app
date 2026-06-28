@@ -18,11 +18,15 @@ class TokenConnectionProfile {
     return name.isEmpty ? '设备令牌连接' : name;
   }
 
-  CoreBootstrapConfig toBootstrap({required String version}) {
+  CoreBootstrapConfig toBootstrap({
+    required String version,
+    String? configServerOverride,
+  }) {
+    final override = configServerOverride?.trim() ?? '';
     return CoreBootstrapConfig(
       bootstrapToken: bootstrapToken,
       version: version,
-      configServer: configServer,
+      configServer: override.isEmpty ? configServer : override,
     );
   }
 

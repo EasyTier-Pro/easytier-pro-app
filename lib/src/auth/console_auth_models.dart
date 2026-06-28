@@ -396,6 +396,16 @@ class CoreBootstrapConfig {
   final String configServer;
 }
 
+class CoreBootstrapDefaults {
+  const CoreBootstrapDefaults({
+    required this.version,
+    required this.configServer,
+  });
+
+  final String version;
+  final String configServer;
+}
+
 class AuthSession {
   const AuthSession({required this.user, required this.tokenSet});
 

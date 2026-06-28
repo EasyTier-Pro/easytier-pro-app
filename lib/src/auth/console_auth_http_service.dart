@@ -757,19 +757,24 @@ class ConsoleAuthService implements AuthService {
       'Fetching recommended core version',
       context: {'workspace_id': workspaceId},
     );
-    return _fetchLatestReleaseVersion();
+    final defaults = await fetchCoreBootstrapDefaults();
+    return defaults.version;
   }
 
   @override
   Future<String> fetchLatestCoreVersion() {
-    return _fetchLatestReleaseVersion();
+    return fetchCoreBootstrapDefaults().then((defaults) => defaults.version);
   }
 
-  Future<String> _fetchLatestReleaseVersion() async {
+  @override
+  Future<CoreBootstrapDefaults> fetchCoreBootstrapDefaults() async {
     final releaseBody = await _fetchLatestReleaseBody(
-      operation: 'coreVersion.release',
+      operation: 'coreBootstrapDefaults.release',
     );
-    return _releaseVersionFromBody(releaseBody);
+    return CoreBootstrapDefaults(
+      version: _releaseVersionFromBody(releaseBody),
+      configServer: _configServerFromReleaseBody(releaseBody),
+    );
   }
 
   Future<Map<String, dynamic>> _fetchLatestReleaseBody({
@@ -804,6 +809,14 @@ class ConsoleAuthService implements AuthService {
       throw const AuthException('控制台未返回可用版本');
     }
     return rawVersion.startsWith('v') ? rawVersion : 'v$rawVersion';
+  }
+
+  String _configServerFromReleaseBody(Map<String, dynamic> releaseBody) {
+    final configServerRaw =
+        releaseBody['web_config_server_url']?.toString().trim() ?? '';
+    return configServerRaw.isEmpty
+        ? _fallbackConfigServerUrl()
+        : configServerRaw;
   }
 
   @override
@@ -889,16 +902,10 @@ class ConsoleAuthService implements AuthService {
       }
     }
 
-    final configServerRaw =
-        releaseBody['web_config_server_url']?.toString().trim() ?? '';
-    final configServer = configServerRaw.isEmpty
-        ? _fallbackConfigServerUrl()
-        : configServerRaw;
-
     return CoreBootstrapConfig(
       bootstrapToken: bootstrapToken,
       version: version,
-      configServer: configServer,
+      configServer: _configServerFromReleaseBody(releaseBody),
     );
   }
 

@@ -21,6 +21,7 @@ import '../shared/app_smooth_scroll_view.dart';
 import '../shared/selectable_text_hit_boundary.dart';
 import 'device_os_icon.dart';
 import 'home_shell.dart';
+import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
 
 part 'workspace_home_models.dart';
