@@ -7,6 +7,7 @@ import 'package:forui/forui.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
+import 'dashboard_navigation.dart';
 import 'home_shell.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
@@ -50,6 +51,39 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   Map<String, String> _peerStatusErrorsByRuntime = const <String, String>{};
   String? _trafficError;
   String? _selectedRuntimeName;
+
+  List<MapEntry<String, _TokenTrafficSnapshot>> get _sortedTrafficEntries {
+    return _traffic.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+  }
+
+  List<HomeDashboardNetworkOption> get _networkOptions {
+    return [
+      for (final entry in _sortedTrafficEntries)
+        HomeDashboardNetworkOption(id: entry.key, name: entry.key),
+    ];
+  }
+
+  String? get _fallbackRuntimeName {
+    final selected = _selectedRuntimeName?.trim();
+    if (selected != null &&
+        selected.isNotEmpty &&
+        (_traffic.isEmpty || _traffic.containsKey(selected))) {
+      return selected;
+    }
+    final entries = _sortedTrafficEntries;
+    return entries.isEmpty ? null : entries.first.key;
+  }
+
+  int get _knownPeerCount {
+    final ids = <String>{};
+    for (final peers in _peerStatusesByRuntime.values) {
+      for (final peer in peers.values) {
+        ids.add(_tokenPeerDeviceId('token', peer, ids.length));
+      }
+    }
+    return ids.length;
+  }
 
   @override
   void initState() {
@@ -108,7 +142,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     final runtimeName = _selectedRuntimeName?.trim() ?? '';
     final shouldPoll =
         widget.coreLifecycleService.status.value.isRunning &&
-        _activeView == _TokenHomeView.networkDetail &&
+        (_activeView == _TokenHomeView.network ||
+            _activeView == _TokenHomeView.devices) &&
         runtimeName.isNotEmpty;
     if (!shouldPoll) {
       _peerStatusTimer?.cancel();
@@ -185,6 +220,12 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
         _traffic = next;
         _previousTotals = totals;
         _trafficError = null;
+        if (_activeView == _TokenHomeView.network &&
+            (_selectedRuntimeName == null ||
+                !_traffic.containsKey(_selectedRuntimeName))) {
+          final entries = _sortedTrafficEntries;
+          _selectedRuntimeName = entries.isEmpty ? null : entries.first.key;
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -245,6 +286,36 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     _refreshPeerStatusPolling();
   }
 
+  void _showNetwork() {
+    if (_activeView == _TokenHomeView.network) {
+      return;
+    }
+    setState(() {
+      _selectedRuntimeName ??= _fallbackRuntimeName;
+      _activeView = _TokenHomeView.network;
+    });
+    _refreshPeerStatusPolling();
+  }
+
+  void _selectNetwork(String runtimeName) {
+    setState(() {
+      _selectedRuntimeName = runtimeName;
+      _activeView = _TokenHomeView.network;
+    });
+    _refreshPeerStatusPolling();
+  }
+
+  void _showDevices() {
+    if (_activeView == _TokenHomeView.devices) {
+      return;
+    }
+    setState(() {
+      _selectedRuntimeName ??= _fallbackRuntimeName;
+      _activeView = _TokenHomeView.devices;
+    });
+    _refreshPeerStatusPolling();
+  }
+
   void _showSettings() {
     if (_activeView == _TokenHomeView.settings) {
       return;
@@ -258,7 +329,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   void _openNetworkInstance(String runtimeName) {
     setState(() {
       _selectedRuntimeName = runtimeName;
-      _activeView = _TokenHomeView.networkDetail;
+      _activeView = _TokenHomeView.network;
     });
     _refreshPeerStatusPolling();
   }
@@ -285,8 +356,10 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     switch (_tokenMobileViewOrder[nextIndex]) {
       case _TokenHomeView.overview:
         _showOverview();
-      case _TokenHomeView.networkDetail:
-        _showOverview();
+      case _TokenHomeView.network:
+        _showNetwork();
+      case _TokenHomeView.devices:
+        _showDevices();
       case _TokenHomeView.settings:
         _showSettings();
     }
@@ -295,49 +368,48 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   @override
   Widget build(BuildContext context) {
     final status = widget.coreLifecycleService.status.value;
-    final contentKey = ValueKey<String>('token-home:${_activeView.name}');
-    final mobileNavigationIndex = switch (_activeView) {
-      _TokenHomeView.overview => 0,
-      _TokenHomeView.networkDetail => 0,
-      _TokenHomeView.settings => 1,
-    };
+    final selectedRuntimeName = _fallbackRuntimeName;
+    final contentKey = ValueKey<String>(
+      [
+        'token-home',
+        _activeView.name,
+        if (_activeView == _TokenHomeView.network)
+          selectedRuntimeName ?? 'none',
+      ].join(':'),
+    );
 
     return HomeShell(
-      desktopHeader: HomeShellDesktopHeader(
+      desktopHeader: HomeDashboardDesktopHeader(
         contentKey: const ValueKey<String>('token-desktop-dashboard-header'),
-        navigation: [
-          FButton(
-            variant:
-                _activeView == _TokenHomeView.overview ||
-                    _activeView == _TokenHomeView.networkDetail
-                ? .secondary
-                : .ghost,
-            size: .sm,
-            onPress: _showOverview,
-            child: const Text('首页'),
-          ),
-          const SizedBox(width: 6),
-          FButton(
-            variant: _activeView == _TokenHomeView.settings
-                ? .secondary
-                : .ghost,
-            size: .sm,
-            onPress: _showSettings,
-            child: const Text('设置'),
-          ),
-        ],
+        activeView: _homeDashboardViewForToken(_activeView),
+        networks: _networkOptions,
+        selectedNetworkId: selectedRuntimeName,
+        showNetworkNavigation: true,
+        onShowOverview: _showOverview,
+        onShowNetwork: _showNetwork,
+        onSelectNetwork: _selectNetwork,
+        onShowDevices: _showDevices,
         metrics: [
-          const HomeHeaderMetric(
-            label: '模式',
-            value: '令牌',
-            icon: Icons.vpn_key_outlined,
+          HomeHeaderMetric(
+            label: '实例',
+            value: '${_traffic.length}',
+            icon: Icons.hub_outlined,
+          ),
+          HomeHeaderMetric(
+            label: '节点',
+            value: '$_knownPeerCount',
+            icon: Icons.devices_other_outlined,
           ),
           HomeCoreStatusLabel(
             statusListenable: widget.coreLifecycleService.status,
-            label: '连接',
+            label: '引擎',
           ),
         ],
-        trailing: _TokenPhasePill(status: status),
+        trailing: _TokenHeaderActions(
+          status: status,
+          settingsActive: _activeView == _TokenHomeView.settings,
+          onShowSettings: _showSettings,
+        ),
       ),
       mobileHeader: HomeShellMobileHeader(
         title: 'EasyTier Pro',
@@ -348,28 +420,21 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           ),
         ],
       ),
-      mobileNavigation: HomeShellMobileNavigation(
-        navigationKey: const ValueKey<String>('mobile-dashboard-navigation'),
-        index: mobileNavigationIndex,
-        items: [
-          HomeShellMobileNavigationItem(
-            id: 'overview',
-            key: const ValueKey<String>('mobile-nav-overview'),
-            icon: Icons.home_outlined,
-            label: '首页',
-            onSelect: _showOverview,
-          ),
-          HomeShellMobileNavigationItem(
-            id: 'settings',
-            key: const ValueKey<String>('mobile-nav-settings'),
-            icon: Icons.settings_outlined,
-            label: '设置',
-            onSelect: _showSettings,
-          ),
-        ],
+      mobileNavigation: HomeDashboardMobileNavigation(
+        activeView: _homeDashboardViewForToken(_activeView),
+        networks: _networkOptions,
+        selectedNetworkId: selectedRuntimeName,
+        onShowOverview: _showOverview,
+        onShowNetwork: _showNetwork,
+        onSelectNetwork: _selectNetwork,
+        onShowDevices: _showDevices,
+        onShowSettings: _showSettings,
       ),
       contentKey: contentKey,
-      contentMode: HomeShellContentMode.scrollConstrained,
+      contentMode: switch (_activeView) {
+        _TokenHomeView.network => HomeShellContentMode.staticConstrained,
+        _ => HomeShellContentMode.scrollConstrained,
+      },
       onMobileSwipe: _handleMobilePageSwipe,
       child: switch (_activeView) {
         _TokenHomeView.overview => _TokenOverview(
@@ -379,20 +444,26 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           running: status.isRunning,
           onOpenInstance: _openNetworkInstance,
         ),
-        _TokenHomeView.networkDetail => _TokenNetworkInstanceDetailPage(
-          runtimeName: _selectedRuntimeName,
-          snapshot: _selectedRuntimeName == null
+        _TokenHomeView.network => _TokenNetworkInstanceDetailPage(
+          runtimeName: selectedRuntimeName,
+          snapshot: selectedRuntimeName == null
               ? null
-              : _traffic[_selectedRuntimeName],
-          peerStatuses: _selectedRuntimeName == null
+              : _traffic[selectedRuntimeName],
+          peerStatuses: selectedRuntimeName == null
               ? const <String, CorePeerStatus>{}
-              : _peerStatusesByRuntime[_selectedRuntimeName] ??
+              : _peerStatusesByRuntime[selectedRuntimeName] ??
                     const <String, CorePeerStatus>{},
-          peerStatusError: _selectedRuntimeName == null
-              ? null
-              : _peerStatusErrorsByRuntime[_selectedRuntimeName],
-          onBack: _showOverview,
+          peerStatusError: selectedRuntimeName == null
+              ? _trafficError
+              : _peerStatusErrorsByRuntime[selectedRuntimeName],
           onRefresh: () => unawaited(_pollSelectedPeerStatuses()),
+        ),
+        _TokenHomeView.devices => _TokenDevicesPage(
+          selectedRuntimeName: selectedRuntimeName,
+          peerStatusesByRuntime: _peerStatusesByRuntime,
+          peerStatusErrorsByRuntime: _peerStatusErrorsByRuntime,
+          onOpenNetwork: _showNetwork,
+          onAccountLogin: () => unawaited(widget.onAccountLogin()),
         ),
         _TokenHomeView.settings => Align(
           alignment: Alignment.topLeft,
@@ -416,10 +487,21 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   }
 }
 
-enum _TokenHomeView { overview, networkDetail, settings }
+enum _TokenHomeView { overview, network, devices, settings }
+
+HomeDashboardView _homeDashboardViewForToken(_TokenHomeView view) {
+  return switch (view) {
+    _TokenHomeView.overview => HomeDashboardView.overview,
+    _TokenHomeView.network => HomeDashboardView.network,
+    _TokenHomeView.devices => HomeDashboardView.devices,
+    _TokenHomeView.settings => HomeDashboardView.settings,
+  };
+}
 
 const List<_TokenHomeView> _tokenMobileViewOrder = <_TokenHomeView>[
   _TokenHomeView.overview,
+  _TokenHomeView.network,
+  _TokenHomeView.devices,
   _TokenHomeView.settings,
 ];
 
@@ -466,6 +548,109 @@ class _TokenOverview extends StatelessWidget {
           running: running,
           onOpenInstance: onOpenInstance,
         ),
+      ],
+    );
+  }
+}
+
+class _TokenDevicesPage extends StatelessWidget {
+  const _TokenDevicesPage({
+    required this.selectedRuntimeName,
+    required this.peerStatusesByRuntime,
+    required this.peerStatusErrorsByRuntime,
+    required this.onOpenNetwork,
+    required this.onAccountLogin,
+  });
+
+  final String? selectedRuntimeName;
+  final Map<String, Map<String, CorePeerStatus>> peerStatusesByRuntime;
+  final Map<String, String> peerStatusErrorsByRuntime;
+  final VoidCallback onOpenNetwork;
+  final VoidCallback onAccountLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    final runtimeName = selectedRuntimeName?.trim();
+    final peers = runtimeName == null || runtimeName.isEmpty
+        ? const <String, CorePeerStatus>{}
+        : peerStatusesByRuntime[runtimeName] ??
+              const <String, CorePeerStatus>{};
+    final nodes = runtimeName == null || runtimeName.isEmpty
+        ? const <NetworkDevice>[]
+        : _tokenNetworkDevicesFromPeerStatuses(runtimeName, peers);
+    final error = runtimeName == null || runtimeName.isEmpty
+        ? null
+        : peerStatusErrorsByRuntime[runtimeName];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TokenNetworkSectionTitle(
+          title: '设备',
+          countLabel: '${nodes.length}',
+          icon: Icons.devices_other_outlined,
+          trailing: const _TokenReadonlyHint(),
+        ),
+        const SizedBox(height: 12),
+        FCard.raw(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '令牌模式仅展示本机已接入网络中的节点运行态，设备审批、挂载和管理请在控制台完成。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FButton(
+                      variant: .outline,
+                      size: .sm,
+                      onPress: onOpenNetwork,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.hub_outlined, size: 16),
+                          SizedBox(width: 8),
+                          Text('查看网络'),
+                        ],
+                      ),
+                    ),
+                    FButton(
+                      variant: .ghost,
+                      size: .sm,
+                      onPress: onAccountLogin,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.login, size: 16),
+                          SizedBox(width: 8),
+                          Text('使用账号登录'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (runtimeName == null || runtimeName.isEmpty)
+          const _TokenNetworkInstanceEmpty(message: '暂无网络实例，请在控制台将本设备挂载到网络。')
+        else
+          NetworkNodeListPanel(
+            nodes: nodes,
+            peerStatusesByIpv4: peers,
+            runtimeError: error,
+          ),
       ],
     );
   }
@@ -970,7 +1155,6 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
     required this.snapshot,
     required this.peerStatuses,
     required this.peerStatusError,
-    required this.onBack,
     required this.onRefresh,
   });
 
@@ -978,7 +1162,6 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
   final _TokenTrafficSnapshot? snapshot;
   final Map<String, CorePeerStatus> peerStatuses;
   final String? peerStatusError;
-  final VoidCallback onBack;
   final VoidCallback onRefresh;
 
   @override
@@ -988,9 +1171,20 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _TokenDetailBackButton(onBack: onBack),
-          const SizedBox(height: 16),
-          const _TokenNetworkInstanceEmpty(message: '请选择一个网络实例。'),
+          _TokenNetworkSectionTitle(
+            title: '网络',
+            countLabel: '0',
+            icon: Icons.hub_outlined,
+            trailing: const _TokenReadonlyHint(),
+          ),
+          const SizedBox(height: 12),
+          const Expanded(
+            child: Center(
+              child: _TokenNetworkInstanceEmpty(
+                message: '暂无网络实例，请在控制台将本设备挂载到网络。',
+              ),
+            ),
+          ),
         ],
       );
     }
@@ -1002,8 +1196,6 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TokenDetailBackButton(onBack: onBack),
-        const SizedBox(height: 12),
         _TokenNetworkInstanceDetailHeader(
           runtimeName: name,
           nodeCount: nodes.length,
@@ -1012,65 +1204,64 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
           onRefresh: onRefresh,
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A).withAlpha(8),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.devices_outlined,
-                size: 18,
-                color: Color(0xFF334155),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '节点',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(width: 8),
-            HomeStatusChip(label: '${nodes.length}', active: nodes.isNotEmpty),
-            const Spacer(),
-            const _TokenReadonlyHint(),
-          ],
+        _TokenNetworkSectionTitle(
+          title: '节点',
+          countLabel: '${nodes.length}',
+          icon: Icons.devices_outlined,
+          trailing: const _TokenReadonlyHint(),
         ),
         const SizedBox(height: 12),
-        NetworkNodeListPanel(
-          nodes: nodes,
-          peerStatusesByIpv4: peerStatuses,
-          runtimeError: peerStatusError,
+        Expanded(
+          child: NetworkNodeListViewport(
+            nodes: nodes,
+            peerStatusesByIpv4: peerStatuses,
+            runtimeError: peerStatusError,
+          ),
         ),
       ],
     );
   }
 }
 
-class _TokenDetailBackButton extends StatelessWidget {
-  const _TokenDetailBackButton({required this.onBack});
+class _TokenNetworkSectionTitle extends StatelessWidget {
+  const _TokenNetworkSectionTitle({
+    required this.title,
+    required this.countLabel,
+    required this.icon,
+    this.trailing,
+  });
 
-  final VoidCallback onBack;
+  final String title;
+  final String countLabel;
+  final IconData icon;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return FButton(
-      variant: .ghost,
-      size: .sm,
-      onPress: onBack,
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.arrow_back, size: 16),
-          SizedBox(width: 6),
-          Text('返回'),
-        ],
-      ),
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withAlpha(8),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 18, color: const Color(0xFF334155)),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(width: 8),
+        HomeStatusChip(label: countLabel, active: countLabel != '0'),
+        const Spacer(),
+        ?trailing,
+      ],
     );
   }
 }
@@ -1239,6 +1430,39 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
       switchLoading: false,
       switchTooltip: '设备令牌连接由控制台下发，客户端仅展示状态。',
       onOpen: onOpen,
+    );
+  }
+}
+
+class _TokenHeaderActions extends StatelessWidget {
+  const _TokenHeaderActions({
+    required this.status,
+    required this.settingsActive,
+    required this.onShowSettings,
+  });
+
+  final CoreRunStatus status;
+  final bool settingsActive;
+  final VoidCallback onShowSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _TokenPhasePill(status: status),
+        const SizedBox(width: 8),
+        FTooltip(
+          tipBuilder: (context, controller) => const Text('设置'),
+          child: FButton(
+            variant: settingsActive ? .secondary : .ghost,
+            size: .sm,
+            onPress: onShowSettings,
+            mainAxisSize: MainAxisSize.min,
+            child: const Icon(Icons.settings_outlined, size: 16),
+          ),
+        ),
+      ],
     );
   }
 }

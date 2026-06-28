@@ -36,32 +36,21 @@ class _DashboardHeader extends StatelessWidget {
     final trimmedName = userName.trim();
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
-    return HomeShellDesktopHeader(
+    return HomeDashboardDesktopHeader(
       contentKey: const ValueKey<String>('desktop-dashboard-header-content'),
-      navigation: [
-        FButton(
-          variant: activeView == _DashboardView.overview ? .secondary : .ghost,
-          size: .sm,
-          onPress: onShowOverview,
-          child: const Text('首页'),
-        ),
-        if (networks.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          _NetworkTabMenu(
-            active: activeView == _DashboardView.network,
-            networks: networks,
-            selectedNetworkId: selectedNetworkId,
-            onSelectNetwork: onSelectNetwork,
-          ),
-        ],
-        const SizedBox(width: 6),
-        FButton(
-          variant: activeView == _DashboardView.devices ? .secondary : .ghost,
-          size: .sm,
-          onPress: onShowDevices,
-          child: const Text('设备'),
-        ),
-      ],
+      activeView: _homeDashboardViewFor(activeView),
+      networks: _homeDashboardNetworkOptions(networks),
+      selectedNetworkId: selectedNetworkId,
+      showNetworkNavigation: networks.isNotEmpty,
+      onShowOverview: onShowOverview,
+      onShowNetwork: () {
+        if (networks.isEmpty) {
+          return;
+        }
+        onSelectNetwork(selectedNetworkId ?? networks.first.id);
+      },
+      onSelectNetwork: onSelectNetwork,
+      onShowDevices: onShowDevices,
       metrics: [
         HomeHeaderMetric(
           label: '设备',
@@ -150,247 +139,15 @@ class _MobileDashboardNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = switch (activeView) {
-      _DashboardView.overview => 0,
-      _DashboardView.network => 1,
-      _DashboardView.devices => 2,
-      _DashboardView.settings => 3,
-    };
-
-    return HomeShellMobileNavigation(
-      navigationKey: const ValueKey<String>('mobile-dashboard-navigation'),
-      index: selectedIndex,
-      items: [
-        HomeShellMobileNavigationItem(
-          id: 'overview',
-          key: const ValueKey<String>('mobile-nav-overview'),
-          icon: Icons.home_outlined,
-          label: '首页',
-          onSelect: onShowOverview,
-        ),
-        HomeShellMobileNavigationItem(
-          id: 'network',
-          key: const ValueKey<String>('mobile-nav-network'),
-          icon: Icons.hub_outlined,
-          label: '网络',
-          onSelect: () => _handleNetworkNavigation(context),
-        ),
-        HomeShellMobileNavigationItem(
-          id: 'devices',
-          key: const ValueKey<String>('mobile-nav-devices'),
-          icon: Icons.devices_other_outlined,
-          label: '设备',
-          onSelect: onShowDevices,
-        ),
-        HomeShellMobileNavigationItem(
-          id: 'settings',
-          key: const ValueKey<String>('mobile-nav-settings'),
-          icon: Icons.settings_outlined,
-          label: '设置',
-          onSelect: onShowSettings,
-        ),
-      ],
-    );
-  }
-
-  void _handleNetworkNavigation(BuildContext context) {
-    if (activeView == _DashboardView.network && networks.length > 1) {
-      _showNetworkPicker(context);
-    } else {
-      onShowNetwork();
-    }
-  }
-
-  void _showNetworkPicker(BuildContext context) {
-    final networks = this.networks;
-    final selectedNetworkId = this.selectedNetworkId;
-    final onSelectNetwork = this.onSelectNetwork;
-
-    unawaited(
-      showFSheet<void>(
-        context: context,
-        side: FLayout.btt,
-        mainAxisMaxRatio: 0.5,
-        builder: (context) => _MobileNetworkPickerSheet(
-          networks: networks,
-          selectedNetworkId: selectedNetworkId,
-          onSelectNetwork: onSelectNetwork,
-        ),
-      ),
-    );
-  }
-}
-
-class _MobileNetworkPickerSheet extends StatelessWidget {
-  const _MobileNetworkPickerSheet({
-    required this.networks,
-    required this.selectedNetworkId,
-    required this.onSelectNetwork,
-  });
-
-  final List<ConsoleNetwork> networks;
-  final String? selectedNetworkId;
-  final ValueChanged<String> onSelectNetwork;
-
-  @override
-  Widget build(BuildContext context) {
-    return SelectionContainer.disabled(
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          key: const ValueKey<String>('mobile-network-picker-sheet'),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: FItemGroup(
-            divider: FItemDivider.full,
-            children: [
-              for (final network in networks)
-                FItem(
-                  key: ValueKey<String>('mobile-network-option-${network.id}'),
-                  prefix: SizedBox(
-                    width: 18,
-                    child: network.id == selectedNetworkId
-                        ? const Icon(Icons.check, size: 16)
-                        : null,
-                  ),
-                  title: Text(network.name, overflow: TextOverflow.ellipsis),
-                  onPress: () {
-                    Navigator.of(context).pop();
-                    onSelectNetwork(network.id);
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NetworkTabMenu extends StatelessWidget {
-  const _NetworkTabMenu({
-    required this.active,
-    required this.networks,
-    required this.selectedNetworkId,
-    required this.onSelectNetwork,
-  });
-
-  final bool active;
-  final List<ConsoleNetwork> networks;
-  final String? selectedNetworkId;
-  final ValueChanged<String> onSelectNetwork;
-
-  @override
-  Widget build(BuildContext context) {
-    var selectedNetwork = networks.first;
-    for (final network in networks) {
-      if (network.id == selectedNetworkId) {
-        selectedNetwork = network;
-        break;
-      }
-    }
-
-    return ExcludeSemantics(
-      child: FPopoverMenu(
-        menuAnchor: Alignment.topRight,
-        childAnchor: Alignment.bottomRight,
-        maxHeight: 280,
-        divider: FItemDivider.none,
-        menuBuilder: (context, controller, menu) => [
-          FItemGroup(
-            key: const ValueKey<String>('network-tab-popover'),
-            divider: FItemDivider.none,
-            children: [
-              for (final network in networks)
-                FItem(
-                  key: ValueKey<String>('network-tab-option-${network.id}'),
-                  title: SelectionContainer.disabled(
-                    child: Text(network.name, overflow: TextOverflow.ellipsis),
-                  ),
-                  prefix: SizedBox(
-                    width: 18,
-                    child: network.id == selectedNetwork.id
-                        ? const Icon(Icons.check, size: 16)
-                        : null,
-                  ),
-                  onPress: () {
-                    unawaited(controller.hide());
-                    onSelectNetwork(network.id);
-                  },
-                ),
-            ],
-          ),
-        ],
-        builder: (context, controller, child) => _NetworkTabButton(
-          active: active,
-          label: selectedNetwork.name,
-          onSelect: () {
-            if (active) {
-              unawaited(controller.toggle());
-            } else {
-              onSelectNetwork(selectedNetwork.id);
-            }
-          },
-          onOpenMenu: () => unawaited(controller.toggle()),
-        ),
-      ),
-    );
-  }
-}
-
-class _NetworkTabButton extends StatelessWidget {
-  const _NetworkTabButton({
-    required this.active,
-    required this.label,
-    required this.onSelect,
-    required this.onOpenMenu,
-  });
-
-  static const double _labelMinWidth = 44;
-  static const double _labelMaxWidth = 112;
-
-  final bool active;
-  final String label;
-  final VoidCallback onSelect;
-  final VoidCallback onOpenMenu;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: AlignmentDirectional.centerEnd,
-      children: [
-        FButton(
-          key: const ValueKey<String>('network-tab-current'),
-          variant: active ? .secondary : .ghost,
-          size: .sm,
-          onPress: onSelect,
-          mainAxisSize: MainAxisSize.min,
-          suffix: const Padding(
-            padding: EdgeInsetsDirectional.only(start: 4),
-            child: Icon(Icons.expand_more, size: 16),
-          ),
-          child: ConstrainedBox(
-            key: const ValueKey<String>('network-tab-label'),
-            constraints: const BoxConstraints(
-              minWidth: _labelMinWidth,
-              maxWidth: _labelMaxWidth,
-            ),
-            child: Text(label, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-        PositionedDirectional(
-          top: 0,
-          end: 0,
-          bottom: 0,
-          width: 34,
-          child: FTappable.static(
-            key: const ValueKey<String>('network-tab-dropdown'),
-            behavior: HitTestBehavior.opaque,
-            semanticsLabel: '切换网络',
-            onPress: onOpenMenu,
-            child: const SizedBox.expand(),
-          ),
-        ),
-      ],
+    return HomeDashboardMobileNavigation(
+      activeView: _homeDashboardViewFor(activeView),
+      networks: _homeDashboardNetworkOptions(networks),
+      selectedNetworkId: selectedNetworkId,
+      onShowOverview: onShowOverview,
+      onShowNetwork: onShowNetwork,
+      onSelectNetwork: onSelectNetwork,
+      onShowDevices: onShowDevices,
+      onShowSettings: onShowSettings,
     );
   }
 }

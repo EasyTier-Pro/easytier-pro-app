@@ -2,6 +2,24 @@ part of 'workspace_home_view.dart';
 
 enum _DashboardView { overview, network, devices, settings }
 
+HomeDashboardView _homeDashboardViewFor(_DashboardView view) {
+  return switch (view) {
+    _DashboardView.overview => HomeDashboardView.overview,
+    _DashboardView.network => HomeDashboardView.network,
+    _DashboardView.devices => HomeDashboardView.devices,
+    _DashboardView.settings => HomeDashboardView.settings,
+  };
+}
+
+List<HomeDashboardNetworkOption> _homeDashboardNetworkOptions(
+  Iterable<ConsoleNetwork> networks,
+) {
+  return [
+    for (final network in networks)
+      HomeDashboardNetworkOption(id: network.id, name: network.name),
+  ];
+}
+
 enum _NetworkDetailSection { nodes, subnets, local }
 
 const List<_DashboardView> _mobileDashboardViewOrder = <_DashboardView>[

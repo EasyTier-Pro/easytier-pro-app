@@ -202,7 +202,7 @@ void main() {
     );
     expect(find.text('网络'), findsOneWidget);
     expect(find.text('只读'), findsOneWidget);
-    expect(find.text('nt-token'), findsOneWidget);
+    expect(find.text('nt-token'), findsWidgets);
     expect(find.byType(FSwitch), findsOneWidget);
     final tokenSwitch = tester.widget<FSwitch>(find.byType(FSwitch));
     expect(tokenSwitch.value, isTrue);
@@ -211,9 +211,8 @@ void main() {
     expect(find.widgetWithText(FButton, '重新连接'), findsNothing);
     expect(find.widgetWithText(FButton, '复制诊断'), findsNothing);
     expect(find.widgetWithText(FButton, '首页'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '设置'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '设备'), findsOneWidget);
     expect(find.widgetWithText(FButton, '网络'), findsNothing);
-    expect(find.widgetWithText(FButton, '设备'), findsNothing);
     expect(find.widgetWithText(FButton, '更换令牌'), findsNothing);
     expect(find.widgetWithText(FButton, '使用账号登录'), findsNothing);
 
@@ -227,12 +226,12 @@ void main() {
     expect(find.textContaining('10.147.0.2'), findsOneWidget);
     expect(coreLifecycleService.peerReadCount, greaterThan(0));
 
-    await tester.tap(find.widgetWithText(FButton, '返回'));
+    await tester.tap(find.widgetWithText(FButton, '首页'));
     await tester.pumpAndSettle();
 
     expect(find.text('1 个网络实例'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FButton, '设置'));
+    await tester.tap(find.byIcon(Icons.settings_outlined).last);
     await tester.pumpAndSettle();
 
     expect(find.text('连接'), findsWidgets);

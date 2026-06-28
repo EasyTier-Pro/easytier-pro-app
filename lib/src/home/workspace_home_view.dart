@@ -19,6 +19,7 @@ import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import '../shared/selectable_text_hit_boundary.dart';
+import 'dashboard_navigation.dart';
 import 'device_os_icon.dart';
 import 'home_shell.dart';
 import 'network_switch_tile.dart';
