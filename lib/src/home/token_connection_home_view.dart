@@ -324,36 +324,22 @@ class _TokenOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 860;
-        final statusPanel = _TokenStatusPanel(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TokenStatusPanel(
           profile: profile,
           status: status,
           onReconnect: onReconnect,
           onCopyDiagnostics: onCopyDiagnostics,
-        );
-        final trafficPanel = _TokenTrafficPanel(
+        ),
+        const SizedBox(height: 24),
+        _TokenNetworkInstanceList(
           traffic: traffic,
           trafficError: trafficError,
           running: status.isRunning,
-        );
-
-        if (wide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 6, child: statusPanel),
-              const SizedBox(width: 12),
-              Expanded(flex: 4, child: trafficPanel),
-            ],
-          );
-        }
-
-        return Column(
-          children: [statusPanel, const SizedBox(height: 12), trafficPanel],
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -546,8 +532,8 @@ class _TokenStatusPanel extends StatelessWidget {
   }
 }
 
-class _TokenTrafficPanel extends StatelessWidget {
-  const _TokenTrafficPanel({
+class _TokenNetworkInstanceList extends StatelessWidget {
+  const _TokenNetworkInstanceList({
     required this.traffic,
     required this.trafficError,
     required this.running,
@@ -563,49 +549,101 @@ class _TokenTrafficPanel extends StatelessWidget {
     final entries = traffic.entries.toList()
       ..sort((left, right) => left.key.compareTo(right.key));
 
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.monitor_heart_outlined, size: 18),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A).withAlpha(8),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.hub_outlined,
+                    size: 18,
+                    color: Color(0xFF334155),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Text(
-                  '运行实例',
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  '网络',
+                  style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                    fontSize: 18,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            if (!running)
-              _TokenMutedText('连接建立后会显示本机运行实例。')
-            else if (trafficError != null && trafficError!.isNotEmpty)
-              _TokenMutedText(trafficError!)
-            else if (entries.isEmpty)
-              const Row(
-                children: [
-                  FCircularProgress(size: .xs),
-                  SizedBox(width: 8),
-                  Text('正在读取实例状态...'),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  for (var i = 0; i < entries.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 8),
-                    _TokenTrafficTile(
-                      runtimeName: entries[i].key,
-                      snapshot: entries[i].value,
-                    ),
-                  ],
-                ],
-              ),
+            const Spacer(),
+            const _TokenReadonlyHint(),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (!running)
+          const _TokenNetworkInstanceEmpty(message: '连接建立后会显示本机网络实例。')
+        else if (trafficError != null && trafficError!.isNotEmpty)
+          _TokenNetworkInstanceEmpty(message: trafficError!)
+        else if (entries.isEmpty)
+          const _TokenNetworkInstanceLoading()
+        else
+          Column(
+            children: [
+              for (var i = 0; i < entries.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                _TokenNetworkInstanceTile(
+                  runtimeName: entries[i].key,
+                  snapshot: entries[i].value,
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _TokenReadonlyHint extends StatelessWidget {
+  const _TokenReadonlyHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Text(
+        '只读',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: const Color(0xFF64748B),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenNetworkInstanceLoading extends StatelessWidget {
+  const _TokenNetworkInstanceLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return FCard(
+      child: const Padding(
+        padding: EdgeInsets.all(8),
+        child: Row(
+          children: [
+            FCircularProgress(size: .xs),
+            SizedBox(width: 8),
+            Text('正在读取网络实例...'),
           ],
         ),
       ),
@@ -613,8 +651,27 @@ class _TokenTrafficPanel extends StatelessWidget {
   }
 }
 
-class _TokenTrafficTile extends StatelessWidget {
-  const _TokenTrafficTile({required this.runtimeName, required this.snapshot});
+class _TokenNetworkInstanceEmpty extends StatelessWidget {
+  const _TokenNetworkInstanceEmpty({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: _TokenMutedText(message),
+      ),
+    );
+  }
+}
+
+class _TokenNetworkInstanceTile extends StatelessWidget {
+  const _TokenNetworkInstanceTile({
+    required this.runtimeName,
+    required this.snapshot,
+  });
 
   final String runtimeName;
   final _TokenTrafficSnapshot snapshot;
@@ -622,33 +679,106 @@ class _TokenTrafficTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              runtimeName,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+    final downloadRate = _formatTrafficRate(snapshot.downloadBytesPerSecond);
+    final uploadRate = _formatTrafficRate(snapshot.uploadBytesPerSecond);
+
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF16A34A),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          runtimeName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: const Color(0xFF0F172A),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const _TokenReadonlySwitch(value: true),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      const _TokenInstanceStateBadge(),
+                      _RateBadge(icon: Icons.south_west, value: downloadRate),
+                      _RateBadge(icon: Icons.north_east, value: uploadRate),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenReadonlySwitch extends StatelessWidget {
+  const _TokenReadonlySwitch({required this.value});
+
+  final bool value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '设备令牌连接由控制台下发，客户端仅展示状态。',
+      excludeFromSemantics: true,
+      child: FSwitch(value: value, enabled: false, onChange: null),
+    );
+  }
+}
+
+class _TokenInstanceStateBadge extends StatelessWidget {
+  const _TokenInstanceStateBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFFDF4),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.check_circle_outline,
+            size: 13,
+            color: Color(0xFF16A34A),
           ),
-          const SizedBox(width: 8),
-          _RateBadge(
-            icon: Icons.south_west,
-            value: _formatTrafficRate(snapshot.downloadBytesPerSecond),
-          ),
-          const SizedBox(width: 6),
-          _RateBadge(
-            icon: Icons.north_east,
-            value: _formatTrafficRate(snapshot.uploadBytesPerSecond),
+          const SizedBox(width: 4),
+          Text(
+            '已连接',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF15803D),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

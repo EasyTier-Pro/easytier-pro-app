@@ -118,6 +118,16 @@ void main() {
     final coreLifecycleService = _NoopCoreLifecycleService(
       authService: authService,
       machineId: 'machine-token',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-token': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-token',
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+      ],
     );
 
     await tester.pumpWidget(
@@ -166,6 +176,13 @@ void main() {
     expect(coreLifecycleService.tokenProfile?.configServer, contains('22020'));
     expect(find.text('令牌连接已建立'), findsOneWidget);
     expect(find.text('登录控制台'), findsNothing);
+    expect(find.text('网络'), findsOneWidget);
+    expect(find.text('只读'), findsOneWidget);
+    expect(find.text('nt-token'), findsOneWidget);
+    expect(find.byType(FSwitch), findsOneWidget);
+    final tokenSwitch = tester.widget<FSwitch>(find.byType(FSwitch));
+    expect(tokenSwitch.value, isTrue);
+    expect(tokenSwitch.enabled, isFalse);
     expect(find.widgetWithText(FButton, '首页'), findsOneWidget);
     expect(find.widgetWithText(FButton, '设置'), findsOneWidget);
     expect(find.widgetWithText(FButton, '网络'), findsNothing);
