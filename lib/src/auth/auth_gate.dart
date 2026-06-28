@@ -872,40 +872,25 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
                 maxLines: 1,
               ),
             ),
-            const SizedBox(height: 6),
-            _TokenAdvancedDisclosure(
-              expanded: _showAdvancedOptions,
-              onToggle: () {
-                setState(() => _showAdvancedOptions = !_showAdvancedOptions);
-              },
-            ),
             if (_showAdvancedOptions) ...[
               const SizedBox(height: 10),
-              _TokenFormField(
-                label: '控制服务器',
-                child: FTextField(
-                  key: const ValueKey<String>('token-config-server-input'),
-                  control: FTextFieldControl.managed(
-                    controller: _configServerController,
-                  ),
-                  hint: widget.defaultConfigServer,
-                  keyboardType: TextInputType.url,
-                ),
+              _TokenAdvancedPanel(
+                defaultConfigServer: widget.defaultConfigServer,
+                configServerController: _configServerController,
+                nameController: _nameController,
+                onCollapse: () {
+                  setState(() => _showAdvancedOptions = false);
+                },
               ),
-              const SizedBox(height: 12),
-              _TokenFormField(
-                label: '主机名',
-                child: FTextField(
-                  key: const ValueKey<String>('token-display-name-input'),
-                  control: FTextFieldControl.managed(
-                    controller: _nameController,
-                  ),
-                  hint: '设备令牌连接',
-                  keyboardType: TextInputType.text,
-                ),
+            ] else ...[
+              const SizedBox(height: 6),
+              _TokenAdvancedDisclosure(
+                onToggle: () {
+                  setState(() => _showAdvancedOptions = true);
+                },
               ),
             ],
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Row(
               children: [
                 FButton(
@@ -981,12 +966,8 @@ class _TokenLabelLink extends StatelessWidget {
 }
 
 class _TokenAdvancedDisclosure extends StatelessWidget {
-  const _TokenAdvancedDisclosure({
-    required this.expanded,
-    required this.onToggle,
-  });
+  const _TokenAdvancedDisclosure({required this.onToggle});
 
-  final bool expanded;
   final VoidCallback onToggle;
 
   @override
@@ -1014,15 +995,114 @@ class _TokenAdvancedDisclosure extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 2),
-                Icon(
-                  expanded ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: muted,
-                ),
+                Icon(Icons.expand_more, size: 16, color: muted),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TokenAdvancedPanel extends StatelessWidget {
+  const _TokenAdvancedPanel({
+    required this.defaultConfigServer,
+    required this.configServerController,
+    required this.nameController,
+    required this.onCollapse,
+  });
+
+  final String defaultConfigServer;
+  final TextEditingController configServerController;
+  final TextEditingController nameController;
+  final VoidCallback onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.55);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '高级设置',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: muted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onCollapse,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: 2,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '收起',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: muted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(Icons.expand_less, size: 16, color: muted),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _TokenFormField(
+            label: '控制服务器',
+            dense: true,
+            child: FTextField(
+              key: const ValueKey<String>('token-config-server-input'),
+              size: .sm,
+              control: FTextFieldControl.managed(
+                controller: configServerController,
+              ),
+              hint: defaultConfigServer,
+              keyboardType: TextInputType.url,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _TokenFormField(
+            label: '主机名',
+            dense: true,
+            child: FTextField(
+              key: const ValueKey<String>('token-display-name-input'),
+              size: .sm,
+              control: FTextFieldControl.managed(controller: nameController),
+              hint: '设备令牌连接',
+              keyboardType: TextInputType.text,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1033,11 +1113,13 @@ class _TokenFormField extends StatelessWidget {
     required this.label,
     required this.child,
     this.trailing,
+    this.dense = false,
   });
 
   final String label;
   final Widget child;
   final Widget? trailing;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -1052,13 +1134,16 @@ class _TokenFormField extends StatelessWidget {
                 label,
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
+                  color: dense
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.72)
+                      : null,
                 ),
               ),
             ),
             ?trailing,
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: dense ? 5 : 6),
         child,
       ],
     );
