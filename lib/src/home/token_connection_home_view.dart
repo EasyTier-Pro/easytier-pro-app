@@ -9,6 +9,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../desktop/app_update_service.dart';
+import '../desktop/tray_support.dart';
 import '../desktop/window_behavior_preferences.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
@@ -24,6 +25,7 @@ class TokenConnectionHomeView extends StatefulWidget {
     required this.profile,
     required this.coreLifecycleService,
     required this.appUpdateService,
+    required this.traySupport,
     required this.windowBehaviorPreferences,
     required this.onDisconnect,
     required this.onChangeToken,
@@ -33,6 +35,7 @@ class TokenConnectionHomeView extends StatefulWidget {
   final TokenConnectionProfile profile;
   final CoreLifecycleService coreLifecycleService;
   final AppUpdateService appUpdateService;
+  final TraySupport traySupport;
   final WindowBehaviorPreferences windowBehaviorPreferences;
   final Future<void> Function() onDisconnect;
   final Future<void> Function() onChangeToken;
@@ -61,6 +64,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   Map<String, String> _peerStatusErrorsByRuntime = const <String, String>{};
   String? _trafficError;
   String? _selectedRuntimeName;
+  String? _trayConnectionLabel;
+  bool? _trayConnectionEnabled;
   final _networkDetailHeaderCollapse =
       HomeNetworkDetailHeaderCollapseController();
 
@@ -122,6 +127,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   void initState() {
     super.initState();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
+    _syncTrayConnectionAction();
     _refreshTrafficPolling();
   }
 
@@ -136,6 +142,12 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       _refreshTrafficPolling();
       _refreshPeerStatusPolling();
     }
+    if (oldWidget.traySupport != widget.traySupport) {
+      oldWidget.traySupport.setConnectionAction(null);
+      _trayConnectionLabel = null;
+      _trayConnectionEnabled = null;
+      _syncTrayConnectionAction();
+    }
   }
 
   @override
@@ -144,6 +156,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     _peerStatusTimer?.cancel();
     _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
+    widget.traySupport.setConnectionAction(null);
     super.dispose();
   }
 
@@ -151,8 +164,38 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     if (mounted) {
       setState(() {});
     }
+    _syncTrayConnectionAction();
     _refreshTrafficPolling();
     _refreshPeerStatusPolling();
+  }
+
+  void _syncTrayConnectionAction() {
+    final status = widget.coreLifecycleService.status.value;
+    final busy =
+        status.phase == CoreRunPhase.checking ||
+        status.phase == CoreRunPhase.repairing;
+    final running = status.phase == CoreRunPhase.running;
+    final label = busy ? '正在连接...' : (running ? '重新连接' : '连接');
+    final enabled = !busy;
+
+    if (_trayConnectionLabel == label && _trayConnectionEnabled == enabled) {
+      return;
+    }
+
+    _trayConnectionLabel = label;
+    _trayConnectionEnabled = enabled;
+    widget.traySupport.setConnectionAction(
+      TrayConnectionAction(
+        label: label,
+        enabled: enabled,
+        onSelected: enabled
+            ? () async {
+                await widget.traySupport.showWindow();
+                await widget.coreLifecycleService.repair();
+              }
+            : null,
+      ),
+    );
   }
 
   void _refreshTrafficPolling() {

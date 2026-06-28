@@ -397,6 +397,49 @@ void main() {
     }
   });
 
+  testWidgets('token tray action reconnects current connection', (
+    WidgetTester tester,
+  ) async {
+    final traySupport = _RecordingTraySupport();
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+        traySupport: traySupport,
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('token-connect-input')),
+      'device-token',
+    );
+    final connectButton = find.widgetWithText(FButton, '连接');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(traySupport.connectionAction?.label, '重新连接');
+    expect(traySupport.connectionAction?.enabled, isTrue);
+    expect(traySupport.connectionAction?.onSelected, isNotNull);
+
+    await traySupport.connectionAction!.onSelected!();
+    await tester.pump();
+
+    expect(traySupport.showWindowCount, 1);
+    expect(coreLifecycleService.repairCount, 1);
+  });
+
   testWidgets('token mobile network nav matches workspace picker flow', (
     WidgetTester tester,
   ) async {
@@ -5541,6 +5584,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   final Object? peerError;
   TokenConnectionProfile? tokenProfile;
   int _trafficReadCount = 0;
+  int repairCount = 0;
   int peerReadCount = 0;
 
   @override
@@ -5574,6 +5618,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
 
   @override
   Future<void> repair() async {
+    repairCount++;
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
       message: '本机设备已就绪',
@@ -5634,6 +5679,7 @@ class _FakeAppUpdateService extends AppUpdateService {
 class _RecordingTraySupport implements TraySupport {
   TrayConnectionAction? connectionAction;
   TrayEngineAction? engineAction;
+  int showWindowCount = 0;
 
   @override
   Future<void> dispose() async {}
@@ -5655,7 +5701,9 @@ class _RecordingTraySupport implements TraySupport {
   }
 
   @override
-  Future<void> showWindow() async {}
+  Future<void> showWindow() async {
+    showWindowCount++;
+  }
 
   @override
   Future<void> updateCoreStatus(CoreRunStatus status) async {}
