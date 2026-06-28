@@ -1451,63 +1451,23 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   static Map<String, Object?>? _readMap(Object? value) {
-    if (value is Map) {
-      return _stringObjectMap(value);
-    }
-    if (value is String) {
-      final decoded = _tryDecodeJson(value);
-      return decoded is Map ? _stringObjectMap(decoded) : null;
-    }
-    return null;
+    return CoreJsonValue.readMap(value);
   }
 
   static List<Object?> _readList(Object? value) {
-    if (value is List) {
-      return value;
-    }
-    if (value is String && value.trim().isNotEmpty) {
-      final decoded = _tryDecodeJson(value);
-      if (decoded is List) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return <Object?>[decoded];
-      }
-      return <Object?>[value.trim()];
-    }
-    return const <Object?>[];
+    return CoreJsonValue.readList(value);
   }
 
   static Object? _tryDecodeJson(String value) {
-    final text = value.trim();
-    if ((!text.startsWith('{') || !text.endsWith('}')) &&
-        (!text.startsWith('[') || !text.endsWith(']'))) {
-      return null;
-    }
-    try {
-      return jsonDecode(text);
-    } on FormatException {
-      return null;
-    }
+    return CoreJsonValue.tryDecodeJson(value);
   }
 
   static List<String> _readStringList(Object? value) {
-    return _readList(value)
-        .map(_readString)
-        .where((value) => value.isNotEmpty)
-        .toList(growable: false);
+    return CoreJsonValue.readStringList(value);
   }
 
   static List<String> _readCidrList(Object? value) {
-    if (value is Map) {
-      final cidr = _cidrFromValue(value);
-      return cidr.isEmpty ? const <String>[] : <String>[cidr];
-    }
-    return _readList(value)
-        .map(_cidrFromValue)
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
+    return CoreJsonValue.readCidrList(value);
   }
 
   static List<String> _readAddressCidrs(Map<String, Object?> json) {
@@ -1556,75 +1516,7 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
   }
 
   static String _cidrFromValue(Object? value) {
-    if (value is Map) {
-      final map = _stringObjectMap(value);
-      final nested = map['route'] ?? map['route_info'] ?? map['routeInfo'];
-      if (nested is Map) {
-        return _cidrFromValue(nested);
-      }
-      final ipv4Inet = _ipv4InetCidrFromMap(map);
-      if (ipv4Inet.isNotEmpty) {
-        return ipv4Inet;
-      }
-      for (final key in const <String>[
-        'ipv4_addr',
-        'ipv4Addr',
-        'ipv4_address',
-        'ipv4Address',
-        'virtual_ip',
-        'virtualIp',
-        'virtual_ipv4',
-        'virtualIpv4',
-      ]) {
-        final nested = map[key];
-        if (nested == null) {
-          continue;
-        }
-        final nestedCidr = _cidrFromValue(nested);
-        if (nestedCidr.isNotEmpty) {
-          if (!nestedCidr.contains('/')) {
-            final prefix = _firstNonEmptyString([
-              map['network_length'],
-              map['networkLength'],
-              map['prefix'],
-              map['prefix_length'],
-              map['prefixLength'],
-              map['mask'],
-            ]);
-            if (prefix != null) {
-              return '$nestedCidr/$prefix';
-            }
-          }
-          return nestedCidr;
-        }
-      }
-      final cidr = _firstNonEmptyString([
-        map['cidr'],
-        map['ipv4_cidr'],
-        map['ipv4Cidr'],
-        map['ip_cidr'],
-        map['ipCidr'],
-        map['destination'],
-        map['dest'],
-        _readScalarString(map['address']),
-        map['ip'],
-        map['ipv4'],
-      ]);
-      if (cidr == null) {
-        return '';
-      }
-      if (cidr.contains('/')) {
-        return cidr;
-      }
-      final prefix = _firstNonEmptyString([
-        map['prefix'],
-        map['prefix_length'],
-        map['prefixLength'],
-        map['mask'],
-      ]);
-      return prefix == null ? cidr : '$cidr/$prefix';
-    }
-    return _readString(value);
+    return CoreJsonValue.readCidr(value);
   }
 
   static String _routeCidrFromValue(Object? value) {
@@ -1657,67 +1549,16 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     return mapped.isNotEmpty ? mapped : text.substring(0, arrowIndex).trim();
   }
 
-  static String _ipv4InetCidrFromMap(Map<String, Object?> map) {
-    final address = _ipv4AddressFromValue(map['address'] ?? map['addr']);
-    if (address == null || address.isEmpty) {
-      return '';
-    }
-    if (address.contains('/')) {
-      return address;
-    }
-    final prefix = _firstNonEmptyString([
-      map['network_length'],
-      map['networkLength'],
-      map['prefix'],
-      map['prefix_length'],
-      map['prefixLength'],
-      map['mask'],
-    ]);
-    return '$address/${prefix ?? 32}';
-  }
-
-  static String? _ipv4AddressFromValue(Object? value) {
-    if (value is Map) {
-      final map = _stringObjectMap(value);
-      final numeric = _readIntValue(map['addr'] ?? map['value']);
-      if (numeric != null) {
-        return _ipv4FromUint32(numeric);
-      }
-      return _firstNonEmptyString([map['address'], map['ip'], map['ipv4']]);
-    }
-    final numeric = _readIntValue(value);
-    if (numeric != null) {
-      return _ipv4FromUint32(numeric);
-    }
-    return _readScalarString(value);
-  }
-
   static String _ipv4FromUint32(int value) {
-    final unsigned = value & 0xffffffff;
-    return [
-      (unsigned >> 24) & 0xff,
-      (unsigned >> 16) & 0xff,
-      (unsigned >> 8) & 0xff,
-      unsigned & 0xff,
-    ].join('.');
+    return CoreJsonValue.ipv4FromUint32(value);
   }
 
   static int? _readIntValue(Object? value) {
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return int.tryParse(_readString(value));
+    return CoreJsonValue.readInt(value);
   }
 
   static String? _readScalarString(Object? value) {
-    if (value is Map || value is List) {
-      return null;
-    }
-    final text = _readString(value);
-    return text.isEmpty ? null : text;
+    return CoreJsonValue.readScalarString(value);
   }
 
   static List<String> _readRouteCidrs(Object? value) {
@@ -2753,13 +2594,7 @@ class AndroidNetworkInstanceInfo {
   }
 
   static String? _firstScalarString(Iterable<Object?> values) {
-    for (final value in values) {
-      final text = AndroidCoreRuntime._readScalarString(value);
-      if (text != null && text.isNotEmpty) {
-        return text;
-      }
-    }
-    return null;
+    return CoreJsonValue.firstScalarString(values);
   }
 
   static String _latencyText(
@@ -2866,25 +2701,19 @@ class AndroidNetworkInstanceInfo {
 }
 
 Map<String, Object?> _stringObjectMap(Map<dynamic, dynamic> value) {
-  return value.map((key, value) => MapEntry(key.toString(), value));
+  return CoreJsonValue.stringObjectMap(value);
 }
 
 Map<String, dynamic> _stringDynamicMap(Map<dynamic, dynamic> value) {
-  return value.map((key, value) => MapEntry(key.toString(), value));
+  return CoreJsonValue.stringDynamicMap(value);
 }
 
 String _readString(Object? value) {
-  return value?.toString().trim() ?? '';
+  return CoreJsonValue.readString(value);
 }
 
 String? _firstNonEmptyString(Iterable<Object?> values) {
-  for (final value in values) {
-    final text = _readString(value);
-    if (text.isNotEmpty) {
-      return text;
-    }
-  }
-  return null;
+  return CoreJsonValue.firstNonEmptyString(values);
 }
 
 bool? _readBool(Object? value) {

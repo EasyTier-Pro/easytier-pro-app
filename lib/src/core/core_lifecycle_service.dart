@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../auth/console_auth_service.dart';
 import '../logging/app_logger.dart';
 import '../telemetry/app_client_reporter.dart';
+import 'core_json_value.dart';
 import 'core_peer_status.dart';
 
 part 'core_lifecycle_models.dart';

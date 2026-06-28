@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'core_json_value.dart';
+
 class CorePeerStatus {
   const CorePeerStatus({
     required this.cidr,
@@ -258,128 +260,7 @@ Map<String, dynamic>? _selectedPeerConn(Map<String, dynamic> peer) {
   return null;
 }
 
-String _readCidr(Object? value) {
-  if (value is Map) {
-    final map = value.map((key, value) => MapEntry(key.toString(), value));
-    final nested = map['route'] ?? map['route_info'] ?? map['routeInfo'];
-    if (nested is Map) {
-      return _readCidr(nested);
-    }
-    final ipv4Inet = _ipv4InetCidrFromMap(map);
-    if (ipv4Inet.isNotEmpty) {
-      return ipv4Inet;
-    }
-    for (final key in const <String>[
-      'ipv4_addr',
-      'ipv4Addr',
-      'ipv4_address',
-      'ipv4Address',
-      'virtual_ip',
-      'virtualIp',
-      'virtual_ipv4',
-      'virtualIpv4',
-    ]) {
-      final nested = map[key];
-      if (nested == null) {
-        continue;
-      }
-      final nestedCidr = _readCidr(nested);
-      if (nestedCidr.isNotEmpty) {
-        if (!nestedCidr.contains('/')) {
-          final prefix = _firstScalarString([
-            map['network_length'],
-            map['networkLength'],
-            map['prefix'],
-            map['prefix_length'],
-            map['prefixLength'],
-            map['mask'],
-          ]);
-          if (prefix != null) {
-            return '$nestedCidr/$prefix';
-          }
-        }
-        return nestedCidr;
-      }
-    }
-    final cidr = _firstScalarString([
-      map['cidr'],
-      map['ipv4_cidr'],
-      map['ipv4Cidr'],
-      map['ip_cidr'],
-      map['ipCidr'],
-      map['destination'],
-      map['dest'],
-      map['address'],
-      map['ip'],
-      map['ipv4'],
-    ]);
-    if (cidr == null) {
-      return '';
-    }
-    if (cidr.contains('/')) {
-      return cidr;
-    }
-    final prefix = _firstScalarString([
-      map['network_length'],
-      map['networkLength'],
-      map['prefix'],
-      map['prefix_length'],
-      map['prefixLength'],
-      map['prefix_len'],
-      map['prefixLen'],
-      map['mask'],
-    ]);
-    return prefix == null ? cidr : '$cidr/$prefix';
-  }
-  return _readString(value);
-}
-
-String _ipv4InetCidrFromMap(Map<String, dynamic> map) {
-  final address = _ipv4AddressFromValue(map['address'] ?? map['addr']);
-  if (address == null || address.isEmpty) {
-    return '';
-  }
-  if (address.contains('/')) {
-    return address;
-  }
-  final prefix = _firstScalarString([
-    map['network_length'],
-    map['networkLength'],
-    map['prefix'],
-    map['prefix_length'],
-    map['prefixLength'],
-    map['prefix_len'],
-    map['prefixLen'],
-    map['mask'],
-  ]);
-  return '$address/${prefix ?? 32}';
-}
-
-String? _ipv4AddressFromValue(Object? value) {
-  if (value is Map) {
-    final map = value.map((key, value) => MapEntry(key.toString(), value));
-    final numeric = _readIntValue(map['addr'] ?? map['value']);
-    if (numeric != null) {
-      return _ipv4FromUint32(numeric);
-    }
-    return _firstScalarString([map['address'], map['ip'], map['ipv4']]);
-  }
-  final numeric = _readIntValue(value);
-  if (numeric != null) {
-    return _ipv4FromUint32(numeric);
-  }
-  return _readScalarString(value);
-}
-
-String _ipv4FromUint32(int value) {
-  final unsigned = value & 0xffffffff;
-  return [
-    (unsigned >> 24) & 0xff,
-    (unsigned >> 16) & 0xff,
-    (unsigned >> 8) & 0xff,
-    unsigned & 0xff,
-  ].join('.');
-}
+String _readCidr(Object? value) => CoreJsonValue.readCidr(value);
 
 List<dynamic> _extractPeerItems(Object? decoded) {
   if (decoded is List<dynamic>) {
@@ -438,60 +319,20 @@ bool _looksLikeMultiInstanceResult(List<dynamic> items) {
 }
 
 Map<String, dynamic>? _readMap(Object? value) {
-  if (value is Map<String, dynamic>) {
-    return value;
-  }
-  if (value is Map) {
-    return value.map((key, value) => MapEntry(key.toString(), value));
-  }
-  return null;
+  final map = CoreJsonValue.readMap(value);
+  return map == null ? null : Map<String, dynamic>.from(map);
 }
 
 List<dynamic> _readList(Object? value) {
-  return value is List<dynamic> ? value : const <dynamic>[];
+  return List<dynamic>.from(CoreJsonValue.readList(value));
 }
 
 String _readString(Object? value) {
-  final text = value?.toString().trim() ?? '';
-  return text;
-}
-
-String? _readScalarString(Object? value) {
-  if (value is Map || value is List) {
-    return null;
-  }
-  final text = _readString(value);
-  return text.isEmpty ? null : text;
-}
-
-int? _readIntValue(Object? value) {
-  if (value is int) {
-    return value;
-  }
-  if (value is num) {
-    return value.toInt();
-  }
-  return int.tryParse(_readString(value));
+  return CoreJsonValue.readString(value);
 }
 
 String _firstString(Iterable<Object?> values) {
-  for (final value in values) {
-    final text = _readString(value);
-    if (text.isNotEmpty) {
-      return text;
-    }
-  }
-  return '';
-}
-
-String? _firstScalarString(Iterable<Object?> values) {
-  for (final value in values) {
-    final text = _readScalarString(value);
-    if (text != null) {
-      return text;
-    }
-  }
-  return null;
+  return CoreJsonValue.firstString(values);
 }
 
 String _latencyText(Map<String, dynamic>? stats, Map<String, dynamic>? conn) {
