@@ -9,6 +9,7 @@ import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
 import '../desktop/app_update_service.dart';
+import '../desktop/window_behavior_preferences.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
@@ -23,6 +24,7 @@ class TokenConnectionHomeView extends StatefulWidget {
     required this.profile,
     required this.coreLifecycleService,
     required this.appUpdateService,
+    required this.windowBehaviorPreferences,
     required this.onDisconnect,
     required this.onChangeToken,
     required this.onAccountLogin,
@@ -31,6 +33,7 @@ class TokenConnectionHomeView extends StatefulWidget {
   final TokenConnectionProfile profile;
   final CoreLifecycleService coreLifecycleService;
   final AppUpdateService appUpdateService;
+  final WindowBehaviorPreferences windowBehaviorPreferences;
   final Future<void> Function() onDisconnect;
   final Future<void> Function() onChangeToken;
   final Future<void> Function() onAccountLogin;
@@ -290,12 +293,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     if (!mounted) {
       return;
     }
-    showRawFToast(
-      context: context,
-      variant: FToastVariant.primary,
-      duration: const Duration(seconds: 2),
-      builder: (context, entry) => const FToast(title: Text('诊断信息已复制')),
-    );
+    showHomeSettingsToast(context, '诊断信息已复制');
   }
 
   Future<void> _copyText(String value) async {
@@ -303,12 +301,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     if (!mounted) {
       return;
     }
-    showRawFToast(
-      context: context,
-      variant: FToastVariant.primary,
-      duration: const Duration(seconds: 2),
-      builder: (context, entry) => const FToast(title: Text('已复制到剪贴板')),
-    );
+    showHomeSettingsToast(context, '已复制到剪贴板');
   }
 
   void _showOverview() {
@@ -498,6 +491,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
           profile: widget.profile,
           coreLifecycleService: widget.coreLifecycleService,
           appUpdateService: widget.appUpdateService,
+          windowBehaviorPreferences: widget.windowBehaviorPreferences,
           onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
           onCopyText: (value) => unawaited(_copyText(value)),
           onDisconnect: () => unawaited(widget.onDisconnect()),
@@ -772,6 +766,7 @@ class _TokenSettingsPanel extends StatefulWidget {
     required this.profile,
     required this.coreLifecycleService,
     required this.appUpdateService,
+    required this.windowBehaviorPreferences,
     required this.onCopyDiagnostics,
     required this.onCopyText,
     required this.onDisconnect,
@@ -782,6 +777,7 @@ class _TokenSettingsPanel extends StatefulWidget {
   final TokenConnectionProfile profile;
   final CoreLifecycleService coreLifecycleService;
   final AppUpdateService appUpdateService;
+  final WindowBehaviorPreferences windowBehaviorPreferences;
   final VoidCallback onCopyDiagnostics;
   final ValueChanged<String> onCopyText;
   final VoidCallback onDisconnect;
@@ -827,12 +823,7 @@ class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
   }
 
   void _showToast(String message, {bool destructive = false}) {
-    showRawFToast(
-      context: context,
-      variant: destructive ? FToastVariant.destructive : FToastVariant.primary,
-      duration: const Duration(seconds: 2),
-      builder: (context, entry) => FToast(title: Text(message)),
-    );
+    showHomeSettingsToast(context, message, destructive: destructive);
   }
 
   @override
@@ -889,6 +880,15 @@ class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
             onAccountLogin: widget.onAccountLogin,
           ),
         ),
+        if (homeSettingsCanConfigureWindowBehavior)
+          HomeSettingsSection(
+            id: 'window',
+            title: '窗口行为',
+            icon: Icons.web_asset_outlined,
+            builder: (context) => HomeWindowBehaviorSettingsSection(
+              windowBehaviorPreferences: widget.windowBehaviorPreferences,
+            ),
+          ),
         HomeSettingsSection(
           id: 'app',
           title: '应用信息',
@@ -898,6 +898,12 @@ class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
             checkingForUpdates: _checkingForUpdates,
             onCheckForUpdates: () => unawaited(_checkForUpdates()),
           ),
+        ),
+        HomeSettingsSection(
+          id: 'diagnostics',
+          title: '诊断日志',
+          icon: Icons.description_outlined,
+          builder: (context) => const HomeDiagnosticsSettingsSection(),
         ),
       ],
     );

@@ -292,6 +292,74 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
+  testWidgets('token settings reuses app-level settings sections', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final windowBehaviorPreferences = WindowBehaviorPreferences(preferences);
+      final tokenStore = TokenConnectionProfileStore.memory();
+      await tokenStore.save(
+        TokenConnectionProfile.fromInput(
+          input: 'device-token',
+          defaultConfigServer: 'tcp://et-web.console.easytier.net:22020',
+          displayName: 'Token Device',
+        ),
+      );
+      final authService = _LoginFlowAuthService();
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          tokenConnectionProfileStore: tokenStore,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-token',
+          ),
+          windowBehaviorPreferences: windowBehaviorPreferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined).last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-window-behavior-card')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('settings-app-card')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('settings-diagnostics-group')),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FButton, '检查更新'), findsOneWidget);
+      expect(find.text('查看日志'), findsOneWidget);
+      expect(windowBehaviorPreferences.minimizeToTray, isFalse);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey<String>('settings-window-behavior-card'),
+          ),
+          matching: find.byType(FSwitch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(windowBehaviorPreferences.minimizeToTray, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('token mobile network nav matches workspace picker flow', (
     WidgetTester tester,
   ) async {

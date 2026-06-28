@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/core_lifecycle_service.dart';
 import '../desktop/app_update_service.dart';
+import '../desktop/window_behavior_preferences.dart';
+import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
 import 'home_shell.dart';
@@ -432,6 +436,446 @@ class HomeAppSettingsSection extends StatelessWidget {
       return '通过已配置的更新源检查桌面客户端版本。';
     }
     return '当前平台暂不支持应用内更新检查。';
+  }
+}
+
+bool get homeSettingsCanOpenLogDirectory =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux);
+
+bool get homeSettingsCanConfigureWindowBehavior =>
+    homeSettingsCanOpenLogDirectory;
+
+final Expando<Map<(String, bool), FToasterEntry>> _homeSettingsToastEntries =
+    Expando<Map<(String, bool), FToasterEntry>>('homeSettingsToastEntries');
+
+Duration _homeSettingsToastDuration({required bool destructive}) =>
+    destructive ? const Duration(seconds: 3) : const Duration(seconds: 2);
+
+FToastAlignment? _homeSettingsToastAlignment(BuildContext context) {
+  if (MediaQuery.sizeOf(context).width < homeShellMobileBreakpoint) {
+    return FToastAlignment.topCenter;
+  }
+  return null;
+}
+
+void showHomeSettingsToast(
+  BuildContext context,
+  String message, {
+  bool destructive = false,
+}) {
+  final toaster = context.findAncestorStateOfType<FToasterState>();
+  final variant = destructive
+      ? FToastVariant.destructive
+      : FToastVariant.primary;
+  final alignment = _homeSettingsToastAlignment(context);
+
+  FToasterEntry showToast({VoidCallback? onDismiss}) => showRawFToast(
+    context: context,
+    variant: variant,
+    alignment: alignment,
+    duration: _homeSettingsToastDuration(destructive: destructive),
+    onDismiss: onDismiss,
+    builder: (context, entry) => ExcludeSemantics(
+      child: FToast(variant: variant, title: Text(message)),
+    ),
+  );
+
+  if (toaster == null) {
+    showToast();
+    return;
+  }
+
+  final entries = _homeSettingsToastEntries[toaster] ??=
+      <(String, bool), FToasterEntry>{};
+  final key = (message, destructive);
+  final existing = entries[key];
+  if (existing != null) {
+    if (existing.showing) {
+      return;
+    }
+    entries.remove(key);
+  }
+
+  late final FToasterEntry entry;
+  entry = showToast(
+    onDismiss: () {
+      final current = _homeSettingsToastEntries[toaster];
+      if (current?[key] == entry) {
+        current?.remove(key);
+      }
+    },
+  );
+  entries[key] = entry;
+}
+
+class HomeWindowBehaviorSettingsSection extends StatelessWidget {
+  const HomeWindowBehaviorSettingsSection({
+    super.key,
+    required this.windowBehaviorPreferences,
+  });
+
+  final WindowBehaviorPreferences windowBehaviorPreferences;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: windowBehaviorPreferences,
+      builder: (context, _) {
+        return FCard.raw(
+          key: const ValueKey<String>('settings-window-behavior-card'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.web_asset_outlined, color: Color(0xFF3C3C43)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '最小化窗口时隐藏到托盘',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '关闭窗口仍会隐藏到托盘，可从托盘菜单退出应用。',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF737373),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _HomeSettingsControlBoundary(
+                  child: FSwitch(
+                    value: windowBehaviorPreferences.minimizeToTray,
+                    onChange: (value) => unawaited(
+                      windowBehaviorPreferences.setMinimizeToTray(value),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class HomeDiagnosticsSettingsSection extends StatelessWidget {
+  const HomeDiagnosticsSettingsSection({super.key});
+
+  static const MethodChannel _androidDiagnosticsChannel = MethodChannel(
+    'net.easytier.pro/core_runtime',
+  );
+
+  Future<void> _exportLogs(BuildContext context) async {
+    try {
+      final file = await AppLogger.instance.exportDiagnostics();
+      final shared = await _shareDiagnosticsFile(file);
+      AppLogger.instance.info(
+        'settings',
+        'Diagnostics exported',
+        context: {'file': file.path, 'shared': shared},
+      );
+      if (context.mounted) {
+        showHomeSettingsToast(
+          context,
+          shared ? '诊断日志已生成，请在分享面板中发送文件' : '诊断日志已导出: ${file.path}',
+        );
+      }
+    } catch (error) {
+      AppLogger.instance.error(
+        'settings',
+        'Diagnostics export failed',
+        context: {'error': error.toString()},
+      );
+      if (context.mounted) {
+        showHomeSettingsToast(context, '导出诊断日志失败', destructive: true);
+      }
+    }
+  }
+
+  Future<bool> _shareDiagnosticsFile(File file) async {
+    if (kIsWeb || !Platform.isAndroid) {
+      return false;
+    }
+    await _androidDiagnosticsChannel.invokeMethod<bool>('shareFile', {
+      'path': file.path,
+      'mimeType': 'text/plain',
+      'title': '分享 EasyTier Pro 诊断日志',
+    });
+    return true;
+  }
+
+  Future<void> _openLogDirectory(BuildContext context) async {
+    final path = AppLogger.instance.logDirectoryPath;
+    if (path == null || path.isEmpty) {
+      if (context.mounted) {
+        showHomeSettingsToast(context, '日志目录尚未初始化', destructive: true);
+      }
+      return;
+    }
+    if (!homeSettingsCanOpenLogDirectory) {
+      if (context.mounted) {
+        showHomeSettingsToast(context, '当前平台不支持打开日志目录', destructive: true);
+      }
+      return;
+    }
+    try {
+      late final List<String> command;
+      if (Platform.isWindows) {
+        command = ['explorer', path];
+      } else if (Platform.isMacOS) {
+        command = ['open', path];
+      } else {
+        command = ['xdg-open', path];
+      }
+      await Process.run(command.first, command.skip(1).toList());
+    } catch (error) {
+      if (context.mounted) {
+        showHomeSettingsToast(context, '打开日志目录失败', destructive: true);
+      }
+    }
+  }
+
+  Future<void> _showLogsDialog(BuildContext context) async {
+    await showFDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext, _, animation) => ExcludeSemantics(
+        child: FDialog.raw(
+          animation: animation,
+          constraints: const BoxConstraints(
+            minWidth: 600,
+            maxWidth: 800,
+            maxHeight: 520,
+          ),
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('诊断日志', style: Theme.of(context).textTheme.titleLarge),
+                    const Spacer(),
+                    _HomeSettingsControlBoundary(
+                      child: ExcludeSemantics(
+                        child: FPopoverMenu(
+                          menuAnchor: Alignment.topRight,
+                          childAnchor: Alignment.bottomRight,
+                          divider: FItemDivider.none,
+                          menuBuilder: (context, controller, menu) => [
+                            FItemGroup(
+                              divider: FItemDivider.none,
+                              children: [
+                                FItem(
+                                  prefix: const Icon(
+                                    Icons.download_outlined,
+                                    size: 18,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  title: Text(
+                                    '导出诊断日志',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  onPress: () {
+                                    unawaited(controller.hide());
+                                    unawaited(_exportLogs(dialogContext));
+                                  },
+                                ),
+                                if (homeSettingsCanOpenLogDirectory)
+                                  FItem(
+                                    prefix: const Icon(
+                                      Icons.folder_open_outlined,
+                                      size: 18,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                    title: Text(
+                                      '打开日志目录',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    onPress: () {
+                                      unawaited(controller.hide());
+                                      unawaited(
+                                        _openLogDirectory(dialogContext),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ],
+                          builder: (context, controller, child) => Tooltip(
+                            message: '更多操作',
+                            excludeFromSemantics: true,
+                            child: FButton(
+                              variant: .ghost,
+                              size: .sm,
+                              onPress: () => unawaited(controller.toggle()),
+                              mainAxisSize: MainAxisSize.min,
+                              child: const Icon(Icons.more_vert, size: 18),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _HomeSettingsControlBoundary(
+                      child: FButton(
+                        variant: .ghost,
+                        size: .sm,
+                        onPress: () {
+                          if (Navigator.of(dialogContext).canPop()) {
+                            Navigator.of(dialogContext).pop();
+                          }
+                        },
+                        child: const Icon(Icons.close, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ValueListenableBuilder<List<AppLogEntry>>(
+                    valueListenable: AppLogger.instance.recentEntries,
+                    builder: (context, entries, _) {
+                      if (entries.isEmpty) {
+                        return const Center(child: Text('暂无日志'));
+                      }
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FB),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            entries.map((entry) => entry.humanLine).join('\n'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  color: const Color(0xFF374151),
+                                ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FTileGroup(
+      key: const ValueKey<String>('settings-diagnostics-group'),
+      divider: .full,
+      children: [
+        FTile(
+          prefix: const Icon(
+            Icons.description_outlined,
+            size: 22,
+            color: Color(0xFF3C3C43),
+          ),
+          title: Text(
+            '查看日志',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '在弹窗中查看最近的应用日志',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+          ),
+          suffix: const Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: Color(0xFF9CA3AF),
+          ),
+          onPress: () => unawaited(_showLogsDialog(context)),
+        ),
+        FTile(
+          prefix: const Icon(
+            Icons.download_outlined,
+            size: 22,
+            color: Color(0xFF3C3C43),
+          ),
+          title: Text(
+            '导出诊断日志',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '将日志打包为文件以便分享',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+          ),
+          suffix: const Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: Color(0xFF9CA3AF),
+          ),
+          onPress: () => unawaited(_exportLogs(context)),
+        ),
+        if (homeSettingsCanOpenLogDirectory)
+          FTile(
+            prefix: const Icon(
+              Icons.folder_open_outlined,
+              size: 22,
+              color: Color(0xFF3C3C43),
+            ),
+            title: Text(
+              '打开日志目录',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              '在文件管理器中查看日志文件夹',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF737373)),
+            ),
+            suffix: const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: Color(0xFF9CA3AF),
+            ),
+            onPress: () => unawaited(_openLogDirectory(context)),
+          ),
+      ],
+    );
   }
 }
 
