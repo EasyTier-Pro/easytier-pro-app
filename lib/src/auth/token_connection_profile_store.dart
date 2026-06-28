@@ -51,13 +51,10 @@ class TokenConnectionProfile {
     required String defaultConfigServer,
     String displayName = '',
   }) {
-    final parsed = _parseTokenConnectionInput(
-      input,
-      defaultConfigServer: defaultConfigServer,
-    );
+    final token = _parseDeviceTokenInput(input);
     return TokenConnectionProfile(
-      bootstrapToken: parsed.bootstrapToken,
-      configServer: parsed.configServer,
+      bootstrapToken: token,
+      configServer: _normalizeConfigServer(defaultConfigServer),
       displayName: displayName.trim(),
       updatedAt: DateTime.now().toUtc(),
     );
@@ -128,20 +125,7 @@ class TokenConnectionProfileStore {
   }
 }
 
-class _ParsedTokenConnectionInput {
-  const _ParsedTokenConnectionInput({
-    required this.bootstrapToken,
-    required this.configServer,
-  });
-
-  final String bootstrapToken;
-  final String configServer;
-}
-
-_ParsedTokenConnectionInput _parseTokenConnectionInput(
-  String input, {
-  required String defaultConfigServer,
-}) {
+String _parseDeviceTokenInput(String input) {
   final text = input.trim();
   if (text.isEmpty) {
     throw const AuthException('请输入设备令牌。');
@@ -149,71 +133,10 @@ _ParsedTokenConnectionInput _parseTokenConnectionInput(
 
   final uri = Uri.tryParse(text);
   if (uri != null && uri.hasScheme) {
-    final queryToken = _firstNonEmptyTokenConnectionValue([
-      uri.queryParameters['token'],
-      uri.queryParameters['bootstrap_token'],
-      uri.queryParameters['device_token'],
-    ]);
-    final queryServer = _firstNonEmptyTokenConnectionValue([
-      uri.queryParameters['server'],
-      uri.queryParameters['config_server'],
-      uri.queryParameters['configServer'],
-    ]);
-    if (queryToken != null) {
-      return _ParsedTokenConnectionInput(
-        bootstrapToken: queryToken,
-        configServer: _normalizeConfigServer(
-          queryServer ?? defaultConfigServer,
-        ),
-      );
-    }
-
-    if (_looksLikeConfigServerUrl(uri)) {
-      final segments = uri.pathSegments
-          .map(Uri.decodeComponent)
-          .where((segment) => segment.trim().isNotEmpty)
-          .toList(growable: false);
-      if (segments.isNotEmpty) {
-        final token = segments.last.trim();
-        final server = uri.replace(
-          pathSegments: segments.length == 1
-              ? const <String>[]
-              : segments.take(segments.length - 1),
-          query: null,
-          fragment: null,
-        );
-        return _ParsedTokenConnectionInput(
-          bootstrapToken: token,
-          configServer: _normalizeConfigServer(server.toString()),
-        );
-      }
-    }
+    throw const AuthException('请粘贴设备令牌，不支持连接链接。');
   }
 
-  return _ParsedTokenConnectionInput(
-    bootstrapToken: text,
-    configServer: _normalizeConfigServer(defaultConfigServer),
-  );
-}
-
-String? _firstNonEmptyTokenConnectionValue(Iterable<Object?> values) {
-  for (final value in values) {
-    final text = value?.toString().trim() ?? '';
-    if (text.isNotEmpty) {
-      return text;
-    }
-  }
-  return null;
-}
-
-bool _looksLikeConfigServerUrl(Uri uri) {
-  final scheme = uri.scheme.toLowerCase();
-  return scheme == 'tcp' ||
-      scheme == 'udp' ||
-      scheme == 'ws' ||
-      scheme == 'wss' ||
-      scheme == 'http' ||
-      scheme == 'https';
+  return text;
 }
 
 String _normalizeConfigServer(String value) {

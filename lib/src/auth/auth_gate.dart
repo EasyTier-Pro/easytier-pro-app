@@ -739,13 +739,6 @@ class _LoginRequiredView extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              '登录即表示你同意将本设备注册到所选工作区。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
           ],
         ),
       ),
@@ -844,54 +837,42 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
             ),
             const SizedBox(height: 8),
             Text(
-              '用控制台生成的设备令牌接入本机，不进入工作区管理界面。',
+              '用控制台生成的设备令牌接入本机',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 20),
             _TokenFormField(
-              label: '设备令牌或连接链接',
+              label: '设备令牌',
               child: FTextField(
                 key: const ValueKey<String>('token-connect-input'),
                 control: FTextFieldControl.managed(
                   controller: _tokenController,
                 ),
-                hint: 'etk_... 或 easytierpro://connect?...',
+                hint: 'etk_...',
                 keyboardType: TextInputType.text,
-                maxLines: 3,
+                maxLines: 2,
               ),
             ),
-            const SizedBox(height: 14),
-            FButton(
-              variant: .outline,
-              onPress: () => unawaited(_openConsoleEnrollmentKeys()),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.open_in_new, size: 18),
-                  SizedBox(width: 8),
-                  Text('在控制台查看接入密钥'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            FButton(
-              variant: .ghost,
-              onPress: () {
-                setState(() => _showAdvancedOptions = !_showAdvancedOptions);
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _showAdvancedOptions ? Icons.expand_less : Icons.tune,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(_showAdvancedOptions ? '收起高级选项' : '高级选项'),
-                ],
-              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              children: [
+                _TokenInlineAction(
+                  label: '从控制台获取接入密钥',
+                  onTap: () => unawaited(_openConsoleEnrollmentKeys()),
+                ),
+                _TokenInlineAction(
+                  label: _showAdvancedOptions ? '收起高级设置' : '高级设置',
+                  onTap: () {
+                    setState(
+                      () => _showAdvancedOptions = !_showAdvancedOptions,
+                    );
+                  },
+                ),
+              ],
             ),
             if (_showAdvancedOptions) ...[
               const SizedBox(height: 14),
@@ -953,6 +934,35 @@ class _TokenConnectionViewState extends State<_TokenConnectionView> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenInlineAction extends StatelessWidget {
+  const _TokenInlineAction({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );

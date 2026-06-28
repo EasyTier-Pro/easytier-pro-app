@@ -133,12 +133,15 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
     await tester.pumpAndSettle();
 
+    expect(find.text('设备令牌'), findsOneWidget);
+    expect(find.text('设备令牌或连接链接'), findsNothing);
+    expect(find.textContaining('easytierpro://connect'), findsNothing);
     expect(find.text('控制服务器'), findsNothing);
     expect(find.text('主机名'), findsNothing);
     expect(find.text('连接名称'), findsNothing);
-    expect(find.widgetWithText(FButton, '在控制台查看接入密钥'), findsOneWidget);
+    expect(find.text('从控制台获取接入密钥'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FButton, '高级选项'));
+    await tester.tap(find.text('高级设置'));
     await tester.pumpAndSettle();
 
     expect(find.text('控制服务器'), findsOneWidget);
@@ -3634,23 +3637,30 @@ void main() {
     );
   });
 
-  test('token connection profile parses token and connection link', () {
+  test('token connection profile accepts token and rejects connection link', () {
     final plain = TokenConnectionProfile.fromInput(
       input: '  device-token  ',
       defaultConfigServer: 'tcp://console.test:22020/',
       displayName: '办公令牌',
     );
-    final link = TokenConnectionProfile.fromInput(
-      input:
-          'easytierpro://connect?token=link-token&server=tcp%3A%2F%2Fedge.test%3A22020',
-      defaultConfigServer: 'tcp://console.test:22020',
-    );
 
     expect(plain.bootstrapToken, 'device-token');
     expect(plain.configServer, 'tcp://console.test:22020');
     expect(plain.effectiveDisplayName, '办公令牌');
-    expect(link.bootstrapToken, 'link-token');
-    expect(link.configServer, 'tcp://edge.test:22020');
+    expect(
+      () => TokenConnectionProfile.fromInput(
+        input:
+            'easytierpro://connect?token=link-token&server=tcp%3A%2F%2Fedge.test%3A22020',
+        defaultConfigServer: 'tcp://console.test:22020',
+      ),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          contains('不支持连接链接'),
+        ),
+      ),
+    );
   });
 
   test(
