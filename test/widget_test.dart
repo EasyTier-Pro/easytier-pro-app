@@ -177,6 +177,7 @@ void main() {
     expect(find.text('登录控制台'), findsNothing);
     expect(find.text('已在线'), findsOneWidget);
     expect(find.text('1 个网络实例'), findsOneWidget);
+    expect(find.textContaining('正在读取网络实例'), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('status-traffic-strip')),
       findsOneWidget,

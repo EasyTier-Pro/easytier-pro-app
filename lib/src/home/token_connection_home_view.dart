@@ -456,7 +456,7 @@ class _TokenStatusSummary extends StatelessWidget {
         : running
         ? instanceCount > 0
               ? '$instanceCount 个网络实例'
-              : '正在读取网络实例...'
+              : '暂无网络实例'
         : status.message;
 
     final statusBody = Row(
@@ -838,7 +838,7 @@ class _TokenNetworkInstanceList extends StatelessWidget {
         else if (trafficError != null && trafficError!.isNotEmpty)
           _TokenNetworkInstanceEmpty(message: trafficError!)
         else if (entries.isEmpty)
-          const _TokenNetworkInstanceLoading()
+          const _TokenNetworkInstanceEmpty(message: '暂无网络实例')
         else
           Column(
             children: [
@@ -873,26 +873,6 @@ class _TokenReadonlyHint extends StatelessWidget {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: const Color(0xFF64748B),
           fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _TokenNetworkInstanceLoading extends StatelessWidget {
-  const _TokenNetworkInstanceLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return FCard(
-      child: const Padding(
-        padding: EdgeInsets.all(8),
-        child: Row(
-          children: [
-            FCircularProgress(size: .xs),
-            SizedBox(width: 8),
-            Text('正在读取网络实例...'),
-          ],
         ),
       ),
     );
