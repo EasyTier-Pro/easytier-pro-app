@@ -6,6 +6,7 @@ import 'package:forui/forui.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_lifecycle_service.dart';
+import 'home_shell.dart';
 
 class TokenConnectionHomeView extends StatefulWidget {
   const TokenConnectionHomeView({
@@ -29,6 +30,10 @@ class TokenConnectionHomeView extends StatefulWidget {
 }
 
 class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
+  static const double _mobileSwipeDistanceThreshold = 72;
+  static const double _mobileSwipeHorizontalDominance = 1.25;
+
+  _TokenHomeView _activeView = _TokenHomeView.overview;
   Timer? _trafficTimer;
   bool _trafficInFlight = false;
   Map<String, CoreNetworkTrafficTotals> _previousTotals =
@@ -146,132 +151,297 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     );
   }
 
+  void _showOverview() {
+    if (_activeView == _TokenHomeView.overview) {
+      return;
+    }
+    setState(() {
+      _activeView = _TokenHomeView.overview;
+    });
+  }
+
+  void _showSettings() {
+    if (_activeView == _TokenHomeView.settings) {
+      return;
+    }
+    setState(() {
+      _activeView = _TokenHomeView.settings;
+    });
+  }
+
+  void _handleMobilePageSwipe(Offset delta) {
+    final horizontalDistance = delta.dx.abs();
+    final verticalDistance = delta.dy.abs();
+    if (horizontalDistance < _mobileSwipeDistanceThreshold ||
+        horizontalDistance <
+            verticalDistance * _mobileSwipeHorizontalDominance) {
+      return;
+    }
+
+    final currentIndex = _tokenMobileViewOrder.indexOf(_activeView);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    final nextIndex = delta.dx < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex < 0 || nextIndex >= _tokenMobileViewOrder.length) {
+      return;
+    }
+
+    switch (_tokenMobileViewOrder[nextIndex]) {
+      case _TokenHomeView.overview:
+        _showOverview();
+      case _TokenHomeView.settings:
+        _showSettings();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = widget.coreLifecycleService.status.value;
+    final contentKey = ValueKey<String>('token-home:${_activeView.name}');
+    final mobileNavigationIndex = switch (_activeView) {
+      _TokenHomeView.overview => 0,
+      _TokenHomeView.settings => 1,
+    };
 
-    return FScaffold(
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 860;
-            final content = [
-              _TokenStatusPanel(
-                profile: widget.profile,
-                status: status,
-                onReconnect: () =>
-                    unawaited(widget.coreLifecycleService.repair()),
-                onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
-              ),
-              _TokenTrafficPanel(
-                traffic: _traffic,
-                trafficError: _trafficError,
-                running: status.isRunning,
-              ),
-              _TokenActionPanel(
-                onDisconnect: () => unawaited(widget.onDisconnect()),
-                onChangeToken: () => unawaited(widget.onChangeToken()),
-                onAccountLogin: () => unawaited(widget.onAccountLogin()),
-              ),
-            ];
-
-            return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: wide ? 40 : 18,
-                vertical: wide ? 32 : 18,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1040),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _TokenHeader(profile: widget.profile, status: status),
-                      const SizedBox(height: 20),
-                      if (wide)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 6,
-                              child: Column(
-                                children: [
-                                  content[0],
-                                  const SizedBox(height: 12),
-                                  content[1],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(flex: 4, child: content[2]),
-                          ],
-                        )
-                      else
-                        Column(
-                          children: [
-                            content[0],
-                            const SizedBox(height: 12),
-                            content[1],
-                            const SizedBox(height: 12),
-                            content[2],
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+    return HomeShell(
+      desktopHeader: HomeShellDesktopHeader(
+        contentKey: const ValueKey<String>('token-desktop-dashboard-header'),
+        navigation: [
+          FButton(
+            variant: _activeView == _TokenHomeView.overview
+                ? .secondary
+                : .ghost,
+            size: .sm,
+            onPress: _showOverview,
+            child: const Text('首页'),
+          ),
+          const SizedBox(width: 6),
+          FButton(
+            variant: _activeView == _TokenHomeView.settings
+                ? .secondary
+                : .ghost,
+            size: .sm,
+            onPress: _showSettings,
+            child: const Text('设置'),
+          ),
+        ],
+        metrics: [
+          const HomeHeaderMetric(
+            label: '模式',
+            value: '令牌',
+            icon: Icons.vpn_key_outlined,
+          ),
+          HomeCoreStatusLabel(
+            statusListenable: widget.coreLifecycleService.status,
+            label: '连接',
+          ),
+        ],
+        trailing: _TokenPhasePill(status: status),
       ),
+      mobileHeader: HomeShellMobileHeader(
+        title: 'EasyTier Pro',
+        subtitle: '设备令牌连接 · ${widget.profile.effectiveDisplayName}',
+        suffixes: [
+          HomeCoreStatusDot(
+            statusListenable: widget.coreLifecycleService.status,
+          ),
+        ],
+      ),
+      mobileNavigation: HomeShellMobileNavigation(
+        navigationKey: const ValueKey<String>('mobile-dashboard-navigation'),
+        index: mobileNavigationIndex,
+        items: [
+          HomeShellMobileNavigationItem(
+            id: 'overview',
+            key: const ValueKey<String>('mobile-nav-overview'),
+            icon: Icons.home_outlined,
+            label: '首页',
+            onSelect: _showOverview,
+          ),
+          HomeShellMobileNavigationItem(
+            id: 'settings',
+            key: const ValueKey<String>('mobile-nav-settings'),
+            icon: Icons.settings_outlined,
+            label: '设置',
+            onSelect: _showSettings,
+          ),
+        ],
+      ),
+      contentKey: contentKey,
+      contentMode: HomeShellContentMode.scrollConstrained,
+      onMobileSwipe: _handleMobilePageSwipe,
+      child: switch (_activeView) {
+        _TokenHomeView.overview => _TokenOverview(
+          profile: widget.profile,
+          status: status,
+          traffic: _traffic,
+          trafficError: _trafficError,
+          onReconnect: () => unawaited(widget.coreLifecycleService.repair()),
+          onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
+        ),
+        _TokenHomeView.settings => Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: _TokenActionPanel(
+              profile: widget.profile,
+              onDisconnect: () => unawaited(widget.onDisconnect()),
+              onChangeToken: () => unawaited(widget.onChangeToken()),
+              onAccountLogin: () => unawaited(widget.onAccountLogin()),
+            ),
+          ),
+        ),
+      },
     );
   }
 }
 
-class _TokenHeader extends StatelessWidget {
-  const _TokenHeader({required this.profile, required this.status});
+enum _TokenHomeView { overview, settings }
+
+const List<_TokenHomeView> _tokenMobileViewOrder = <_TokenHomeView>[
+  _TokenHomeView.overview,
+  _TokenHomeView.settings,
+];
+
+class _TokenOverview extends StatelessWidget {
+  const _TokenOverview({
+    required this.profile,
+    required this.status,
+    required this.traffic,
+    required this.trafficError,
+    required this.onReconnect,
+    required this.onCopyDiagnostics,
+  });
 
   final TokenConnectionProfile profile;
   final CoreRunStatus status;
+  final Map<String, _TokenTrafficSnapshot> traffic;
+  final String? trafficError;
+  final VoidCallback onReconnect;
+  final VoidCallback onCopyDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 860;
+        final statusPanel = _TokenStatusPanel(
+          profile: profile,
+          status: status,
+          onReconnect: onReconnect,
+          onCopyDiagnostics: onCopyDiagnostics,
+        );
+        final trafficPanel = _TokenTrafficPanel(
+          traffic: traffic,
+          trafficError: trafficError,
+          running: status.isRunning,
+        );
+
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 6, child: statusPanel),
+              const SizedBox(width: 12),
+              Expanded(flex: 4, child: trafficPanel),
+            ],
+          );
+        }
+
+        return Column(
+          children: [statusPanel, const SizedBox(height: 12), trafficPanel],
+        );
+      },
+    );
+  }
+}
+
+class _TokenActionPanel extends StatelessWidget {
+  const _TokenActionPanel({
+    required this.profile,
+    required this.onDisconnect,
+    required this.onChangeToken,
+    required this.onAccountLogin,
+  });
+
+  final TokenConnectionProfile profile;
+  final VoidCallback onDisconnect;
+  final VoidCallback onChangeToken;
+  final VoidCallback onAccountLogin;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.vpn_key_outlined, color: Colors.white),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                profile.effectiveDisplayName,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.settings_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '连接设置',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _TokenInfoRow(label: '主机名', value: profile.effectiveDisplayName),
+            _TokenInfoRow(label: '控制服务器', value: profile.configServer),
+            const SizedBox(height: 14),
+            Container(height: 1, color: const Color(0xFFE5E7EB)),
+            const SizedBox(height: 14),
+            FButton(
+              variant: .outline,
+              onPress: onChangeToken,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.key_outlined, size: 16),
+                  SizedBox(width: 6),
+                  Text('更换令牌'),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                '设备令牌连接',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
+            ),
+            const SizedBox(height: 8),
+            FButton(
+              variant: .outline,
+              onPress: onAccountLogin,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.login, size: 16),
+                  SizedBox(width: 6),
+                  Text('使用账号登录'),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            FButton(
+              variant: .destructive,
+              onPress: onDisconnect,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.power_settings_new, size: 16),
+                  SizedBox(width: 6),
+                  Text('断开连接'),
+                ],
+              ),
+            ),
+          ],
         ),
-        _TokenPhasePill(status: status),
-      ],
+      ),
     );
   }
 }
@@ -481,73 +651,6 @@ class _TokenTrafficTile extends StatelessWidget {
             value: _formatTrafficRate(snapshot.uploadBytesPerSecond),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TokenActionPanel extends StatelessWidget {
-  const _TokenActionPanel({
-    required this.onDisconnect,
-    required this.onChangeToken,
-    required this.onAccountLogin,
-  });
-
-  final VoidCallback onDisconnect;
-  final VoidCallback onChangeToken;
-  final VoidCallback onAccountLogin;
-
-  @override
-  Widget build(BuildContext context) {
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FButton(
-              variant: .outline,
-              onPress: onChangeToken,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.key_outlined, size: 16),
-                  SizedBox(width: 6),
-                  Text('更换令牌'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            FButton(
-              variant: .outline,
-              onPress: onAccountLogin,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.login, size: 16),
-                  SizedBox(width: 6),
-                  Text('使用账号登录'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            FButton(
-              variant: .destructive,
-              onPress: onDisconnect,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.power_settings_new, size: 16),
-                  SizedBox(width: 6),
-                  Text('断开连接'),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

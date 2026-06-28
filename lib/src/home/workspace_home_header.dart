@@ -36,121 +36,55 @@ class _DashboardHeader extends StatelessWidget {
     final trimmedName = userName.trim();
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
-    return SelectionContainer.disabled(
-      child: Container(
-        key: const ValueKey<String>('desktop-dashboard-header-content'),
-        height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFFFFF),
-          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+    return HomeShellDesktopHeader(
+      contentKey: const ValueKey<String>('desktop-dashboard-header-content'),
+      navigation: [
+        FButton(
+          variant: activeView == _DashboardView.overview ? .secondary : .ghost,
+          size: .sm,
+          onPress: onShowOverview,
+          child: const Text('首页'),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact =
-                constraints.maxWidth < _dashboardHeaderCompactBreakpoint;
-
-            return Row(
-              children: [
-                const _BrandMark(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: appScrollPhysics,
-                    child: Row(
-                      children: [
-                        FButton(
-                          variant: activeView == _DashboardView.overview
-                              ? .secondary
-                              : .ghost,
-                          size: .sm,
-                          onPress: onShowOverview,
-                          child: const Text('首页'),
-                        ),
-                        if (networks.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          _NetworkTabMenu(
-                            active: activeView == _DashboardView.network,
-                            networks: networks,
-                            selectedNetworkId: selectedNetworkId,
-                            onSelectNetwork: onSelectNetwork,
-                          ),
-                        ],
-                        const SizedBox(width: 6),
-                        FButton(
-                          variant: activeView == _DashboardView.devices
-                              ? .secondary
-                              : .ghost,
-                          size: .sm,
-                          onPress: onShowDevices,
-                          child: const Text('设备'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (!compact) const SizedBox(width: 16),
-                if (!compact) ...[
-                  _HeaderMetric(
-                    label: '设备',
-                    value: '$deviceCount',
-                    icon: Icons.devices_other_outlined,
-                  ),
-                  const SizedBox(width: 10),
-                  _HeaderMetric(
-                    label: '在线',
-                    value: '$onlineDeviceCount',
-                    icon: Icons.circle,
-                    color: onlineDeviceCount > 0
-                        ? const Color(0xFF16A34A)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 10),
-                  ValueListenableBuilder<CoreRunStatus>(
-                    valueListenable: coreStatusListenable,
-                    builder: (context, status, _) {
-                      final color = switch (status.phase) {
-                        CoreRunPhase.running => const Color(0xFF16A34A),
-                        CoreRunPhase.repairing => const Color(0xFFF59E0B),
-                        CoreRunPhase.checking => const Color(0xFF2563EB),
-                        CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
-                        CoreRunPhase.needsVpnPermission => const Color(
-                          0xFFF59E0B,
-                        ),
-                        CoreRunPhase.error => const Color(0xFFDC2626),
-                        CoreRunPhase.stopped => Colors.grey,
-                        CoreRunPhase.signedOut => Colors.grey,
-                      };
-                      return Row(
-                        children: [
-                          Icon(Icons.circle, size: 12, color: color),
-                          const SizedBox(width: 5),
-                          Text(
-                            '引擎',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: const Color(0xFF737373),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-                const SizedBox(width: 12),
-                _UserMenu(
-                  userName: trimmedName,
-                  workspaceName: workspaceName,
-                  initial: initial,
-                  onShowSettings: onShowSettings,
-                  onLogout: onLogout,
-                ),
-              ],
-            );
-          },
+        if (networks.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          _NetworkTabMenu(
+            active: activeView == _DashboardView.network,
+            networks: networks,
+            selectedNetworkId: selectedNetworkId,
+            onSelectNetwork: onSelectNetwork,
+          ),
+        ],
+        const SizedBox(width: 6),
+        FButton(
+          variant: activeView == _DashboardView.devices ? .secondary : .ghost,
+          size: .sm,
+          onPress: onShowDevices,
+          child: const Text('设备'),
         ),
+      ],
+      metrics: [
+        HomeHeaderMetric(
+          label: '设备',
+          value: '$deviceCount',
+          icon: Icons.devices_other_outlined,
+        ),
+        HomeHeaderMetric(
+          label: '在线',
+          value: '$onlineDeviceCount',
+          icon: Icons.circle,
+          color: onlineDeviceCount > 0 ? const Color(0xFF16A34A) : Colors.grey,
+        ),
+        HomeCoreStatusLabel(
+          statusListenable: coreStatusListenable,
+          label: '引擎',
+        ),
+      ],
+      trailing: _UserMenu(
+        userName: trimmedName,
+        workspaceName: workspaceName,
+        initial: initial,
+        onShowSettings: onShowSettings,
+        onLogout: onLogout,
       ),
     );
   }
@@ -176,91 +110,24 @@ class _MobileDashboardHeader extends StatelessWidget {
     final trimmedName = userName.trim();
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
-    return SelectionContainer.disabled(
-      child: FHeader(
-        style: FHeaderStyleDelta.delta(
-          constraints: const BoxConstraints(minHeight: 58),
-          decoration: DecorationDelta.value(
-            const BoxDecoration(
-              color: Color(0xFFFFFFFF),
-              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-            ),
-          ),
-          padding: EdgeInsetsGeometryDelta.value(
-            const EdgeInsets.symmetric(horizontal: 14),
-          ),
-          actionSpacing: 4,
+    return HomeShellMobileHeader(
+      title: 'EasyTier Pro',
+      subtitle: workspaceName,
+      suffixes: [
+        HomeCoreStatusDot(statusListenable: coreStatusListenable),
+        _UserMenu(
+          userName: trimmedName,
+          workspaceName: workspaceName,
+          initial: initial,
+          onShowSettings: onShowSettings,
+          onLogout: onLogout,
         ),
-        title: Row(
-          children: [
-            const _BrandMark(),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'EasyTier Pro',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF0F172A),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    workspaceName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        suffixes: [
-          ValueListenableBuilder<CoreRunStatus>(
-            valueListenable: coreStatusListenable,
-            builder: (context, status, _) {
-              return Tooltip(
-                message: status.message,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _mobileCoreStatusColor(status.phase).withAlpha(20),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.circle,
-                    size: 10,
-                    color: _mobileCoreStatusColor(status.phase),
-                  ),
-                ),
-              );
-            },
-          ),
-          _UserMenu(
-            userName: trimmedName,
-            workspaceName: workspaceName,
-            initial: initial,
-            onShowSettings: onShowSettings,
-            onLogout: onLogout,
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
 
-class _MobileDashboardNavigation extends StatefulWidget {
+class _MobileDashboardNavigation extends StatelessWidget {
   const _MobileDashboardNavigation({
     required this.activeView,
     required this.networks,
@@ -282,74 +149,62 @@ class _MobileDashboardNavigation extends StatefulWidget {
   final VoidCallback onShowSettings;
 
   @override
-  State<_MobileDashboardNavigation> createState() =>
-      _MobileDashboardNavigationState();
-}
-
-class _MobileDashboardNavigationState
-    extends State<_MobileDashboardNavigation> {
-  @override
   Widget build(BuildContext context) {
-    final selectedIndex = switch (widget.activeView) {
+    final selectedIndex = switch (activeView) {
       _DashboardView.overview => 0,
       _DashboardView.network => 1,
       _DashboardView.devices => 2,
       _DashboardView.settings => 3,
     };
 
-    return SelectionContainer.disabled(
-      child: FBottomNavigationBar(
-        key: const ValueKey<String>('mobile-dashboard-navigation'),
-        index: selectedIndex,
-        onChange: _handleNavigationChange,
-        children: const [
-          FBottomNavigationBarItem(
-            key: ValueKey<String>('mobile-nav-overview'),
-            icon: Icon(Icons.home_outlined),
-            label: Text('首页'),
-          ),
-          FBottomNavigationBarItem(
-            key: ValueKey<String>('mobile-nav-network'),
-            icon: Icon(Icons.hub_outlined),
-            label: Text('网络'),
-          ),
-          FBottomNavigationBarItem(
-            key: ValueKey<String>('mobile-nav-devices'),
-            icon: Icon(Icons.devices_other_outlined),
-            label: Text('设备'),
-          ),
-          FBottomNavigationBarItem(
-            key: ValueKey<String>('mobile-nav-settings'),
-            icon: Icon(Icons.settings_outlined),
-            label: Text('设置'),
-          ),
-        ],
-      ),
+    return HomeShellMobileNavigation(
+      navigationKey: const ValueKey<String>('mobile-dashboard-navigation'),
+      index: selectedIndex,
+      items: [
+        HomeShellMobileNavigationItem(
+          id: 'overview',
+          key: const ValueKey<String>('mobile-nav-overview'),
+          icon: Icons.home_outlined,
+          label: '首页',
+          onSelect: onShowOverview,
+        ),
+        HomeShellMobileNavigationItem(
+          id: 'network',
+          key: const ValueKey<String>('mobile-nav-network'),
+          icon: Icons.hub_outlined,
+          label: '网络',
+          onSelect: () => _handleNetworkNavigation(context),
+        ),
+        HomeShellMobileNavigationItem(
+          id: 'devices',
+          key: const ValueKey<String>('mobile-nav-devices'),
+          icon: Icons.devices_other_outlined,
+          label: '设备',
+          onSelect: onShowDevices,
+        ),
+        HomeShellMobileNavigationItem(
+          id: 'settings',
+          key: const ValueKey<String>('mobile-nav-settings'),
+          icon: Icons.settings_outlined,
+          label: '设置',
+          onSelect: onShowSettings,
+        ),
+      ],
     );
   }
 
-  void _handleNavigationChange(int index) {
-    switch (index) {
-      case 0:
-        widget.onShowOverview();
-      case 1:
-        if (widget.activeView == _DashboardView.network &&
-            widget.networks.length > 1) {
-          _showNetworkPicker(context);
-        } else {
-          widget.onShowNetwork();
-        }
-      case 2:
-        widget.onShowDevices();
-      case 3:
-        widget.onShowSettings();
+  void _handleNetworkNavigation(BuildContext context) {
+    if (activeView == _DashboardView.network && networks.length > 1) {
+      _showNetworkPicker(context);
+    } else {
+      onShowNetwork();
     }
   }
 
   void _showNetworkPicker(BuildContext context) {
-    final networks = widget.networks;
-    final selectedNetworkId = widget.selectedNetworkId;
-    final onSelectNetwork = widget.onSelectNetwork;
+    final networks = this.networks;
+    final selectedNetworkId = this.selectedNetworkId;
+    final onSelectNetwork = this.onSelectNetwork;
 
     unawaited(
       showFSheet<void>(
@@ -409,19 +264,6 @@ class _MobileNetworkPickerSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-Color _mobileCoreStatusColor(CoreRunPhase phase) {
-  return switch (phase) {
-    CoreRunPhase.running => const Color(0xFF16A34A),
-    CoreRunPhase.repairing => const Color(0xFFF59E0B),
-    CoreRunPhase.checking => const Color(0xFF2563EB),
-    CoreRunPhase.needsElevation => const Color(0xFFF59E0B),
-    CoreRunPhase.needsVpnPermission => const Color(0xFFF59E0B),
-    CoreRunPhase.error => const Color(0xFFDC2626),
-    CoreRunPhase.stopped => Colors.grey,
-    CoreRunPhase.signedOut => Colors.grey,
-  };
 }
 
 class _NetworkTabMenu extends StatelessWidget {

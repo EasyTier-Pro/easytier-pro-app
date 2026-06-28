@@ -18,9 +18,9 @@ import '../desktop/window_behavior_preferences.dart';
 import '../logging/app_logger.dart';
 import '../shared/app_motion.dart';
 import '../shared/app_smooth_scroll_view.dart';
-import '../shared/app_text_selection.dart';
 import '../shared/selectable_text_hit_boundary.dart';
 import 'device_os_icon.dart';
+import 'home_shell.dart';
 import 'network_node_list_panel.dart';
 
 part 'workspace_home_models.dart';
@@ -466,188 +466,51 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
       ].join(':'),
     );
 
-    return FScaffold(
-      childPad: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final mobile = constraints.maxWidth < _mobileShellBreakpoint;
-          final pagePadding = EdgeInsets.all(mobile ? 16 : 24);
-
-          return Column(
-            children: [
-              if (!mobile) const _DesktopSystemTopInset(),
-              if (mobile)
-                _MobileDashboardHeader(
-                  userName: widget.session.user.effectiveName,
-                  workspaceName: workspaceName,
-                  onShowSettings: _showSettings,
-                  onLogout: widget.onLogout,
-                  coreStatusListenable: widget.coreLifecycleService.status,
-                )
-              else
-                _DashboardHeader(
-                  userName: widget.session.user.effectiveName,
-                  workspaceName: workspaceName,
-                  activeView: _activeView,
-                  networks: _networks,
-                  deviceCount: _totalDeviceCount,
-                  onlineDeviceCount: _onlineDeviceCount,
-                  selectedNetworkId: _selectedNetworkId,
-                  onShowOverview: _showOverview,
-                  onSelectNetwork: _selectNetwork,
-                  onShowDevices: _showDevices,
-                  onShowSettings: _showSettings,
-                  onLogout: widget.onLogout,
-                  coreStatusListenable: widget.coreLifecycleService.status,
-                ),
-              Expanded(
-                child: AppTextSelectionTapCleaner(
-                  child: _MobilePageSwipeGate(
-                    enabled: mobile,
-                    onSwipe: _handleMobilePageSwipe,
-                    child: DecoratedBox(
-                      decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
-                      child: AnimatedSwitcher(
-                        duration: appMotionMedium,
-                        reverseDuration: appMotionShort,
-                        transitionBuilder: appFadeSlideTransition,
-                        layoutBuilder: appSwitcherStackLayout,
-                        child: KeyedSubtree(
-                          key: contentKey,
-                          child: switch (_activeView) {
-                            _DashboardView.network => Padding(
-                              padding: pagePadding,
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 1040,
-                                  ),
-                                  child: _buildContent(context),
-                                ),
-                              ),
-                            ),
-                            _DashboardView.settings => _buildContent(context),
-                            _ => AppSmoothScrollView(
-                              padding: pagePadding,
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 1040,
-                                  ),
-                                  child: _buildContent(context),
-                                ),
-                              ),
-                            ),
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (mobile)
-                _MobileDashboardNavigation(
-                  activeView: _activeView,
-                  networks: _networks,
-                  selectedNetworkId: _selectedNetworkId,
-                  onShowOverview: _showOverview,
-                  onShowNetwork: _showNetwork,
-                  onSelectNetwork: _selectNetwork,
-                  onShowDevices: _showDevices,
-                  onShowSettings: _showSettings,
-                ),
-            ],
-          );
-        },
+    return HomeShell(
+      desktopHeader: _DashboardHeader(
+        userName: widget.session.user.effectiveName,
+        workspaceName: workspaceName,
+        activeView: _activeView,
+        networks: _networks,
+        deviceCount: _totalDeviceCount,
+        onlineDeviceCount: _onlineDeviceCount,
+        selectedNetworkId: _selectedNetworkId,
+        onShowOverview: _showOverview,
+        onSelectNetwork: _selectNetwork,
+        onShowDevices: _showDevices,
+        onShowSettings: _showSettings,
+        onLogout: widget.onLogout,
+        coreStatusListenable: widget.coreLifecycleService.status,
       ),
+      mobileHeader: _MobileDashboardHeader(
+        userName: widget.session.user.effectiveName,
+        workspaceName: workspaceName,
+        onShowSettings: _showSettings,
+        onLogout: widget.onLogout,
+        coreStatusListenable: widget.coreLifecycleService.status,
+      ),
+      mobileNavigation: _MobileDashboardNavigation(
+        activeView: _activeView,
+        networks: _networks,
+        selectedNetworkId: _selectedNetworkId,
+        onShowOverview: _showOverview,
+        onShowNetwork: _showNetwork,
+        onSelectNetwork: _selectNetwork,
+        onShowDevices: _showDevices,
+        onShowSettings: _showSettings,
+      ),
+      contentKey: contentKey,
+      contentMode: switch (_activeView) {
+        _DashboardView.network => HomeShellContentMode.staticConstrained,
+        _DashboardView.settings => HomeShellContentMode.plain,
+        _ => HomeShellContentMode.scrollConstrained,
+      },
+      onMobileSwipe: _handleMobilePageSwipe,
+      child: _buildContent(context),
     );
   }
 
   String _normalizeError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
-  }
-}
-
-class _MobilePageSwipeGate extends StatefulWidget {
-  const _MobilePageSwipeGate({
-    required this.enabled,
-    required this.onSwipe,
-    required this.child,
-  });
-
-  final bool enabled;
-  final ValueChanged<Offset> onSwipe;
-  final Widget child;
-
-  @override
-  State<_MobilePageSwipeGate> createState() => _MobilePageSwipeGateState();
-}
-
-class _MobilePageSwipeGateState extends State<_MobilePageSwipeGate> {
-  int? _trackingPointer;
-  Offset _pointerDelta = Offset.zero;
-
-  void _startTracking(PointerDownEvent event) {
-    if (!widget.enabled || _trackingPointer != null) {
-      return;
-    }
-
-    _trackingPointer = event.pointer;
-    _pointerDelta = Offset.zero;
-  }
-
-  void _trackMove(PointerMoveEvent event) {
-    if (!widget.enabled || event.pointer != _trackingPointer) {
-      return;
-    }
-
-    _pointerDelta += event.delta;
-  }
-
-  void _finishTracking(PointerEvent event) {
-    if (event.pointer != _trackingPointer) {
-      return;
-    }
-
-    final delta = _pointerDelta;
-    _trackingPointer = null;
-    _pointerDelta = Offset.zero;
-    if (widget.enabled) {
-      widget.onSwipe(delta);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.enabled) {
-      return widget.child;
-    }
-
-    return Listener(
-      key: const ValueKey<String>('mobile-dashboard-page-swipe'),
-      behavior: HitTestBehavior.deferToChild,
-      onPointerDown: _startTracking,
-      onPointerMove: _trackMove,
-      onPointerUp: _finishTracking,
-      onPointerCancel: _finishTracking,
-      child: widget.child,
-    );
-  }
-}
-
-class _DesktopSystemTopInset extends StatelessWidget {
-  const _DesktopSystemTopInset();
-
-  @override
-  Widget build(BuildContext context) {
-    final topInset = MediaQuery.paddingOf(context).top;
-    if (topInset <= 0) {
-      return const SizedBox.shrink();
-    }
-    return Container(
-      key: const ValueKey<String>('desktop-system-top-inset'),
-      height: topInset,
-      color: const Color(0xFFF8F9FB),
-    );
   }
 }

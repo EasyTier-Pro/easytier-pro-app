@@ -166,6 +166,20 @@ void main() {
     expect(coreLifecycleService.tokenProfile?.configServer, contains('22020'));
     expect(find.text('令牌连接已建立'), findsOneWidget);
     expect(find.text('登录控制台'), findsNothing);
+    expect(find.widgetWithText(FButton, '首页'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '设置'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '网络'), findsNothing);
+    expect(find.widgetWithText(FButton, '设备'), findsNothing);
+    expect(find.widgetWithText(FButton, '更换令牌'), findsNothing);
+    expect(find.widgetWithText(FButton, '使用账号登录'), findsNothing);
+
+    await tester.tap(find.widgetWithText(FButton, '设置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('连接设置'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '更换令牌'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '使用账号登录'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
   testWidgets('starts core after login and joins networks independently', (

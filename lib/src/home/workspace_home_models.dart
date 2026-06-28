@@ -13,8 +13,7 @@ const List<_DashboardView> _mobileDashboardViewOrder = <_DashboardView>[
 
 enum _JoinPhase { idle, joining, joined, leaving, error }
 
-const double _dashboardHeaderCompactBreakpoint = 560;
-const double _mobileShellBreakpoint = 600;
+const double _mobileShellBreakpoint = homeShellMobileBreakpoint;
 
 class _JoinNetworkState {
   const _JoinNetworkState({required this.phase, this.message, this.localIpv4});
