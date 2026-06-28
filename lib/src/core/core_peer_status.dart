@@ -14,6 +14,7 @@ class CorePeerStatus {
     required this.natType,
     required this.peerId,
     required this.version,
+    this.featureFlag,
   });
 
   final String cidr;
@@ -28,13 +29,16 @@ class CorePeerStatus {
   final String natType;
   final String peerId;
   final String version;
+  final CorePeerFeatureFlag? featureFlag;
 
   bool get isLocal => cost.toLowerCase() == 'local';
+  bool get isCredentialPeer => featureFlag?.isCredentialPeer != false;
 
   factory CorePeerStatus.fromJson(Map<String, dynamic> json) {
     final cidr = _readString(json['cidr']);
     final rawIpv4 = _readString(json['ipv4']);
     final ipv4 = normalizeCorePeerIpv4(rawIpv4.isEmpty ? cidr : rawIpv4);
+    final featureFlag = _readFeatureFlag(json);
     return CorePeerStatus(
       cidr: cidr,
       ipv4: ipv4,
@@ -48,6 +52,21 @@ class CorePeerStatus {
       natType: _readString(json['nat_type']),
       peerId: _readString(json['id'] ?? json['peer_id']),
       version: _readString(json['version']),
+      featureFlag: featureFlag,
+    );
+  }
+}
+
+class CorePeerFeatureFlag {
+  const CorePeerFeatureFlag({this.isCredentialPeer});
+
+  final bool? isCredentialPeer;
+
+  factory CorePeerFeatureFlag.fromJson(Map<String, dynamic> json) {
+    return CorePeerFeatureFlag(
+      isCredentialPeer: _readBool(
+        json['is_credential_peer'] ?? json['isCredentialPeer'],
+      ),
     );
   }
 }
@@ -62,13 +81,25 @@ Map<String, CorePeerStatus> parseCorePeerStatusesFromJson(String output) {
       continue;
     }
     final status = CorePeerStatus.fromJson(item);
-    if (status.ipv4.isEmpty) {
+    if (status.ipv4.isEmpty || !status.isCredentialPeer) {
       continue;
     }
     statuses[status.ipv4] = status;
   }
 
   return statuses;
+}
+
+Map<String, CorePeerStatus> filterCredentialPeerStatuses(
+  Map<String, CorePeerStatus> statuses,
+) {
+  final visible = <String, CorePeerStatus>{};
+  for (final entry in statuses.entries) {
+    if (entry.value.isCredentialPeer) {
+      visible[entry.key] = entry.value;
+    }
+  }
+  return visible;
 }
 
 String normalizeCorePeerIpv4(String value) {
@@ -121,4 +152,37 @@ bool _looksLikeMultiInstanceResult(List<dynamic> items) {
 String _readString(Object? value) {
   final text = value?.toString().trim() ?? '';
   return text;
+}
+
+CorePeerFeatureFlag? _readFeatureFlag(Map<String, dynamic> json) {
+  final value = json['feature_flag'] ?? json['featureFlag'];
+  if (value is Map<String, dynamic>) {
+    return CorePeerFeatureFlag.fromJson(value);
+  }
+  if (value is Map) {
+    return CorePeerFeatureFlag.fromJson(
+      value.map((key, value) => MapEntry(key.toString(), value)),
+    );
+  }
+  return null;
+}
+
+bool? _readBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  final text = value?.toString().trim().toLowerCase();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+  if (text == 'true' || text == '1' || text == 'yes') {
+    return true;
+  }
+  if (text == 'false' || text == '0' || text == 'no') {
+    return false;
+  }
+  return null;
 }

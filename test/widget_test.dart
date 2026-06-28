@@ -169,6 +169,21 @@ void main() {
             peerId: 'peer-token',
             version: 'v2.6.4',
           ),
+          '10.147.0.254': CorePeerStatus(
+            cidr: '10.147.0.254/24',
+            ipv4: '10.147.0.254',
+            hostname: 'non-user-peer',
+            cost: 'p2p',
+            latencyText: '1',
+            lossText: '0%',
+            rxBytes: '0',
+            txBytes: '0',
+            tunnelProto: 'tcp',
+            natType: 'cone',
+            peerId: 'peer-non-user',
+            version: 'v2.6.4',
+            featureFlag: CorePeerFeatureFlag(isCredentialPeer: false),
+          ),
         },
       ],
     );
@@ -248,6 +263,7 @@ void main() {
     expect(find.text('设备令牌连接 · 只读实例'), findsOneWidget);
     expect(find.textContaining('节点'), findsWidgets);
     expect(find.text('token-peer'), findsOneWidget);
+    expect(find.text('non-user-peer'), findsNothing);
     expect(find.textContaining('10.147.0.2'), findsOneWidget);
     expect(coreLifecycleService.peerReadCount, greaterThan(0));
 
@@ -3752,6 +3768,29 @@ void main() {
     expect(statuses['10.144.0.2']?.latencyText, '3.45');
     expect(statuses['10.144.0.2']?.peerId, '390879727');
     expect(statuses['10.144.0.3']?.ipv4, '10.144.0.3');
+  });
+
+  test('parses peer feature flags and hides non credential peers', () {
+    final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
+      jsonEncode([
+        {
+          'cidr': '10.144.0.2/24',
+          'hostname': 'credential-peer',
+          'feature_flag': {'is_credential_peer': true},
+        },
+        {
+          'cidr': '10.144.0.3/24',
+          'hostname': 'non-user-peer',
+          'feature_flag': {'is_credential_peer': false},
+        },
+        {'cidr': '10.144.0.4/24', 'hostname': 'legacy-peer'},
+      ]),
+    );
+
+    expect(statuses.keys, containsAll(<String>['10.144.0.2', '10.144.0.4']));
+    expect(statuses.keys, isNot(contains('10.144.0.3')));
+    expect(statuses['10.144.0.2']?.featureFlag?.isCredentialPeer, isTrue);
+    expect(statuses['10.144.0.4']?.featureFlag, isNull);
   });
 
   test('parses multi-instance peer status wrappers', () {

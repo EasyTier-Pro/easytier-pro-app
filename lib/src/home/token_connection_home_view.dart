@@ -199,10 +199,11 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       if (!mounted || _selectedRuntimeName != runtimeName) {
         return;
       }
+      final credentialPeers = filterCredentialPeerStatuses(peers);
       setState(() {
         _peerStatusesByRuntime = {
           ..._peerStatusesByRuntime,
-          runtimeName: peers,
+          runtimeName: credentialPeers,
         };
         final errors = Map<String, String>.of(_peerStatusErrorsByRuntime)
           ..remove(runtimeName);

@@ -615,7 +615,9 @@ ${_quotePosixShellArgument(installerPath)} desktop install --json < ${_quotePosi
   Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
     String runtimeNetworkName,
   ) async {
-    return _runtime.readNetworkPeerStatuses(runtimeNetworkName);
+    return filterCredentialPeerStatuses(
+      await _runtime.readNetworkPeerStatuses(runtimeNetworkName),
+    );
   }
 
   static bool _isInstanceNotReadyMessage(String message) {
