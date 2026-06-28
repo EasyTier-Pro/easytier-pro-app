@@ -287,6 +287,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       onMobileSwipe: _handleMobilePageSwipe,
       child: switch (_activeView) {
         _TokenHomeView.overview => _TokenOverview(
+          status: status,
           traffic: _traffic,
           trafficError: _trafficError,
           running: status.isRunning,
@@ -322,21 +323,239 @@ const List<_TokenHomeView> _tokenMobileViewOrder = <_TokenHomeView>[
 
 class _TokenOverview extends StatelessWidget {
   const _TokenOverview({
+    required this.status,
     required this.traffic,
     required this.trafficError,
     required this.running,
   });
 
+  final CoreRunStatus status;
   final Map<String, _TokenTrafficSnapshot> traffic;
   final String? trafficError;
   final bool running;
 
   @override
   Widget build(BuildContext context) {
-    return _TokenNetworkInstanceList(
-      traffic: traffic,
-      trafficError: trafficError,
-      running: running,
+    final entries = traffic.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    var totalDownloadRate = 0.0;
+    var totalUploadRate = 0.0;
+    for (final entry in entries) {
+      totalDownloadRate += entry.value.downloadBytesPerSecond ?? 0;
+      totalUploadRate += entry.value.uploadBytesPerSecond ?? 0;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TokenStatusSummary(
+          status: status,
+          instanceCount: running ? entries.length : 0,
+          downloadRate: totalDownloadRate,
+          uploadRate: totalUploadRate,
+          hasTrafficStats: entries.isNotEmpty,
+        ),
+        const SizedBox(height: 24),
+        _TokenNetworkInstanceList(
+          entries: entries,
+          trafficError: trafficError,
+          running: running,
+        ),
+      ],
+    );
+  }
+}
+
+class _TokenStatusSummary extends StatelessWidget {
+  const _TokenStatusSummary({
+    required this.status,
+    required this.instanceCount,
+    required this.downloadRate,
+    required this.uploadRate,
+    required this.hasTrafficStats,
+  });
+
+  final CoreRunStatus status;
+  final int instanceCount;
+  final double downloadRate;
+  final double uploadRate;
+  final bool hasTrafficStats;
+
+  @override
+  Widget build(BuildContext context) {
+    final running = status.phase == CoreRunPhase.running;
+    final error = status.phase == CoreRunPhase.error;
+    final checking =
+        status.phase == CoreRunPhase.checking ||
+        status.phase == CoreRunPhase.repairing;
+    final stopped =
+        status.phase == CoreRunPhase.stopped ||
+        status.phase == CoreRunPhase.signedOut;
+    final needsAuthorization =
+        status.phase == CoreRunPhase.needsElevation ||
+        status.phase == CoreRunPhase.needsVpnPermission;
+
+    final ringColor = error
+        ? const Color(0xFFDC2626)
+        : needsAuthorization
+        ? const Color(0xFFF59E0B)
+        : checking || stopped
+        ? const Color(0xFF9CA3AF)
+        : running
+        ? const Color(0xFF16A34A)
+        : const Color(0xFF2563EB);
+
+    final bgColor = error
+        ? const Color(0xFFFEE2E2)
+        : needsAuthorization
+        ? const Color(0xFFFEF3C7)
+        : checking || stopped
+        ? const Color(0xFFF3F4F6)
+        : running
+        ? const Color(0xFFF0FDF4)
+        : const Color(0xFFDBEAFE);
+
+    final borderColor = error
+        ? const Color(0xFFFECACA)
+        : needsAuthorization
+        ? const Color(0xFFFDE68A)
+        : checking || stopped
+        ? const Color(0xFFE5E7EB)
+        : running
+        ? const Color(0xFFBBF7D0)
+        : const Color(0xFFBFDBFE);
+
+    final icon = error
+        ? Icons.error_outline
+        : needsAuthorization
+        ? Icons.verified_user_outlined
+        : checking
+        ? Icons.sync
+        : running
+        ? Icons.check
+        : Icons.power_settings_new;
+
+    final title = error
+        ? '连接异常'
+        : needsAuthorization
+        ? '需要授权'
+        : checking
+        ? '正在连接'
+        : running
+        ? '已在线'
+        : '已断开';
+
+    final subtitle = error
+        ? status.lastError?.isNotEmpty == true
+              ? status.lastError!
+              : '连接引擎遇到问题'
+        : needsAuthorization
+        ? status.lastError?.isNotEmpty == true
+              ? status.lastError!
+              : status.message
+        : running
+        ? instanceCount > 0
+              ? '$instanceCount 个网络实例'
+              : '正在读取网络实例...'
+        : status.message;
+
+    final statusBody = Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: ringColor, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: ringColor.withAlpha(20),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Center(child: Icon(icon, color: ringColor, size: 18)),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                  fontSize: 16,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final trafficStrip =
+        hasTrafficStats && instanceCount > 0 && !error && !needsAuthorization
+        ? HomeTrafficRateStrip(
+            downloadRate: downloadRate,
+            uploadRate: uploadRate,
+          )
+        : null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withAlpha(6),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (trafficStrip != null && constraints.maxWidth < 240) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                statusBody,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: trafficStrip),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: statusBody),
+              if (trafficStrip != null) ...[
+                const SizedBox(width: 10),
+                trafficStrip,
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -565,20 +784,18 @@ class _TokenSettingsPanel extends StatelessWidget {
 
 class _TokenNetworkInstanceList extends StatelessWidget {
   const _TokenNetworkInstanceList({
-    required this.traffic,
+    required this.entries,
     required this.trafficError,
     required this.running,
   });
 
-  final Map<String, _TokenTrafficSnapshot> traffic;
+  final List<MapEntry<String, _TokenTrafficSnapshot>> entries;
   final String? trafficError;
   final bool running;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final entries = traffic.entries.toList()
-      ..sort((left, right) => left.key.compareTo(right.key));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

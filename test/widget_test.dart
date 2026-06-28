@@ -175,6 +175,12 @@ void main() {
     expect(coreLifecycleService.tokenProfile?.bootstrapToken, 'device-token');
     expect(coreLifecycleService.tokenProfile?.configServer, contains('22020'));
     expect(find.text('登录控制台'), findsNothing);
+    expect(find.text('已在线'), findsOneWidget);
+    expect(find.text('1 个网络实例'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsOneWidget,
+    );
     expect(find.text('网络'), findsOneWidget);
     expect(find.text('只读'), findsOneWidget);
     expect(find.text('nt-token'), findsOneWidget);

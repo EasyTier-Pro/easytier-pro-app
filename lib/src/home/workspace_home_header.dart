@@ -395,97 +395,6 @@ class _NetworkTabButton extends StatelessWidget {
   }
 }
 
-class _TrafficRateStrip extends StatelessWidget {
-  const _TrafficRateStrip({
-    required this.downloadRate,
-    required this.uploadRate,
-  });
-
-  final double downloadRate;
-  final double uploadRate;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      key: const ValueKey<String>('status-traffic-strip'),
-      width: 128,
-      height: 26,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: _TrafficRateMetric(
-                  icon: Icons.arrow_downward,
-                  label: _formatCompactTrafficRate(downloadRate),
-                  color: const Color(0xFF16A34A),
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 12,
-                margin: const EdgeInsets.symmetric(horizontal: 5),
-                color: const Color(0xFFE2E8F0),
-              ),
-              Expanded(
-                child: _TrafficRateMetric(
-                  icon: Icons.arrow_upward,
-                  label: _formatCompactTrafficRate(uploadRate),
-                  color: const Color(0xFF2563EB),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrafficRateMetric extends StatelessWidget {
-  const _TrafficRateMetric({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 11, color: color),
-        const SizedBox(width: 3),
-        Flexible(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              maxLines: 1,
-              softWrap: false,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({
     required this.statusListenable,
@@ -665,7 +574,7 @@ class _StatusBadge extends StatelessWidget {
                     !error &&
                     !needsElevation &&
                     !needsVpnPermission
-                ? _TrafficRateStrip(
+                ? HomeTrafficRateStrip(
                     downloadRate: downloadRate,
                     uploadRate: uploadRate,
                   )

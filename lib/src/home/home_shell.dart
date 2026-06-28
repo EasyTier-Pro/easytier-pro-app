@@ -307,6 +307,60 @@ class HomeHeaderMetric extends StatelessWidget {
   }
 }
 
+class HomeTrafficRateStrip extends StatelessWidget {
+  const HomeTrafficRateStrip({
+    super.key,
+    required this.downloadRate,
+    required this.uploadRate,
+  });
+
+  final double downloadRate;
+  final double uploadRate;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const ValueKey<String>('status-traffic-strip'),
+      width: 128,
+      height: 26,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: _HomeTrafficRateMetric(
+                  icon: Icons.arrow_downward,
+                  label: _formatHomeCompactTrafficRate(downloadRate),
+                  color: const Color(0xFF16A34A),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 12,
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                color: const Color(0xFFE2E8F0),
+              ),
+              Expanded(
+                child: _HomeTrafficRateMetric(
+                  icon: Icons.arrow_upward,
+                  label: _formatHomeCompactTrafficRate(uploadRate),
+                  color: const Color(0xFF2563EB),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HomeSettingsInfoRow extends StatelessWidget {
   const HomeSettingsInfoRow({
     super.key,
@@ -361,6 +415,63 @@ class HomeSettingsInfoRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _HomeTrafficRateMetric extends StatelessWidget {
+  const _HomeTrafficRateMetric({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: color),
+        const SizedBox(width: 3),
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatHomeCompactTrafficRate(num bytesPerSecond) {
+  return '${_formatHomeCompactBytes(bytesPerSecond)}/s';
+}
+
+String _formatHomeCompactBytes(num bytes) {
+  const units = <String>['B', 'K', 'M', 'G', 'T'];
+  var value = bytes.toDouble();
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value = value / 1024;
+    unitIndex++;
+  }
+  if (unitIndex == 0) {
+    return '${value.round()}${units[unitIndex]}';
+  }
+  final decimals = value >= 100 ? 0 : 1;
+  return '${value.toStringAsFixed(decimals)}${units[unitIndex]}';
 }
 
 class HomeCoreStatusLabel extends StatelessWidget {
