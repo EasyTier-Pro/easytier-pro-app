@@ -960,7 +960,7 @@ class _CoreSettingsSection extends StatelessWidget {
                         if (status.machineId != null &&
                             status.machineId!.isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          _SettingsInfoRow(
+                          HomeSettingsInfoRow(
                             label: '设备 ID',
                             value: status.machineId!,
                             onCopy: onCopyText,
@@ -968,7 +968,7 @@ class _CoreSettingsSection extends StatelessWidget {
                         ],
                         if (engineVersionStatus.installedVersion != null) ...[
                           const SizedBox(height: 12),
-                          _SettingsInfoRow(
+                          HomeSettingsInfoRow(
                             label: '当前版本',
                             value: engineVersionStatus.installedVersion!,
                             onCopy: onCopyText,
@@ -976,7 +976,7 @@ class _CoreSettingsSection extends StatelessWidget {
                         ],
                         if (engineVersionStatus.consoleVersion != null) ...[
                           const SizedBox(height: 12),
-                          _SettingsInfoRow(
+                          HomeSettingsInfoRow(
                             label: '控制台版本',
                             value: engineVersionStatus.consoleVersion!,
                             onCopy: onCopyText,
@@ -1464,63 +1464,6 @@ class _DiagnosticsSettingsSection extends StatelessWidget {
             ),
             onPress: onOpenLogDirectory,
           ),
-      ],
-    );
-  }
-}
-
-class _SettingsInfoRow extends StatelessWidget {
-  const _SettingsInfoRow({
-    required this.label,
-    required this.value,
-    required this.onCopy,
-  });
-
-  final String label;
-  final String value;
-  final ValueChanged<String> onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF737373),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF0F172A),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-        _ControlSelectionBoundary(
-          child: FTooltip(
-            tipBuilder: (context, controller) => const Text('复制'),
-            child: FButton(
-              variant: .ghost,
-              size: .xs,
-              style: const .delta(
-                contentStyle: .delta(padding: .value(EdgeInsets.zero)),
-              ),
-              onPress: () => onCopy(value),
-              child: const Icon(Icons.copy, size: 14),
-            ),
-          ),
-        ),
       ],
     );
   }

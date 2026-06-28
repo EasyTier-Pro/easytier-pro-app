@@ -151,6 +151,19 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     );
   }
 
+  Future<void> _copyText(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    showRawFToast(
+      context: context,
+      variant: FToastVariant.primary,
+      duration: const Duration(seconds: 2),
+      builder: (context, entry) => const FToast(title: Text('已复制到剪贴板')),
+    );
+  }
+
   void _showOverview() {
     if (_activeView == _TokenHomeView.overview) {
       return;
@@ -274,19 +287,21 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       onMobileSwipe: _handleMobilePageSwipe,
       child: switch (_activeView) {
         _TokenHomeView.overview => _TokenOverview(
-          profile: widget.profile,
-          status: status,
           traffic: _traffic,
           trafficError: _trafficError,
-          onReconnect: () => unawaited(widget.coreLifecycleService.repair()),
-          onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
+          running: status.isRunning,
         ),
         _TokenHomeView.settings => Align(
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: _TokenActionPanel(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: _TokenSettingsPanel(
               profile: widget.profile,
+              status: status,
+              onReconnect: () =>
+                  unawaited(widget.coreLifecycleService.repair()),
+              onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
+              onCopyText: (value) => unawaited(_copyText(value)),
               onDisconnect: () => unawaited(widget.onDisconnect()),
               onChangeToken: () => unawaited(widget.onChangeToken()),
               onAccountLogin: () => unawaited(widget.onAccountLogin()),
@@ -307,52 +322,42 @@ const List<_TokenHomeView> _tokenMobileViewOrder = <_TokenHomeView>[
 
 class _TokenOverview extends StatelessWidget {
   const _TokenOverview({
-    required this.profile,
-    required this.status,
     required this.traffic,
     required this.trafficError,
-    required this.onReconnect,
-    required this.onCopyDiagnostics,
+    required this.running,
   });
 
-  final TokenConnectionProfile profile;
-  final CoreRunStatus status;
   final Map<String, _TokenTrafficSnapshot> traffic;
   final String? trafficError;
-  final VoidCallback onReconnect;
-  final VoidCallback onCopyDiagnostics;
+  final bool running;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _TokenStatusPanel(
-          profile: profile,
-          status: status,
-          onReconnect: onReconnect,
-          onCopyDiagnostics: onCopyDiagnostics,
-        ),
-        const SizedBox(height: 24),
-        _TokenNetworkInstanceList(
-          traffic: traffic,
-          trafficError: trafficError,
-          running: status.isRunning,
-        ),
-      ],
+    return _TokenNetworkInstanceList(
+      traffic: traffic,
+      trafficError: trafficError,
+      running: running,
     );
   }
 }
 
-class _TokenActionPanel extends StatelessWidget {
-  const _TokenActionPanel({
+class _TokenSettingsPanel extends StatelessWidget {
+  const _TokenSettingsPanel({
     required this.profile,
+    required this.status,
+    required this.onReconnect,
+    required this.onCopyDiagnostics,
+    required this.onCopyText,
     required this.onDisconnect,
     required this.onChangeToken,
     required this.onAccountLogin,
   });
 
   final TokenConnectionProfile profile;
+  final CoreRunStatus status;
+  final VoidCallback onReconnect;
+  final VoidCallback onCopyDiagnostics;
+  final ValueChanged<String> onCopyText;
   final VoidCallback onDisconnect;
   final VoidCallback onChangeToken;
   final VoidCallback onAccountLogin;
@@ -360,174 +365,200 @@ class _TokenActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    final error = status.lastError?.trim();
+    final engine = status.details?.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '连接',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 16),
+        FCard.raw(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.settings_outlined, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  '连接设置',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                Row(
+                  children: [
+                    Icon(
+                      _phaseIcon(status.phase),
+                      size: 18,
+                      color: _phaseColor(status.phase),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        status.message,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                HomeSettingsInfoRow(
+                  label: '设备 ID',
+                  value: status.machineId ?? '等待注册',
+                  onCopy: onCopyText,
+                ),
+                const SizedBox(height: 12),
+                HomeSettingsInfoRow(
+                  label: '连接引擎',
+                  value: engine == null || engine.isEmpty ? '准备中' : engine,
+                  onCopy: onCopyText,
+                ),
+                const SizedBox(height: 12),
+                HomeSettingsInfoRow(
+                  label: '控制服务器',
+                  value: profile.configServer,
+                  onCopy: onCopyText,
+                ),
+                if (error != null && error.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F9FB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Text(
+                      error,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _phaseColor(status.phase),
+                      ),
+                    ),
                   ),
+                ],
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FButton(
+                      variant: .outline,
+                      onPress: onReconnect,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh, size: 16),
+                          SizedBox(width: 8),
+                          Text('重新连接'),
+                        ],
+                      ),
+                    ),
+                    FButton(
+                      variant: .outline,
+                      onPress: onCopyDiagnostics,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.content_copy, size: 16),
+                          SizedBox(width: 8),
+                          Text('复制诊断'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            _TokenInfoRow(label: '主机名', value: profile.effectiveDisplayName),
-            _TokenInfoRow(label: '控制服务器', value: profile.configServer),
-            const SizedBox(height: 14),
-            Container(height: 1, color: const Color(0xFFE5E7EB)),
-            const SizedBox(height: 14),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          '登录方式',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 16),
+        FCard.raw(
+          child: FItemGroup(
+            divider: .full,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              FItem.raw(
+                prefix: const Icon(Icons.vpn_key_outlined),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '设备令牌',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      profile.effectiveDisplayName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
             FButton(
               variant: .outline,
               onPress: onChangeToken,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.key_outlined, size: 16),
-                  SizedBox(width: 6),
+                  SizedBox(width: 8),
                   Text('更换令牌'),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
             FButton(
               variant: .outline,
               onPress: onAccountLogin,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.login, size: 16),
-                  SizedBox(width: 6),
+                  SizedBox(width: 8),
                   Text('使用账号登录'),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
             FButton(
               variant: .destructive,
               onPress: onDisconnect,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.power_settings_new, size: 16),
-                  SizedBox(width: 6),
+                  SizedBox(width: 8),
                   Text('断开连接'),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _TokenStatusPanel extends StatelessWidget {
-  const _TokenStatusPanel({
-    required this.profile,
-    required this.status,
-    required this.onReconnect,
-    required this.onCopyDiagnostics,
-  });
-
-  final TokenConnectionProfile profile;
-  final CoreRunStatus status;
-  final VoidCallback onReconnect;
-  final VoidCallback onCopyDiagnostics;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final error = status.lastError?.trim();
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _phaseIcon(status.phase),
-                  color: _phaseColor(status.phase),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    status.message,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _TokenInfoRow(label: '本机设备', value: status.machineId ?? '等待注册'),
-            _TokenInfoRow(label: '连接引擎', value: status.details ?? '准备中'),
-            _TokenInfoRow(label: '控制服务器', value: profile.configServer),
-            if (error != null && error.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer.withValues(
-                    alpha: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  error,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FButton(
-                  onPress: onReconnect,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh, size: 16),
-                      SizedBox(width: 6),
-                      Text('重新连接'),
-                    ],
-                  ),
-                ),
-                FButton(
-                  variant: .outline,
-                  onPress: onCopyDiagnostics,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.content_copy, size: 16),
-                      SizedBox(width: 6),
-                      Text('复制诊断'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 }
@@ -778,44 +809,6 @@ class _TokenInstanceStateBadge extends StatelessWidget {
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: const Color(0xFF15803D),
               fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TokenInfoRow extends StatelessWidget {
-  const _TokenInfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 84,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
             ),
           ),
         ],

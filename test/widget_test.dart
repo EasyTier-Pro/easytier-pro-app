@@ -174,7 +174,6 @@ void main() {
 
     expect(coreLifecycleService.tokenProfile?.bootstrapToken, 'device-token');
     expect(coreLifecycleService.tokenProfile?.configServer, contains('22020'));
-    expect(find.text('令牌连接已建立'), findsOneWidget);
     expect(find.text('登录控制台'), findsNothing);
     expect(find.text('网络'), findsOneWidget);
     expect(find.text('只读'), findsOneWidget);
@@ -183,6 +182,9 @@ void main() {
     final tokenSwitch = tester.widget<FSwitch>(find.byType(FSwitch));
     expect(tokenSwitch.value, isTrue);
     expect(tokenSwitch.enabled, isFalse);
+    expect(find.text('本机设备'), findsNothing);
+    expect(find.widgetWithText(FButton, '重新连接'), findsNothing);
+    expect(find.widgetWithText(FButton, '复制诊断'), findsNothing);
     expect(find.widgetWithText(FButton, '首页'), findsOneWidget);
     expect(find.widgetWithText(FButton, '设置'), findsOneWidget);
     expect(find.widgetWithText(FButton, '网络'), findsNothing);
@@ -193,7 +195,13 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, '设置'));
     await tester.pumpAndSettle();
 
-    expect(find.text('连接设置'), findsOneWidget);
+    expect(find.text('连接'), findsWidgets);
+    expect(find.text('登录方式'), findsOneWidget);
+    expect(find.text('令牌连接已建立'), findsOneWidget);
+    expect(find.text('设备 ID'), findsOneWidget);
+    expect(find.text('连接引擎'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '重新连接'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '复制诊断'), findsOneWidget);
     expect(find.widgetWithText(FButton, '更换令牌'), findsOneWidget);
     expect(find.widgetWithText(FButton, '使用账号登录'), findsOneWidget);
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
