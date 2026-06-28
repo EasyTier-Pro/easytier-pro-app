@@ -304,6 +304,30 @@ HomeAppUpdateFeedback homeAppUpdateCheckFeedback(AppUpdateCheckStatus status) {
   };
 }
 
+String homeCoreEngineActionLabel(CoreEngineVersionStatus status) {
+  if (status.updateAvailable) {
+    final consoleVersion = status.consoleVersion;
+    if (consoleVersion != null && consoleVersion.isNotEmpty) {
+      return '更新连接引擎至 $consoleVersion';
+    }
+    return '更新连接引擎';
+  }
+  return '重装连接引擎';
+}
+
+Future<HomeAppUpdateFeedback> runHomeAppUpdateCheck(
+  AppUpdateService appUpdateService, {
+  void Function(Object error, StackTrace stack)? onError,
+}) async {
+  try {
+    final result = await appUpdateService.checkForUpdates();
+    return homeAppUpdateCheckFeedback(result.status);
+  } catch (error, stack) {
+    onError?.call(error, stack);
+    return homeAppUpdateCheckFeedback(AppUpdateCheckStatus.failed);
+  }
+}
+
 class HomeAppSettingsSection extends StatelessWidget {
   const HomeAppSettingsSection({
     super.key,

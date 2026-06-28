@@ -15,6 +15,7 @@ import '../shared/app_smooth_scroll_view.dart';
 import 'dashboard_navigation.dart';
 import 'home_shell.dart';
 import 'home_settings_page.dart';
+import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
@@ -46,7 +47,8 @@ class TokenConnectionHomeView extends StatefulWidget {
       _TokenConnectionHomeViewState();
 }
 
-class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
+class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
+    with HomeTrayActionsMixin<TokenConnectionHomeView> {
   static const double _mobileSwipeDistanceThreshold = 72;
   static const double _mobileSwipeHorizontalDominance = 1.25;
 
@@ -68,6 +70,23 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   bool? _trayConnectionEnabled;
   final _networkDetailHeaderCollapse =
       HomeNetworkDetailHeaderCollapseController();
+
+  @override
+  TraySupport get traySupport => widget.traySupport;
+
+  @override
+  CoreLifecycleService get coreLifecycleService => widget.coreLifecycleService;
+
+  @override
+  AppUpdateService get appUpdateService => widget.appUpdateService;
+
+  @override
+  void showSettingsFromTray() => _showSettings();
+
+  @override
+  void showTrayFeedback(String message, {bool destructive = false}) {
+    showHomeSettingsToast(context, message, destructive: destructive);
+  }
 
   List<MapEntry<String, _TokenTrafficSnapshot>> get _sortedTrafficEntries {
     return _traffic.entries.toList()
@@ -127,6 +146,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   void initState() {
     super.initState();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
+    initHomeTrayActions();
     _syncTrayConnectionAction();
     _refreshTrafficPolling();
   }
@@ -142,6 +162,10 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       _refreshTrafficPolling();
       _refreshPeerStatusPolling();
     }
+    didUpdateHomeTrayActions(
+      oldTraySupport: oldWidget.traySupport,
+      oldCoreLifecycleService: oldWidget.coreLifecycleService,
+    );
     if (oldWidget.traySupport != widget.traySupport) {
       oldWidget.traySupport.setConnectionAction(null);
       _trayConnectionLabel = null;
@@ -157,6 +181,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
     _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     widget.traySupport.setConnectionAction(null);
+    disposeHomeTrayActions();
     super.dispose();
   }
 
@@ -165,6 +190,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
       setState(() {});
     }
     _syncTrayConnectionAction();
+    syncHomeTrayCoreUpdateAction();
     _refreshTrafficPolling();
     _refreshPeerStatusPolling();
   }
@@ -843,19 +869,11 @@ class _TokenSettingsPanelState extends State<_TokenSettingsPanel> {
       _checkingForUpdates = true;
     });
     try {
-      final result = await widget.appUpdateService.checkForUpdates();
+      final feedback = await runHomeAppUpdateCheck(widget.appUpdateService);
       if (!mounted) {
         return;
       }
-      final feedback = homeAppUpdateCheckFeedback(result.status);
       _showToast(feedback.message, destructive: feedback.destructive);
-    } catch (_) {
-      if (mounted) {
-        final feedback = homeAppUpdateCheckFeedback(
-          AppUpdateCheckStatus.failed,
-        );
-        _showToast(feedback.message, destructive: feedback.destructive);
-      }
     } finally {
       if (mounted) {
         setState(() {

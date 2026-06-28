@@ -21,14 +21,3 @@ String _formatBytes(num bytes) {
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
 }
-
-String _coreEngineActionLabel(CoreEngineVersionStatus status) {
-  if (status.updateAvailable) {
-    final consoleVersion = status.consoleVersion;
-    if (consoleVersion != null && consoleVersion.isNotEmpty) {
-      return '更新连接引擎至 $consoleVersion';
-    }
-    return '更新连接引擎';
-  }
-  return '重装连接引擎';
-}

@@ -30,6 +30,18 @@ class TrayEngineAction {
   final Future<void> Function()? onSelected;
 }
 
+class TrayMenuAction {
+  const TrayMenuAction({
+    required this.label,
+    required this.enabled,
+    this.onSelected,
+  });
+
+  final String label;
+  final bool enabled;
+  final Future<void> Function()? onSelected;
+}
+
 enum AppExitReason { user, update }
 
 abstract class TraySupport {
@@ -46,6 +58,10 @@ abstract class TraySupport {
   void setConnectionAction(TrayConnectionAction? action);
 
   void setEngineAction(TrayEngineAction? action);
+
+  void setSettingsAction(TrayMenuAction? action);
+
+  void setAppUpdateAction(TrayMenuAction? action);
 }
 
 TraySupport createTraySupport({

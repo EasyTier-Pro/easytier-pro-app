@@ -80,29 +80,20 @@ class _SettingsPanelState extends State<_SettingsPanel> {
       _checkingForUpdates = true;
     });
     try {
-      final result = await widget.appUpdateService.checkForUpdates();
+      final feedback = await runHomeAppUpdateCheck(
+        widget.appUpdateService,
+        onError: (error, stack) {
+          AppLogger.instance.error(
+            'settings',
+            'Update check failed',
+            context: {'error': error.toString(), 'stack': stack.toString()},
+          );
+        },
+      );
       if (!mounted || !context.mounted) {
         return;
       }
-
-      final feedback = homeAppUpdateCheckFeedback(result.status);
       _showToast(context, feedback.message, destructive: feedback.destructive);
-    } catch (error, stack) {
-      AppLogger.instance.error(
-        'settings',
-        'Update check failed',
-        context: {'error': error.toString(), 'stack': stack.toString()},
-      );
-      if (mounted && context.mounted) {
-        final feedback = homeAppUpdateCheckFeedback(
-          AppUpdateCheckStatus.failed,
-        );
-        _showToast(
-          context,
-          feedback.message,
-          destructive: feedback.destructive,
-        );
-      }
     } finally {
       if (mounted) {
         setState(() {

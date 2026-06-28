@@ -432,6 +432,8 @@ void main() {
     expect(traySupport.connectionAction?.label, '重新连接');
     expect(traySupport.connectionAction?.enabled, isTrue);
     expect(traySupport.connectionAction?.onSelected, isNotNull);
+    expect(traySupport.settingsAction?.label, '设置');
+    expect(traySupport.appUpdateAction?.label, '检查更新');
 
     await traySupport.connectionAction!.onSelected!();
     await tester.pump();
@@ -3222,6 +3224,63 @@ void main() {
     expect(traySupport.engineAction?.onSelected, isNotNull);
   });
 
+  testWidgets('tray settings and app update actions open settings', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final updateResult = Completer<AppUpdateCheckResult>();
+    final appUpdateService = _FakeAppUpdateService(updateResult.future);
+    final authService = _FakeAuthService();
+    final traySupport = _RecordingTraySupport();
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: traySupport,
+        appUpdateService: appUpdateService,
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(traySupport.settingsAction?.label, '设置');
+    expect(traySupport.settingsAction?.enabled, isTrue);
+    expect(traySupport.appUpdateAction?.label, '检查更新');
+    expect(traySupport.appUpdateAction?.enabled, isTrue);
+
+    await traySupport.settingsAction!.onSelected!();
+    await tester.pumpAndSettle();
+
+    expect(traySupport.showWindowCount, 1);
+    expect(
+      find.byKey(const ValueKey<String>('settings-app-card')),
+      findsOneWidget,
+    );
+
+    final updateFuture = traySupport.appUpdateAction!.onSelected!();
+    await tester.pump();
+    await tester.pump();
+
+    expect(traySupport.showWindowCount, 2);
+    expect(traySupport.appUpdateAction?.label, '正在检查更新...');
+    expect(traySupport.appUpdateAction?.enabled, isFalse);
+
+    updateResult.complete(
+      const AppUpdateCheckResult(AppUpdateCheckStatus.started),
+    );
+    await updateFuture;
+    await tester.pumpAndSettle();
+
+    expect(appUpdateService.checkCount, 1);
+    expect(traySupport.appUpdateAction?.label, '检查更新');
+    expect(traySupport.appUpdateAction?.enabled, isTrue);
+    expect(find.text('已开始检查更新'), findsOneWidget);
+  });
+
   testWidgets(
     'mobile settings account card stays compact and does not scroll sideways',
     (WidgetTester tester) async {
@@ -5679,6 +5738,8 @@ class _FakeAppUpdateService extends AppUpdateService {
 class _RecordingTraySupport implements TraySupport {
   TrayConnectionAction? connectionAction;
   TrayEngineAction? engineAction;
+  TrayMenuAction? settingsAction;
+  TrayMenuAction? appUpdateAction;
   int showWindowCount = 0;
 
   @override
@@ -5698,6 +5759,16 @@ class _RecordingTraySupport implements TraySupport {
   @override
   void setEngineAction(TrayEngineAction? action) {
     engineAction = action;
+  }
+
+  @override
+  void setSettingsAction(TrayMenuAction? action) {
+    settingsAction = action;
+  }
+
+  @override
+  void setAppUpdateAction(TrayMenuAction? action) {
+    appUpdateAction = action;
   }
 
   @override

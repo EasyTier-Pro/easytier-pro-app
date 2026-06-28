@@ -23,6 +23,9 @@ class _DesktopTraySupport extends TraySupport
   bool _quitRequested = false;
   bool _trayMenuVisible = false;
   TrayConnectionAction? _connectionAction;
+  TrayEngineAction? _engineAction;
+  TrayMenuAction? _settingsAction;
+  TrayMenuAction? _appUpdateAction;
   final AppLogger _logger = AppLogger.instance;
   final WindowBehaviorPreferences _windowBehaviorPreferences;
 
@@ -115,7 +118,28 @@ class _DesktopTraySupport extends TraySupport
   }
 
   @override
-  void setEngineAction(TrayEngineAction? _) {}
+  void setEngineAction(TrayEngineAction? action) {
+    _engineAction = action;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
+
+  @override
+  void setSettingsAction(TrayMenuAction? action) {
+    _settingsAction = action;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
+
+  @override
+  void setAppUpdateAction(TrayMenuAction? action) {
+    _appUpdateAction = action;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
 
   @override
   void onTrayIconMouseDown() {
@@ -158,6 +182,32 @@ class _DesktopTraySupport extends TraySupport
 
   Future<void> _refreshContextMenu() async {
     final connectionAction = _connectionAction;
+    final engineAction = _engineAction;
+    final settingsAction = _settingsAction;
+    final appUpdateAction = _appUpdateAction;
+    final operationItems = <MenuItem>[
+      if (connectionAction != null)
+        _actionMenuItem(
+          label: connectionAction.label,
+          enabled: connectionAction.enabled,
+          onSelected: connectionAction.onSelected,
+          logMessage: 'Connection action clicked from tray',
+        ),
+      if (appUpdateAction != null)
+        _actionMenuItem(
+          label: appUpdateAction.label,
+          enabled: appUpdateAction.enabled,
+          onSelected: appUpdateAction.onSelected,
+          logMessage: 'App update action clicked from tray',
+        ),
+      if (engineAction != null)
+        _actionMenuItem(
+          label: engineAction.label,
+          enabled: engineAction.enabled,
+          onSelected: engineAction.onSelected,
+          logMessage: 'Engine action clicked from tray',
+        ),
+    ];
 
     await trayManager.setContextMenu(
       Menu(
@@ -168,23 +218,16 @@ class _DesktopTraySupport extends TraySupport
               unawaited(showWindow());
             },
           ),
-          if (connectionAction != null) ...[
-            MenuItem.separator(),
-            MenuItem(
-              label: connectionAction.label,
-              disabled: !connectionAction.enabled,
-              onClick: (_) {
-                _logger.info(
-                  'tray',
-                  'Connection action clicked from tray',
-                  context: {'label': connectionAction.label},
-                );
-                final onSelected = connectionAction.onSelected;
-                if (connectionAction.enabled && onSelected != null) {
-                  unawaited(onSelected());
-                }
-              },
+          if (settingsAction != null)
+            _actionMenuItem(
+              label: settingsAction.label,
+              enabled: settingsAction.enabled,
+              onSelected: settingsAction.onSelected,
+              logMessage: 'Settings action clicked from tray',
             ),
+          if (operationItems.isNotEmpty) ...[
+            MenuItem.separator(),
+            ...operationItems,
           ],
           MenuItem.separator(),
           MenuItem(
@@ -195,6 +238,24 @@ class _DesktopTraySupport extends TraySupport
           ),
         ],
       ),
+    );
+  }
+
+  MenuItem _actionMenuItem({
+    required String label,
+    required bool enabled,
+    required Future<void> Function()? onSelected,
+    required String logMessage,
+  }) {
+    return MenuItem(
+      label: label,
+      disabled: !enabled,
+      onClick: (_) {
+        _logger.info('tray', logMessage, context: {'label': label});
+        if (enabled && onSelected != null) {
+          unawaited(onSelected());
+        }
+      },
     );
   }
 

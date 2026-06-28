@@ -23,6 +23,7 @@ import 'dashboard_navigation.dart';
 import 'device_os_icon.dart';
 import 'home_shell.dart';
 import 'home_settings_page.dart';
+import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
@@ -73,7 +74,8 @@ class WorkspaceHomeView extends StatefulWidget {
   State<WorkspaceHomeView> createState() => _WorkspaceHomeViewState();
 }
 
-class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
+class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
+    with HomeTrayActionsMixin<WorkspaceHomeView> {
   static const Duration _devicePollDelay = Duration(seconds: 1);
   static const int _devicePollAttempts = 60;
 
@@ -141,10 +143,33 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   String? _trayWorkspaceName;
   bool? _trayConnectionEnabled;
   bool? _trayConnectionDisconnecting;
-  String? _trayEngineLabel;
-  bool? _trayEngineEnabled;
-
   ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
+
+  @override
+  TraySupport get traySupport => widget.traySupport;
+
+  @override
+  CoreLifecycleService get coreLifecycleService => widget.coreLifecycleService;
+
+  @override
+  AppUpdateService get appUpdateService => widget.appUpdateService;
+
+  @override
+  void showSettingsFromTray() => _showSettings();
+
+  @override
+  void showTrayFeedback(String message, {bool destructive = false}) {
+    _showWorkspaceToast(context, message, destructive: destructive);
+  }
+
+  @override
+  void logTrayAppUpdateError(Object error, StackTrace stack) {
+    AppLogger.instance.error(
+      'tray',
+      'Update check failed from tray',
+      context: {'error': error.toString(), 'stack': stack.toString()},
+    );
+  }
 
   bool get _isAndroidMvpSingleActiveNetwork {
     final override = widget.androidMvpSingleActiveNetworkOverride;
@@ -203,7 +228,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void _updateState(VoidCallback fn) {
     setState(fn);
     _syncTrayConnectionAction();
-    _syncTrayEngineAction();
+    syncHomeTrayCoreUpdateAction();
   }
 
   void _syncTrayConnectionAction() {
@@ -267,30 +292,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     return name == null || name.isEmpty ? '未关联工作区' : name;
   }
 
-  void _syncTrayEngineAction() {
-    final versionStatus = widget.coreLifecycleService.engineVersionStatus.value;
-    final coreStatus = widget.coreLifecycleService.status.value;
-    final busy =
-        coreStatus.phase == CoreRunPhase.checking ||
-        coreStatus.phase == CoreRunPhase.repairing;
-    final label = _coreEngineActionLabel(versionStatus);
-    final enabled = !busy;
-
-    if (_trayEngineLabel == label && _trayEngineEnabled == enabled) {
-      return;
-    }
-
-    _trayEngineLabel = label;
-    _trayEngineEnabled = enabled;
-    widget.traySupport.setEngineAction(
-      TrayEngineAction(
-        label: label,
-        enabled: enabled,
-        onSelected: enabled ? widget.coreLifecycleService.repair : null,
-      ),
-    );
-  }
-
   Future<void> _runTrayConnectionAction(
     String networkId,
     bool disconnect,
@@ -347,11 +348,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
   void initState() {
     super.initState();
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
-    widget.coreLifecycleService.engineVersionStatus.addListener(
-      _onEngineVersionChanged,
-    );
+    initHomeTrayActions();
     _syncTrayConnectionAction();
-    _syncTrayEngineAction();
     unawaited(_loadInitialData());
   }
 
@@ -363,11 +361,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     _newNetworkIPv4CidrController.dispose();
     _networkDetailHeaderCollapse.dispose();
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
-    widget.coreLifecycleService.engineVersionStatus.removeListener(
-      _onEngineVersionChanged,
-    );
     widget.traySupport.setConnectionAction(null);
-    widget.traySupport.setEngineAction(null);
+    disposeHomeTrayActions();
     super.dispose();
   }
 
@@ -377,17 +372,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView> {
     }
     setState(() {});
     _syncTrayConnectionAction();
-    _syncTrayEngineAction();
+    syncHomeTrayCoreUpdateAction();
     _refreshTrafficPolling();
     _refreshPeerPolling();
     final selectedNetworkId = _selectedNetworkId;
     if (_activeView == _DashboardView.network && selectedNetworkId != null) {
       unawaited(_loadLocalNodeConfigForNetworkId(selectedNetworkId));
     }
-  }
-
-  void _onEngineVersionChanged() {
-    _syncTrayEngineAction();
   }
 
   @override
