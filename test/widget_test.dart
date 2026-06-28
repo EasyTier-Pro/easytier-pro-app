@@ -368,6 +368,58 @@ void main() {
     );
   });
 
+  testWidgets('token network names prefer console display suffix', (
+    WidgetTester tester,
+  ) async {
+    const runtimeName = 't_d04e97ef-9d62-40a1-b2c5-168b04c30494_Home';
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          runtimeName: CoreNetworkTrafficTotals(
+            runtimeNetworkName: runtimeName,
+            downloadBytes: 1024,
+            uploadBytes: 2048,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('token-connect-input')),
+      'device-token',
+    );
+    final connectButton = find.widgetWithText(FButton, '连接');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text(runtimeName), findsNothing);
+
+    await tester.tap(find.text('Home').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text(runtimeName), findsNothing);
+  });
+
   testWidgets('starts core after login and joins networks independently', (
     WidgetTester tester,
   ) async {

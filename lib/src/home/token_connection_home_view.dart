@@ -64,7 +64,10 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView> {
   List<HomeDashboardNetworkOption> get _networkOptions {
     return [
       for (final entry in _sortedTrafficEntries)
-        HomeDashboardNetworkOption(id: entry.key, name: entry.key),
+        HomeDashboardNetworkOption(
+          id: entry.key,
+          name: _tokenRuntimeDisplayName(entry.key),
+        ),
     ];
   }
 
@@ -1088,13 +1091,14 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = runtimeName?.trim() ?? '';
+    final displayName = _tokenRuntimeDisplayName(name);
     final nodes = name.isEmpty
         ? const <NetworkDevice>[]
         : _tokenNetworkDevicesFromPeerStatuses(name, peerStatuses);
     final downloadRate = _formatTrafficRate(snapshot?.downloadBytesPerSecond);
     final uploadRate = _formatTrafficRate(snapshot?.uploadBytesPerSecond);
     final header = HomeNetworkDetailHeader(
-      title: name.isEmpty ? '网络' : name,
+      title: name.isEmpty ? '网络' : displayName,
       subtitle: '设备令牌连接 · 只读实例',
       totalDevices: nodes.length,
       onlineDevices: nodes.length,
@@ -1232,7 +1236,7 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
     final uploadRate = _formatTrafficRate(snapshot.uploadBytesPerSecond);
 
     return HomeNetworkSwitchTile(
-      title: runtimeName,
+      title: _tokenRuntimeDisplayName(runtimeName),
       joined: true,
       locallyConnected: true,
       failed: false,
@@ -1404,6 +1408,28 @@ List<NetworkDevice> _tokenNetworkDevicesFromPeerStatuses(
         lifecycleState: 'active',
       ),
   ];
+}
+
+String _tokenRuntimeDisplayName(String runtimeName) {
+  final trimmed = runtimeName.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+
+  final parts = trimmed.split('_');
+  if (parts.length >= 3 && parts.first == 't' && _looksLikeUuid(parts[1])) {
+    final displayName = parts.skip(2).join('_').trim();
+    if (displayName.isNotEmpty) {
+      return displayName;
+    }
+  }
+  return trimmed;
+}
+
+bool _looksLikeUuid(String value) {
+  return RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  ).hasMatch(value);
 }
 
 String _tokenPeerDeviceId(String runtimeName, CorePeerStatus peer, int index) {
