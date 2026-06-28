@@ -35,8 +35,8 @@ class CorePeerStatus {
   bool get isCredentialPeer => featureFlag?.isCredentialPeer != false;
 
   factory CorePeerStatus.fromJson(Map<String, dynamic> json) {
-    final cidr = _readString(json['cidr']);
-    final rawIpv4 = _readString(json['ipv4']);
+    final cidr = _readCidr(json['cidr']);
+    final rawIpv4 = _readCidr(json['ipv4']);
     final ipv4 = normalizeCorePeerIpv4(rawIpv4.isEmpty ? cidr : rawIpv4);
     final featureFlag = _readFeatureFlag(json);
     return CorePeerStatus(
@@ -88,6 +88,21 @@ Map<String, CorePeerStatus> parseCorePeerStatusesFromJson(String output) {
   }
 
   return statuses;
+}
+
+CorePeerStatus? parseCoreLocalPeerStatusFromNodeInfoJson(String output) {
+  final decoded = jsonDecode(output);
+  final item = _extractNodeInfoItem(decoded);
+  if (item == null) {
+    return null;
+  }
+  final status = CorePeerStatus.fromJson(
+    _localPeerStatusJsonFromNodeInfo(item),
+  );
+  if (status.ipv4.isEmpty || !status.isCredentialPeer) {
+    return null;
+  }
+  return status;
 }
 
 Map<String, CorePeerStatus> filterCredentialPeerStatuses(
@@ -152,7 +167,11 @@ Map<String, dynamic> _peerStatusJsonFromItem(Map<String, dynamic> item) {
     'peer_id': _readString(route['peer_id'] ?? route['peerId']),
     'id': _readString(route['peer_id'] ?? route['peerId']),
     'version': _firstString([route['version'], peer?['version']]),
-    'feature_flag': route['feature_flag'] ?? route['featureFlag'],
+    'feature_flag':
+        route['feature_flag'] ??
+        route['featureFlag'] ??
+        peer?['feature_flag'] ??
+        peer?['featureFlag'],
   };
   normalized.removeWhere((key, value) {
     if (key == 'feature_flag') {
@@ -161,6 +180,46 @@ Map<String, dynamic> _peerStatusJsonFromItem(Map<String, dynamic> item) {
     return _readString(value).isEmpty;
   });
   return normalized;
+}
+
+Map<String, dynamic> _localPeerStatusJsonFromNodeInfo(
+  Map<String, dynamic> nodeInfo,
+) {
+  final cidr = _readCidr(
+    nodeInfo['virtual_ipv4'] ??
+        nodeInfo['virtualIpv4'] ??
+        nodeInfo['ipv4_addr'] ??
+        nodeInfo['ipv4Addr'] ??
+        nodeInfo['ipv4'] ??
+        nodeInfo['address'],
+  );
+  return <String, dynamic>{
+    'cidr': cidr,
+    'ipv4': cidr,
+    'hostname': _firstString([
+      nodeInfo['hostname'],
+      nodeInfo['hostName'],
+      nodeInfo['name'],
+    ]),
+    'cost': 'Local',
+    'lat_ms': '-',
+    'loss_rate': '-',
+    'rx_bytes': '-',
+    'tx_bytes': '-',
+    'tunnel_proto': '-',
+    'nat_type': _natTypeText(
+      _readMap(nodeInfo['stun_info'] ?? nodeInfo['stunInfo']),
+    ),
+    'peer_id': _readString(nodeInfo['peer_id'] ?? nodeInfo['peerId']),
+    'id': _readString(nodeInfo['peer_id'] ?? nodeInfo['peerId']),
+    'version': _firstString([nodeInfo['version']]),
+    'feature_flag': nodeInfo['feature_flag'] ?? nodeInfo['featureFlag'],
+  }..removeWhere((key, value) {
+    if (key == 'feature_flag') {
+      return value == null;
+    }
+    return _readString(value).isEmpty;
+  });
 }
 
 Map<String, dynamic> _peerInfoJson(Map<String, dynamic> peer) {
@@ -202,25 +261,124 @@ Map<String, dynamic>? _selectedPeerConn(Map<String, dynamic> peer) {
 String _readCidr(Object? value) {
   if (value is Map) {
     final map = value.map((key, value) => MapEntry(key.toString(), value));
-    final address = _firstString([
+    final nested = map['route'] ?? map['route_info'] ?? map['routeInfo'];
+    if (nested is Map) {
+      return _readCidr(nested);
+    }
+    final ipv4Inet = _ipv4InetCidrFromMap(map);
+    if (ipv4Inet.isNotEmpty) {
+      return ipv4Inet;
+    }
+    for (final key in const <String>[
+      'ipv4_addr',
+      'ipv4Addr',
+      'ipv4_address',
+      'ipv4Address',
+      'virtual_ip',
+      'virtualIp',
+      'virtual_ipv4',
+      'virtualIpv4',
+    ]) {
+      final nested = map[key];
+      if (nested == null) {
+        continue;
+      }
+      final nestedCidr = _readCidr(nested);
+      if (nestedCidr.isNotEmpty) {
+        if (!nestedCidr.contains('/')) {
+          final prefix = _firstScalarString([
+            map['network_length'],
+            map['networkLength'],
+            map['prefix'],
+            map['prefix_length'],
+            map['prefixLength'],
+            map['mask'],
+          ]);
+          if (prefix != null) {
+            return '$nestedCidr/$prefix';
+          }
+        }
+        return nestedCidr;
+      }
+    }
+    final cidr = _firstScalarString([
+      map['cidr'],
+      map['ipv4_cidr'],
+      map['ipv4Cidr'],
+      map['ip_cidr'],
+      map['ipCidr'],
+      map['destination'],
+      map['dest'],
       map['address'],
       map['ip'],
       map['ipv4'],
-      map['addr'],
     ]);
-    if (address.isEmpty || address.contains('/')) {
-      return address;
+    if (cidr == null) {
+      return '';
     }
-    final prefix = _firstString([
+    if (cidr.contains('/')) {
+      return cidr;
+    }
+    final prefix = _firstScalarString([
       map['network_length'],
       map['networkLength'],
       map['prefix'],
+      map['prefix_length'],
+      map['prefixLength'],
       map['prefix_len'],
       map['prefixLen'],
+      map['mask'],
     ]);
-    return prefix.isEmpty ? address : '$address/$prefix';
+    return prefix == null ? cidr : '$cidr/$prefix';
   }
   return _readString(value);
+}
+
+String _ipv4InetCidrFromMap(Map<String, dynamic> map) {
+  final address = _ipv4AddressFromValue(map['address'] ?? map['addr']);
+  if (address == null || address.isEmpty) {
+    return '';
+  }
+  if (address.contains('/')) {
+    return address;
+  }
+  final prefix = _firstScalarString([
+    map['network_length'],
+    map['networkLength'],
+    map['prefix'],
+    map['prefix_length'],
+    map['prefixLength'],
+    map['prefix_len'],
+    map['prefixLen'],
+    map['mask'],
+  ]);
+  return '$address/${prefix ?? 32}';
+}
+
+String? _ipv4AddressFromValue(Object? value) {
+  if (value is Map) {
+    final map = value.map((key, value) => MapEntry(key.toString(), value));
+    final numeric = _readIntValue(map['addr'] ?? map['value']);
+    if (numeric != null) {
+      return _ipv4FromUint32(numeric);
+    }
+    return _firstScalarString([map['address'], map['ip'], map['ipv4']]);
+  }
+  final numeric = _readIntValue(value);
+  if (numeric != null) {
+    return _ipv4FromUint32(numeric);
+  }
+  return _readScalarString(value);
+}
+
+String _ipv4FromUint32(int value) {
+  final unsigned = value & 0xffffffff;
+  return [
+    (unsigned >> 24) & 0xff,
+    (unsigned >> 16) & 0xff,
+    (unsigned >> 8) & 0xff,
+    unsigned & 0xff,
+  ].join('.');
 }
 
 List<dynamic> _extractPeerItems(Object? decoded) {
@@ -245,6 +403,25 @@ List<dynamic> _extractPeerItems(Object? decoded) {
   }
 
   throw const FormatException('easytier-cli peer JSON 必须是数组');
+}
+
+Map<String, dynamic>? _extractNodeInfoItem(Object? decoded) {
+  if (decoded is List<dynamic>) {
+    for (final item in decoded) {
+      final map = _readMap(item);
+      final result = _readMap(map?['result']);
+      if (result != null) {
+        return result;
+      }
+    }
+    return null;
+  }
+
+  final map = _readMap(decoded);
+  if (map == null) {
+    return null;
+  }
+  return _readMap(map['result']) ?? map;
 }
 
 bool _looksLikeMultiInstanceResult(List<dynamic> items) {
@@ -279,6 +456,24 @@ String _readString(Object? value) {
   return text;
 }
 
+String? _readScalarString(Object? value) {
+  if (value is Map || value is List) {
+    return null;
+  }
+  final text = _readString(value);
+  return text.isEmpty ? null : text;
+}
+
+int? _readIntValue(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(_readString(value));
+}
+
 String _firstString(Iterable<Object?> values) {
   for (final value in values) {
     final text = _readString(value);
@@ -287,6 +482,16 @@ String _firstString(Iterable<Object?> values) {
     }
   }
   return '';
+}
+
+String? _firstScalarString(Iterable<Object?> values) {
+  for (final value in values) {
+    final text = _readScalarString(value);
+    if (text != null) {
+      return text;
+    }
+  }
+  return null;
 }
 
 String _latencyText(Map<String, dynamic>? stats, Map<String, dynamic>? conn) {

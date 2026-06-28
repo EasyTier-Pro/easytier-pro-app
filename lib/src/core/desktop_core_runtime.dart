@@ -400,6 +400,66 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
       );
     }
 
-    return CoreLifecycleService.parseNetworkPeerStatusesFromJson(stdoutText);
+    final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
+      stdoutText,
+    );
+    final localStatus = await _readLocalPeerStatus(
+      cliExecutable: cliExecutable,
+      instanceName: instanceName,
+    );
+    if (localStatus == null) {
+      return statuses;
+    }
+    return <String, CorePeerStatus>{...statuses, localStatus.ipv4: localStatus};
+  }
+
+  Future<CorePeerStatus?> _readLocalPeerStatus({
+    required String cliExecutable,
+    required String instanceName,
+  }) async {
+    final process = await _processStarter(cliExecutable, [
+      '-o',
+      'json',
+      '--instance-name',
+      instanceName,
+      'node',
+      'info',
+    ]);
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill();
+        return -1;
+      },
+    );
+    final stdoutText = await stdoutFuture;
+    final stderrText = (await stderrFuture).trim();
+
+    if (exitCode != 0) {
+      _owner._logger.warn(
+        'core.peer',
+        'EasyTier local peer status failed',
+        context: {
+          'instance_name': instanceName,
+          'exit_code': exitCode,
+          'stderr': exitCode == -1 ? 'easytier-cli node info 执行超时' : stderrText,
+        },
+      );
+      return null;
+    }
+
+    try {
+      return parseCoreLocalPeerStatusFromNodeInfoJson(stdoutText);
+    } on FormatException catch (error) {
+      _owner._logger.warn(
+        'core.peer',
+        'EasyTier local peer status JSON parse failed',
+        context: {'instance_name': instanceName, 'error': error.toString()},
+      );
+      return null;
+    }
   }
 }

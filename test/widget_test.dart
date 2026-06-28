@@ -3799,7 +3799,10 @@ void main() {
         {
           'route': {
             'peer_id': 100,
-            'ipv4_addr': {'address': '10.144.0.2', 'network_length': 24},
+            'ipv4_addr': {
+              'address': {'addr': 177209346},
+              'network_length': 24,
+            },
             'hostname': 'credential-peer',
             'cost': 1,
             'path_latency': 4,
@@ -3820,12 +3823,17 @@ void main() {
         {
           'route': {
             'peer_id': 101,
-            'ipv4_addr': {'address': '10.144.0.3', 'network_length': 24},
+            'ipv4_addr': {
+              'address': {'addr': 177209347},
+              'network_length': 24,
+            },
             'hostname': 'admin-peer',
             'cost': 1,
+          },
+          'peer': {
+            'peer_id': 101,
             'feature_flag': {'is_credential_peer': false},
           },
-          'peer': {'peer_id': 101},
         },
       ]),
     );
@@ -3835,6 +3843,25 @@ void main() {
     expect(statuses['10.144.0.2']?.cost, 'p2p');
     expect(statuses['10.144.0.2']?.latencyText, '4.20');
     expect(statuses['10.144.0.2']?.tunnelProto, 'tcp');
+  });
+
+  test('parses local node info with nested ipv4 inet', () {
+    final status = parseCoreLocalPeerStatusFromNodeInfoJson(
+      jsonEncode({
+        'peer_id': 99,
+        'ipv4_addr': {
+          'address': {'addr': 177209345},
+          'network_length': 24,
+        },
+        'hostname': 'local-peer',
+        'version': '2.6.4',
+      }),
+    );
+
+    expect(status?.ipv4, '10.144.0.1');
+    expect(status?.cidr, '10.144.0.1/24');
+    expect(status?.hostname, 'local-peer');
+    expect(status?.isLocal, isTrue);
   });
 
   test('parses multi-instance peer status wrappers', () {

@@ -2687,7 +2687,11 @@ class AndroidNetworkInstanceInfo {
       'peer_id': peerId,
       'id': peerId,
       'version': _firstScalarString([route['version'], peer?['version']]),
-      'feature_flag': route['feature_flag'] ?? route['featureFlag'],
+      'feature_flag':
+          route['feature_flag'] ??
+          route['featureFlag'] ??
+          peer?['feature_flag'] ??
+          peer?['featureFlag'],
     }..removeWhere((_, value) => _readString(value).isEmpty);
   }
 

@@ -162,38 +162,63 @@ void main() {
   });
 
   group('CoreLifecycleService engine version', () {
-    test('desktop peer status reads verbose peer routes', () async {
-      final owner = CoreLifecycleService(
-        authService: _LifecycleAuthService(),
-        runtime: _LifecycleRuntime(),
-      );
-      addTearDown(owner.dispose);
+    test(
+      'desktop peer status merges verbose peer routes and local node',
+      () async {
+        final owner = CoreLifecycleService(
+          authService: _LifecycleAuthService(),
+          runtime: _LifecycleRuntime(),
+        );
+        addTearDown(owner.dispose);
 
-      var recordedArguments = const <String>[];
-      final process = _VersionProbeProcess();
-      final runtime = DesktopCoreRuntime(
-        owner,
-        processStarter: (_, arguments) async {
-          recordedArguments = List<String>.of(arguments);
-          scheduleMicrotask(
-            () => process.complete(exitCode: 0, stdoutText: '[]'),
-          );
-          return process;
-        },
-      );
+        final calls = <List<String>>[];
+        final runtime = DesktopCoreRuntime(
+          owner,
+          processStarter: (_, arguments) async {
+            calls.add(List<String>.of(arguments));
+            final process = _VersionProbeProcess();
+            scheduleMicrotask(() {
+              final stdoutText = arguments.contains('peer')
+                  ? jsonEncode([
+                      {
+                        'route': {
+                          'peer_id': 100,
+                          'ipv4_addr': {
+                            'address': {'addr': 177209346},
+                            'network_length': 24,
+                          },
+                          'hostname': 'remote-node',
+                          'cost': 1,
+                          'feature_flag': {'is_credential_peer': true},
+                        },
+                        'peer': {'peer_id': 100},
+                      },
+                    ])
+                  : jsonEncode({
+                      'peer_id': 99,
+                      'ipv4_addr': '10.144.0.1/24',
+                      'hostname': 'local-node',
+                    });
+              process.complete(exitCode: 0, stdoutText: stdoutText);
+            });
+            return process;
+          },
+        );
 
-      final statuses = await runtime.readNetworkPeerStatuses('network-a');
+        final statuses = await runtime.readNetworkPeerStatuses('network-a');
 
-      expect(statuses, isEmpty);
-      expect(recordedArguments, [
-        '-v',
-        '-o',
-        'json',
-        '--instance-name',
-        'network-a',
-        'peer',
-      ]);
-    });
+        expect(
+          statuses.keys,
+          containsAll(<String>['10.144.0.1', '10.144.0.2']),
+        );
+        expect(statuses['10.144.0.1']?.isLocal, isTrue);
+        expect(statuses['10.144.0.2']?.hostname, 'remote-node');
+        expect(calls, [
+          ['-v', '-o', 'json', '--instance-name', 'network-a', 'peer'],
+          ['-o', 'json', '--instance-name', 'network-a', 'node', 'info'],
+        ]);
+      },
+    );
 
     test('desktop version probe sends sigkill on POSIX timeout', () async {
       final owner = CoreLifecycleService(
