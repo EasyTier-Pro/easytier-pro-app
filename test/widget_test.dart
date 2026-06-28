@@ -128,6 +128,24 @@ void main() {
           ),
         },
       ],
+      peerSamples: const <Map<String, CorePeerStatus>>[
+        <String, CorePeerStatus>{
+          '10.147.0.2': CorePeerStatus(
+            cidr: '10.147.0.2/24',
+            ipv4: '10.147.0.2',
+            hostname: 'token-peer',
+            cost: 'local',
+            latencyText: '3',
+            lossText: '0%',
+            rxBytes: '128',
+            txBytes: '256',
+            tunnelProto: 'tcp',
+            natType: 'cone',
+            peerId: 'peer-token',
+            version: 'v2.6.4',
+          ),
+        },
+      ],
     );
 
     await tester.pumpWidget(
@@ -198,6 +216,21 @@ void main() {
     expect(find.widgetWithText(FButton, '设备'), findsNothing);
     expect(find.widgetWithText(FButton, '更换令牌'), findsNothing);
     expect(find.widgetWithText(FButton, '使用账号登录'), findsNothing);
+
+    await tester.tap(find.text('nt-token').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('设备令牌连接 · 只读实例'), findsOneWidget);
+    expect(find.text('节点'), findsOneWidget);
+    expect(find.text('token-peer'), findsOneWidget);
+    expect(find.textContaining('10.147.0.2'), findsOneWidget);
+    expect(coreLifecycleService.peerReadCount, greaterThan(0));
+
+    await tester.tap(find.widgetWithText(FButton, '返回'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 个网络实例'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FButton, '设置'));
     await tester.pumpAndSettle();
