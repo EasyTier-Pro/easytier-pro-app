@@ -80,7 +80,7 @@ Map<String, CorePeerStatus> parseCorePeerStatusesFromJson(String output) {
     if (item is! Map<String, dynamic>) {
       continue;
     }
-    final status = CorePeerStatus.fromJson(item);
+    final status = CorePeerStatus.fromJson(_peerStatusJsonFromItem(item));
     if (status.ipv4.isEmpty || !status.isCredentialPeer) {
       continue;
     }
@@ -110,6 +110,117 @@ String normalizeCorePeerIpv4(String value) {
   final withoutCidr = trimmed.split('/').first.trim();
   final withoutWhitespace = withoutCidr.split(RegExp(r'\s+')).first.trim();
   return withoutWhitespace;
+}
+
+Map<String, dynamic> _peerStatusJsonFromItem(Map<String, dynamic> item) {
+  final route = _readMap(
+    item['route'] ?? item['route_info'] ?? item['routeInfo'],
+  );
+  if (route == null) {
+    return item;
+  }
+
+  final peer = _readMap(item['peer']);
+  final cidr = _readCidr(
+    route['ipv4_addr'] ??
+        route['ipv4Addr'] ??
+        route['ipv4'] ??
+        route['address'],
+  );
+  final peerInfo = peer == null
+      ? const <String, dynamic>{}
+      : _peerInfoJson(peer);
+  final normalized = <String, dynamic>{
+    ...peerInfo,
+    'cidr': cidr,
+    'ipv4': cidr,
+    'hostname': _firstString([
+      route['hostname'],
+      route['hostName'],
+      peer?['hostname'],
+      peer?['name'],
+    ]),
+    'cost': _routeCostText(route),
+    if (_readString(peerInfo['lat_ms']).isEmpty)
+      'lat_ms': _firstString([
+        route['path_latency_latency_first'],
+        route['pathLatencyLatencyFirst'],
+        route['path_latency'],
+        route['pathLatency'],
+      ]),
+    'nat_type': _natTypeText(_readMap(route['stun_info'] ?? route['stunInfo'])),
+    'peer_id': _readString(route['peer_id'] ?? route['peerId']),
+    'id': _readString(route['peer_id'] ?? route['peerId']),
+    'version': _firstString([route['version'], peer?['version']]),
+    'feature_flag': route['feature_flag'] ?? route['featureFlag'],
+  };
+  normalized.removeWhere((key, value) {
+    if (key == 'feature_flag') {
+      return value == null;
+    }
+    return _readString(value).isEmpty;
+  });
+  return normalized;
+}
+
+Map<String, dynamic> _peerInfoJson(Map<String, dynamic> peer) {
+  final conn = _selectedPeerConn(peer);
+  final stats = _readMap(conn?['stats']);
+  final tunnel = _readMap(conn?['tunnel']);
+  return <String, dynamic>{
+    'peer_id': _readString(peer['peer_id'] ?? peer['peerId']),
+    'id': _readString(peer['peer_id'] ?? peer['peerId']),
+    'lat_ms': _latencyText(stats, conn),
+    'loss_rate': _firstString([
+      conn?['loss_rate'],
+      conn?['lossRate'],
+      stats?['loss_rate'],
+      stats?['lossRate'],
+    ]),
+    'rx_bytes': _readString(stats?['rx_bytes'] ?? stats?['rxBytes']),
+    'tx_bytes': _readString(stats?['tx_bytes'] ?? stats?['txBytes']),
+    'tunnel_proto': _firstString([
+      tunnel?['tunnel_type'],
+      tunnel?['tunnelType'],
+      conn?['tunnel_proto'],
+      conn?['tunnelProto'],
+    ]),
+  }..removeWhere((_, value) => _readString(value).isEmpty);
+}
+
+Map<String, dynamic>? _selectedPeerConn(Map<String, dynamic> peer) {
+  final conns = _readList(peer['conns'] ?? peer['connections']);
+  for (final conn in conns) {
+    final map = _readMap(conn);
+    if (map != null) {
+      return map;
+    }
+  }
+  return null;
+}
+
+String _readCidr(Object? value) {
+  if (value is Map) {
+    final map = value.map((key, value) => MapEntry(key.toString(), value));
+    final address = _firstString([
+      map['address'],
+      map['ip'],
+      map['ipv4'],
+      map['addr'],
+    ]);
+    if (address.isEmpty || address.contains('/')) {
+      return address;
+    }
+    final prefix = _firstString([
+      map['network_length'],
+      map['networkLength'],
+      map['prefix'],
+      map['prefix_len'],
+      map['prefixLen'],
+    ]);
+    return prefix.isEmpty ? address : '$address/$prefix';
+  }
+  return _readString(value);
 }
 
 List<dynamic> _extractPeerItems(Object? decoded) {
@@ -149,9 +260,77 @@ bool _looksLikeMultiInstanceResult(List<dynamic> items) {
   });
 }
 
+Map<String, dynamic>? _readMap(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+  return null;
+}
+
+List<dynamic> _readList(Object? value) {
+  return value is List<dynamic> ? value : const <dynamic>[];
+}
+
 String _readString(Object? value) {
   final text = value?.toString().trim() ?? '';
   return text;
+}
+
+String _firstString(Iterable<Object?> values) {
+  for (final value in values) {
+    final text = _readString(value);
+    if (text.isNotEmpty) {
+      return text;
+    }
+  }
+  return '';
+}
+
+String _latencyText(Map<String, dynamic>? stats, Map<String, dynamic>? conn) {
+  final text = _firstString([
+    conn?['lat_ms'],
+    conn?['latMs'],
+    conn?['latency_ms'],
+    conn?['latencyMs'],
+    stats?['lat_ms'],
+    stats?['latMs'],
+    stats?['latency_ms'],
+    stats?['latencyMs'],
+  ]);
+  if (text.isNotEmpty) {
+    return text;
+  }
+  final latencyUs = num.tryParse(
+    _readString(stats?['latency_us'] ?? stats?['latencyUs']),
+  );
+  if (latencyUs == null) {
+    return '';
+  }
+  return (latencyUs / 1000).toStringAsFixed(2);
+}
+
+String _natTypeText(Map<String, dynamic>? stunInfo) {
+  return _firstString([
+    stunInfo?['udp_nat_type'],
+    stunInfo?['udpNatType'],
+    stunInfo?['nat_type'],
+    stunInfo?['natType'],
+  ]);
+}
+
+String _routeCostText(Map<String, dynamic> route) {
+  final cost = int.tryParse(_readString(route['cost']));
+  if (cost == null) {
+    return _readString(route['cost']);
+  }
+  return switch (cost) {
+    0 => 'Local',
+    1 => 'p2p',
+    _ => cost.toString(),
+  };
 }
 
 CorePeerFeatureFlag? _readFeatureFlag(Map<String, dynamic> json) {

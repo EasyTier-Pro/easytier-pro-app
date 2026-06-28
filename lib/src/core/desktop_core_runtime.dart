@@ -290,6 +290,7 @@ class DesktopCoreRuntime extends CorePlatformRuntime {
     );
 
     final process = await Process.start(cliExecutable, [
+      '-v',
       '-o',
       'json',
       '--instance-name',

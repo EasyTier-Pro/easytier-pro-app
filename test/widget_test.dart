@@ -3793,6 +3793,50 @@ void main() {
     expect(statuses['10.144.0.4']?.featureFlag, isNull);
   });
 
+  test('parses verbose peer route pairs and hides non credential peers', () {
+    final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
+      jsonEncode([
+        {
+          'route': {
+            'peer_id': 100,
+            'ipv4_addr': {'address': '10.144.0.2', 'network_length': 24},
+            'hostname': 'credential-peer',
+            'cost': 1,
+            'path_latency': 4,
+            'version': '2.6.4',
+            'feature_flag': {'is_credential_peer': true},
+          },
+          'peer': {
+            'peer_id': 100,
+            'conns': [
+              {
+                'stats': {'rx_bytes': 128, 'tx_bytes': 256, 'latency_us': 4200},
+                'tunnel': {'tunnel_type': 'tcp'},
+                'loss_rate': 0,
+              },
+            ],
+          },
+        },
+        {
+          'route': {
+            'peer_id': 101,
+            'ipv4_addr': {'address': '10.144.0.3', 'network_length': 24},
+            'hostname': 'admin-peer',
+            'cost': 1,
+            'feature_flag': {'is_credential_peer': false},
+          },
+          'peer': {'peer_id': 101},
+        },
+      ]),
+    );
+
+    expect(statuses.keys, <String>['10.144.0.2']);
+    expect(statuses['10.144.0.2']?.hostname, 'credential-peer');
+    expect(statuses['10.144.0.2']?.cost, 'p2p');
+    expect(statuses['10.144.0.2']?.latencyText, '4.20');
+    expect(statuses['10.144.0.2']?.tunnelProto, 'tcp');
+  });
+
   test('parses multi-instance peer status wrappers', () {
     final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
       jsonEncode([
