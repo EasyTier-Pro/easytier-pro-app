@@ -25,6 +25,7 @@ class HomeDashboardDesktopHeader extends StatelessWidget {
     required this.onSelectNetwork,
     required this.onShowDevices,
     this.showNetworkNavigation = true,
+    this.showDevicesNavigation = true,
     this.metrics = const <Widget>[],
     this.trailing,
     this.contentKey,
@@ -38,6 +39,7 @@ class HomeDashboardDesktopHeader extends StatelessWidget {
   final ValueChanged<String> onSelectNetwork;
   final VoidCallback onShowDevices;
   final bool showNetworkNavigation;
+  final bool showDevicesNavigation;
   final List<Widget> metrics;
   final Widget? trailing;
   final Key? contentKey;
@@ -74,15 +76,17 @@ class HomeDashboardDesktopHeader extends StatelessWidget {
               onSelectNetwork: onSelectNetwork,
             ),
         ],
-        const SizedBox(width: 6),
-        FButton(
-          variant: activeView == HomeDashboardView.devices
-              ? .secondary
-              : .ghost,
-          size: .sm,
-          onPress: onShowDevices,
-          child: const Text('设备'),
-        ),
+        if (showDevicesNavigation) ...[
+          const SizedBox(width: 6),
+          FButton(
+            variant: activeView == HomeDashboardView.devices
+                ? .secondary
+                : .ghost,
+            size: .sm,
+            onPress: onShowDevices,
+            child: const Text('设备'),
+          ),
+        ],
       ],
       metrics: metrics,
       trailing: trailing,
@@ -101,6 +105,7 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
     required this.onSelectNetwork,
     required this.onShowDevices,
     required this.onShowSettings,
+    this.showDevicesNavigation = true,
   });
 
   final HomeDashboardView activeView;
@@ -111,19 +116,21 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
   final ValueChanged<String> onSelectNetwork;
   final VoidCallback onShowDevices;
   final VoidCallback onShowSettings;
+  final bool showDevicesNavigation;
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = switch (activeView) {
-      HomeDashboardView.overview => 0,
-      HomeDashboardView.network => 1,
-      HomeDashboardView.devices => 2,
-      HomeDashboardView.settings => 3,
-    };
+    final views = <HomeDashboardView>[
+      HomeDashboardView.overview,
+      HomeDashboardView.network,
+      if (showDevicesNavigation) HomeDashboardView.devices,
+      HomeDashboardView.settings,
+    ];
+    final selectedIndex = views.indexOf(activeView);
 
     return HomeShellMobileNavigation(
       navigationKey: const ValueKey<String>('mobile-dashboard-navigation'),
-      index: selectedIndex,
+      index: selectedIndex < 0 ? 0 : selectedIndex,
       items: [
         HomeShellMobileNavigationItem(
           id: 'overview',
@@ -139,13 +146,14 @@ class HomeDashboardMobileNavigation extends StatelessWidget {
           label: '网络',
           onSelect: () => _handleNetworkNavigation(context),
         ),
-        HomeShellMobileNavigationItem(
-          id: 'devices',
-          key: const ValueKey<String>('mobile-nav-devices'),
-          icon: Icons.devices_other_outlined,
-          label: '设备',
-          onSelect: onShowDevices,
-        ),
+        if (showDevicesNavigation)
+          HomeShellMobileNavigationItem(
+            id: 'devices',
+            key: const ValueKey<String>('mobile-nav-devices'),
+            icon: Icons.devices_other_outlined,
+            label: '设备',
+            onSelect: onShowDevices,
+          ),
         HomeShellMobileNavigationItem(
           id: 'settings',
           key: const ValueKey<String>('mobile-nav-settings'),

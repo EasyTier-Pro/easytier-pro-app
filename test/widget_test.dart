@@ -211,7 +211,7 @@ void main() {
     expect(find.widgetWithText(FButton, '重新连接'), findsNothing);
     expect(find.widgetWithText(FButton, '复制诊断'), findsNothing);
     expect(find.widgetWithText(FButton, '首页'), findsOneWidget);
-    expect(find.widgetWithText(FButton, '设备'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '设备'), findsNothing);
     expect(find.widgetWithText(FButton, '网络'), findsNothing);
     expect(find.widgetWithText(FButton, '更换令牌'), findsNothing);
     expect(find.widgetWithText(FButton, '使用账号登录'), findsNothing);
