@@ -62,6 +62,8 @@ abstract class TraySupport {
   void setSettingsAction(TrayMenuAction? action);
 
   void setAppUpdateAction(TrayMenuAction? action);
+
+  void setExitAction(TrayMenuAction? action);
 }
 
 TraySupport createTraySupport({

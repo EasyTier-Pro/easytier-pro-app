@@ -140,6 +140,51 @@ class CoreLifecycleService {
     });
   }
 
+  Future<void> stopRuntimeForUserExit() {
+    return _enqueue(() async {
+      _invalidateEngineVersionChecks();
+      _stopEngineVersionCheckTimer();
+      _logger.info('core', 'User exit requested runtime stop');
+      final current = status.value;
+      status.value = CoreRunStatus(
+        phase: CoreRunPhase.repairing,
+        message: '正在停止后台服务...',
+        machineId: current.machineId,
+        details: current.details,
+      );
+      try {
+        await _runtime.stop();
+        _logger.info(
+          'core',
+          'Runtime stopped for user exit',
+          context: {'runtime': _runtime.runtimeType.toString()},
+        );
+        engineVersionStatus.value = CoreEngineVersionStatus.unknown;
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.stopped,
+          message: '后台服务已停止',
+          machineId: current.machineId,
+          details: current.details,
+        );
+      } catch (error) {
+        final message = _normalizeError(error);
+        _logger.error(
+          'core',
+          'Runtime stop for user exit failed',
+          context: {'error': message},
+        );
+        status.value = CoreRunStatus(
+          phase: CoreRunPhase.error,
+          message: '后台服务停止失败',
+          lastError: message,
+          machineId: current.machineId,
+          details: current.details,
+        );
+        rethrow;
+      }
+    });
+  }
+
   Future<void> repair() {
     return _enqueue(() async {
       final session = _session;

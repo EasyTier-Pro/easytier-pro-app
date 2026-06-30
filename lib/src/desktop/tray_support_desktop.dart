@@ -26,6 +26,7 @@ class _DesktopTraySupport extends TraySupport
   TrayEngineAction? _engineAction;
   TrayMenuAction? _settingsAction;
   TrayMenuAction? _appUpdateAction;
+  TrayMenuAction? _exitAction;
   final AppLogger _logger = AppLogger.instance;
   final WindowBehaviorPreferences _windowBehaviorPreferences;
 
@@ -142,6 +143,14 @@ class _DesktopTraySupport extends TraySupport
   }
 
   @override
+  void setExitAction(TrayMenuAction? action) {
+    _exitAction = action;
+    if (_initialized && _isDesktopPlatform) {
+      unawaited(_refreshContextMenu());
+    }
+  }
+
+  @override
   void onTrayIconMouseDown() {
     unawaited(showWindow());
   }
@@ -185,6 +194,7 @@ class _DesktopTraySupport extends TraySupport
     final engineAction = _engineAction;
     final settingsAction = _settingsAction;
     final appUpdateAction = _appUpdateAction;
+    final exitAction = _exitAction;
     final operationItems = <MenuItem>[
       if (connectionAction != null)
         _actionMenuItem(
@@ -230,11 +240,11 @@ class _DesktopTraySupport extends TraySupport
             ...operationItems,
           ],
           MenuItem.separator(),
-          MenuItem(
-            label: '退出',
-            onClick: (_) {
-              unawaited(quitApp());
-            },
+          _actionMenuItem(
+            label: exitAction?.label ?? '退出',
+            enabled: exitAction?.enabled ?? true,
+            onSelected: exitAction?.onSelected ?? () => quitApp(),
+            logMessage: 'Exit action clicked from tray',
           ),
         ],
       ),

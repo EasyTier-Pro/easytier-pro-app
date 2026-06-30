@@ -160,6 +160,96 @@ void main() {
       expect(service.status.value.phase, CoreRunPhase.running);
     });
 
+    test('user exit runtime stop preserves active session', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.stopRuntimeForUserExit();
+
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 1);
+      expect(service.status.value.phase, CoreRunPhase.stopped);
+      expect(service.status.value.message, '后台服务已停止');
+      expect(
+        service.engineVersionStatus.value.relation,
+        CoreEngineVersionRelation.unknown,
+      );
+
+      runtime.emit(
+        const CoreRuntimeEvent(type: CoreRuntimeEventTypes.configServerStopped),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(runtime.ensureRunningCount, 1);
+
+      await service.repair();
+      expect(authService.prepareBootstrapCount, 2);
+      expect(runtime.ensureRunningCount, 2);
+      expect(runtime.forceReinstallValues, [false, true]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
+
+    test('user exit runtime stop preserves token connection', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime();
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindTokenConnection(
+        TokenConnectionProfile(
+          bootstrapToken: 'device-token',
+          configServer: 'tcp://127.0.0.1:22020',
+          displayName: 'token profile',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await service.stopRuntimeForUserExit();
+      await service.repair();
+
+      expect(authService.prepareBootstrapCount, 0);
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 2);
+      expect(runtime.forceReinstallValues, [false, true]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
+
+    test('user exit runtime stop failure is reported and rethrown', () async {
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..stopError = StateError('stop failed');
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+
+      await expectLater(
+        service.stopRuntimeForUserExit(),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(runtime.stopCount, 1);
+      expect(runtime.ensureRunningCount, 1);
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(service.status.value.message, '后台服务停止失败');
+      expect(service.status.value.lastError, contains('stop failed'));
+
+      runtime.stopError = null;
+      await service.repair();
+      expect(runtime.ensureRunningCount, 2);
+      expect(service.status.value.phase, CoreRunPhase.running);
+    });
+
     test('token version check uses bootstrap defaults', () async {
       final authService = _LifecycleAuthService();
       final runtime = _LifecycleRuntime()
@@ -1368,6 +1458,7 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   var stopCount = 0;
   var installedVersion = '2.6.4';
   Object? ensureRunningError;
+  Object? stopError;
   Completer<void>? ensureRunningCompleter;
   var supportsElevationRepairValue = false;
   final forceReinstallValues = <bool>[];
@@ -1435,6 +1526,10 @@ class _LifecycleRuntime extends CorePlatformRuntime {
   @override
   Future<void> stop() async {
     stopCount++;
+    final error = stopError;
+    if (error != null) {
+      throw error;
+    }
     connected = false;
   }
 

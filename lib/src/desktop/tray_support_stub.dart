@@ -29,6 +29,9 @@ class _NoopTraySupport implements TraySupport {
 
   @override
   void setAppUpdateAction(TrayMenuAction? action) {}
+
+  @override
+  void setExitAction(TrayMenuAction? action) {}
 }
 
 TraySupport createPlatformTraySupport({

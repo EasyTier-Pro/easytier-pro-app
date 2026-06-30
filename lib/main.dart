@@ -33,6 +33,8 @@ const List<String> _appFontFamilyFallback = <String>[
 
 final FThemeData _foruiThemeData = _createForuiThemeData();
 
+enum _TrayExitChoice { appOnly, appAndService }
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppLogger.instance.initialize();
@@ -115,13 +117,17 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late final WindowBehaviorPreferences _windowBehaviorPreferences;
+  bool _trayExitDialogVisible = false;
+  bool _trayExitInProgress = false;
 
   @override
   void initState() {
     super.initState();
     _windowBehaviorPreferences =
         widget.windowBehaviorPreferences ?? WindowBehaviorPreferences.memory();
+    _registerTrayExitAction(widget.traySupport);
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
     unawaited(
       widget.traySupport.updateCoreStatus(
@@ -131,7 +137,17 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
+  void didUpdateWidget(MyApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.traySupport != widget.traySupport) {
+      oldWidget.traySupport.setExitAction(null);
+      _registerTrayExitAction(widget.traySupport);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.traySupport.setExitAction(null);
     widget.coreLifecycleService.status.removeListener(_onCoreStatusChanged);
     widget.appUpdateService.dispose();
     unawaited(widget.traySupport.dispose());
@@ -142,6 +158,122 @@ class _MyAppState extends State<MyApp> {
     unawaited(
       widget.traySupport.updateCoreStatus(
         widget.coreLifecycleService.status.value,
+      ),
+    );
+  }
+
+  void _registerTrayExitAction(TraySupport traySupport) {
+    traySupport.setExitAction(
+      TrayMenuAction(
+        label: '退出',
+        enabled: true,
+        onSelected: _handleTrayExitRequested,
+      ),
+    );
+  }
+
+  Future<void> _handleTrayExitRequested() async {
+    if (_trayExitDialogVisible || _trayExitInProgress) {
+      await widget.traySupport.showWindow();
+      return;
+    }
+
+    _trayExitDialogVisible = true;
+    try {
+      await widget.traySupport.showWindow();
+      if (!mounted) {
+        return;
+      }
+
+      final context = _navigatorKey.currentContext;
+      if (context == null || !context.mounted) {
+        return;
+      }
+      final choice = await _showTrayExitDialog(context);
+      if (!mounted || choice == null) {
+        return;
+      }
+
+      _trayExitInProgress = true;
+      try {
+        if (choice == _TrayExitChoice.appOnly) {
+          await widget.traySupport.quitApp();
+          return;
+        }
+
+        try {
+          await widget.coreLifecycleService.stopRuntimeForUserExit();
+        } catch (error, stack) {
+          AppLogger.instance.error(
+            'tray',
+            'Failed to stop runtime before tray exit',
+            context: {'error': error.toString(), 'stack': stack.toString()},
+          );
+          if (!mounted) {
+            return;
+          }
+          final toastContext = _navigatorKey.currentContext;
+          if (toastContext != null && toastContext.mounted) {
+            _showTrayExitFailureToast(toastContext, error);
+          }
+          return;
+        }
+        if (!mounted) {
+          return;
+        }
+        await widget.traySupport.quitApp();
+      } finally {
+        _trayExitInProgress = false;
+      }
+    } finally {
+      _trayExitDialogVisible = false;
+    }
+  }
+
+  Future<_TrayExitChoice?> _showTrayExitDialog(BuildContext context) {
+    return showFDialog<_TrayExitChoice>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext, _, animation) => ExcludeSemantics(
+        child: FDialog.adaptive(
+          animation: animation,
+          title: const Text('退出 EasyTier Pro'),
+          body: const Text('仅退出前台程序不会停止后台服务；退出后台服务会停止本机连接引擎，并可能取消开机自启。'),
+          actions: [
+            FButton(
+              onPress: () =>
+                  Navigator.of(dialogContext).pop(_TrayExitChoice.appOnly),
+              child: const Text('仅退出前台程序'),
+            ),
+            FButton(
+              variant: .destructive,
+              onPress: () => Navigator.of(
+                dialogContext,
+              ).pop(_TrayExitChoice.appAndService),
+              child: const Text('退出前台和后台服务'),
+            ),
+            FButton(
+              variant: .outline,
+              onPress: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTrayExitFailureToast(BuildContext context, Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '');
+    showRawFToast(
+      context: context,
+      variant: FToastVariant.destructive,
+      alignment: defaultTargetPlatform == TargetPlatform.android
+          ? FToastAlignment.topCenter
+          : null,
+      builder: (context, entry) => FToast(
+        variant: FToastVariant.destructive,
+        title: Text('后台服务停止失败：$message'),
       ),
     );
   }
@@ -163,6 +295,7 @@ class _MyAppState extends State<MyApp> {
         );
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'EasyTier Pro',
       scrollBehavior: const AppScrollBehavior(),
       builder: (context, child) {

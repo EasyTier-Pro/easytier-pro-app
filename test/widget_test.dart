@@ -3281,6 +3281,144 @@ void main() {
     expect(find.text('已开始检查更新'), findsOneWidget);
   });
 
+  testWidgets('tray exit action can cancel quit confirmation', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    final traySupport = _RecordingTraySupport();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: traySupport,
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(traySupport.exitAction?.label, '退出');
+    expect(traySupport.exitAction?.enabled, isTrue);
+
+    final exitFuture = traySupport.exitAction!.onSelected!();
+    await tester.pumpAndSettle();
+
+    expect(traySupport.showWindowCount, 1);
+    expect(find.text('退出 EasyTier Pro'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await exitFuture;
+
+    expect(traySupport.quitCount, 0);
+    expect(coreLifecycleService.userExitStopCount, 0);
+    expect(find.text('退出 EasyTier Pro'), findsNothing);
+  });
+
+  testWidgets('tray exit action can quit only foreground app', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    final traySupport = _RecordingTraySupport();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: traySupport,
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final exitFuture = traySupport.exitAction!.onSelected!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('仅退出前台程序'));
+    await tester.pumpAndSettle();
+    await exitFuture;
+
+    expect(traySupport.showWindowCount, 1);
+    expect(traySupport.quitCount, 1);
+    expect(traySupport.quitReasons, <AppExitReason>[AppExitReason.user]);
+    expect(coreLifecycleService.userExitStopCount, 0);
+  });
+
+  testWidgets('tray exit action stops background service before quitting', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final authService = _FakeAuthService();
+    final traySupport = _RecordingTraySupport();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: traySupport,
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final exitFuture = traySupport.exitAction!.onSelected!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('退出前台和后台服务'));
+    await tester.pumpAndSettle();
+    await exitFuture;
+
+    expect(coreLifecycleService.userExitStopCount, 1);
+    expect(traySupport.quitCount, 1);
+    expect(traySupport.quitReasons, <AppExitReason>[AppExitReason.user]);
+  });
+
+  testWidgets(
+    'tray exit action stays open when background service stop fails',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+
+      final authService = _FakeAuthService();
+      final traySupport = _RecordingTraySupport();
+      final coreLifecycleService = _NoopCoreLifecycleService(
+        authService: authService,
+        machineId: 'machine-1',
+        userExitStopError: StateError('service stop failed'),
+      );
+
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: traySupport,
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final exitFuture = traySupport.exitAction!.onSelected!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('退出前台和后台服务'));
+      await tester.pumpAndSettle();
+      await exitFuture;
+
+      expect(coreLifecycleService.userExitStopCount, 1);
+      expect(traySupport.quitCount, 0);
+      expect(find.textContaining('后台服务停止失败'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'mobile settings account card stays compact and does not scroll sideways',
     (WidgetTester tester) async {
@@ -5634,6 +5772,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
     this.peerSamples = const <Map<String, CorePeerStatus>>[],
     this.peerError,
+    this.userExitStopError,
   });
 
   final String? machineId;
@@ -5641,10 +5780,12 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
   final List<Map<String, CorePeerStatus>> peerSamples;
   final Object? peerError;
+  final Object? userExitStopError;
   TokenConnectionProfile? tokenProfile;
   int _trafficReadCount = 0;
   int repairCount = 0;
   int peerReadCount = 0;
+  int userExitStopCount = 0;
 
   @override
   Future<void> bindSession(AuthSession session) async {
@@ -5673,6 +5814,19 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   @override
   Future<void> onLogout() async {
     status.value = CoreRunStatus.signedOut;
+  }
+
+  @override
+  Future<void> stopRuntimeForUserExit() async {
+    userExitStopCount++;
+    final error = userExitStopError;
+    if (error != null) {
+      throw error;
+    }
+    status.value = const CoreRunStatus(
+      phase: CoreRunPhase.stopped,
+      message: '后台服务已停止',
+    );
   }
 
   @override
@@ -5740,7 +5894,10 @@ class _RecordingTraySupport implements TraySupport {
   TrayEngineAction? engineAction;
   TrayMenuAction? settingsAction;
   TrayMenuAction? appUpdateAction;
+  TrayMenuAction? exitAction;
   int showWindowCount = 0;
+  int quitCount = 0;
+  final List<AppExitReason> quitReasons = <AppExitReason>[];
 
   @override
   Future<void> dispose() async {}
@@ -5749,7 +5906,10 @@ class _RecordingTraySupport implements TraySupport {
   Future<void> initialize() async {}
 
   @override
-  Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {}
+  Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {
+    quitCount++;
+    quitReasons.add(reason);
+  }
 
   @override
   void setConnectionAction(TrayConnectionAction? action) {
@@ -5769,6 +5929,11 @@ class _RecordingTraySupport implements TraySupport {
   @override
   void setAppUpdateAction(TrayMenuAction? action) {
     appUpdateAction = action;
+  }
+
+  @override
+  void setExitAction(TrayMenuAction? action) {
+    exitAction = action;
   }
 
   @override
