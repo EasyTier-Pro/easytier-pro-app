@@ -169,6 +169,121 @@ void main() {
     }
   });
 
+  testWidgets('console action opens from login entry points', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    final launcher = _FakeUrlLauncherPlatform();
+    final authService = _LoginFlowAuthService();
+    UrlLauncherPlatform.instance = launcher;
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey<String>('auth-open-console')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launcher.launchCount, 1);
+
+      await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('token-connect-open-console')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launcher.launchCount, 2);
+    } finally {
+      UrlLauncherPlatform.instance = previousLauncher;
+    }
+  });
+
+  testWidgets('console action opens from workspace and token headers', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    final launcher = _FakeUrlLauncherPlatform();
+    UrlLauncherPlatform.instance = launcher;
+
+    try {
+      final workspaceAuthService = _FakeAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: workspaceAuthService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: workspaceAuthService,
+            machineId: 'machine-workspace',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('workspace-open-console')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launcher.launchCount, 1);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+
+      final tokenAuthService = _LoginFlowAuthService();
+      final tokenCoreLifecycleService = _NoopCoreLifecycleService(
+        authService: tokenAuthService,
+        machineId: 'machine-token',
+        trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+          {
+            'nt-token': CoreNetworkTrafficTotals(
+              runtimeNetworkName: 'nt-token',
+              downloadBytes: 1024,
+              uploadBytes: 2048,
+              sampledAt: DateTime.utc(2026, 1, 1),
+            ),
+          },
+        ],
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: tokenAuthService,
+          tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+          traySupport: createTraySupport(),
+          coreLifecycleService: tokenCoreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('token-connect-input')),
+        'device-token',
+      );
+      final connectButton = find.widgetWithText(FButton, '连接');
+      await tester.ensureVisible(connectButton);
+      await tester.tap(connectButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('token-open-console')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launcher.launchCount, 2);
+    } finally {
+      UrlLauncherPlatform.instance = previousLauncher;
+    }
+  });
+
   testWidgets('token connection opens separate token home', (
     WidgetTester tester,
   ) async {

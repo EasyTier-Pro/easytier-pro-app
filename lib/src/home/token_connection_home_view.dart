@@ -6,6 +6,7 @@ import 'package:forui/forui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../auth/console_links.dart';
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
 import '../core/core_lifecycle_service.dart';
@@ -21,10 +22,7 @@ import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
 import 'network_traffic_sparkline.dart';
-
-const _tokenConsoleNetworksFragment = '/networks';
-const _tokenProductionApiConsoleHost = 'api.console.easytier.net';
-const _tokenProductionWebConsoleHost = 'console.easytier.net';
+import 'open_console_button.dart';
 
 class TokenConnectionHomeView extends StatefulWidget {
   const TokenConnectionHomeView({
@@ -408,10 +406,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
   }
 
   Future<void> _openConsoleNetworks() async {
-    await launchUrl(
-      _tokenConsoleNetworksUri(),
-      mode: LaunchMode.externalApplication,
-    );
+    await launchUrl(consoleNetworksUri(), mode: LaunchMode.externalApplication);
   }
 
   void _showOverview() {
@@ -551,6 +546,9 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
         suffixes: [
           HomeCoreStatusDot(
             statusListenable: widget.coreLifecycleService.status,
+          ),
+          const HomeOpenConsoleButton(
+            buttonKey: ValueKey<String>('token-mobile-open-console'),
           ),
         ],
       ),
@@ -1461,6 +1459,10 @@ class _TokenHeaderActions extends StatelessWidget {
       children: [
         _TokenPhasePill(status: status),
         const SizedBox(width: 8),
+        const HomeOpenConsoleButton(
+          buttonKey: ValueKey<String>('token-open-console'),
+        ),
+        const SizedBox(width: 4),
         FTooltip(
           tipBuilder: (context, controller) => const Text('设置'),
           child: FButton(
@@ -1681,24 +1683,4 @@ String _formatBytes(num bytes) {
   }
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
-}
-
-Uri _tokenConsoleNetworksUri() {
-  final base = Uri.tryParse(defaultConsoleBaseUrl.trim());
-  if (base == null || base.scheme.trim().isEmpty || base.host.trim().isEmpty) {
-    return Uri.https(
-      _tokenProductionWebConsoleHost,
-      '/',
-    ).replace(fragment: _tokenConsoleNetworksFragment);
-  }
-
-  final host = base.host == _tokenProductionApiConsoleHost
-      ? _tokenProductionWebConsoleHost
-      : base.host;
-  return base.replace(
-    host: host,
-    path: '/',
-    query: null,
-    fragment: _tokenConsoleNetworksFragment,
-  );
 }

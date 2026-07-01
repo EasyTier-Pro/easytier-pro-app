@@ -68,12 +68,21 @@ class _DashboardHeader extends StatelessWidget {
           label: '引擎',
         ),
       ],
-      trailing: _UserMenu(
-        userName: trimmedName,
-        workspaceName: workspaceName,
-        initial: initial,
-        onShowSettings: onShowSettings,
-        onLogout: onLogout,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const HomeOpenConsoleButton(
+            buttonKey: ValueKey<String>('workspace-open-console'),
+          ),
+          const SizedBox(width: 4),
+          _UserMenu(
+            userName: trimmedName,
+            workspaceName: workspaceName,
+            initial: initial,
+            onShowSettings: onShowSettings,
+            onLogout: onLogout,
+          ),
+        ],
       ),
     );
   }
@@ -104,6 +113,9 @@ class _MobileDashboardHeader extends StatelessWidget {
       subtitle: workspaceName,
       suffixes: [
         HomeCoreStatusDot(statusListenable: coreStatusListenable),
+        const HomeOpenConsoleButton(
+          buttonKey: ValueKey<String>('workspace-mobile-open-console'),
+        ),
         _UserMenu(
           userName: trimmedName,
           workspaceName: workspaceName,

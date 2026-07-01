@@ -26,6 +26,7 @@ import 'network_detail_layout.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
 import 'network_traffic_sparkline.dart';
+import 'open_console_button.dart';
 
 part 'workspace_home_models.dart';
 part 'workspace_home_data_actions.dart';
