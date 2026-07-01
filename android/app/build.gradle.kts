@@ -50,18 +50,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk {
-            abiFilters += releaseAbiFilters
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = releaseBuildRequested
-            reset()
-            include(*releaseAbiFilters.toTypedArray())
-            isUniversalApk = false
-        }
     }
 
     signingConfigs {

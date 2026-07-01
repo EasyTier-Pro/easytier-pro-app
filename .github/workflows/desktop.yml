@@ -15,6 +15,7 @@ permissions:
 env:
   INSTALLER_REPOSITORY: EasyTier-Pro/installer
   INSTALLER_REF: main
+  ANDROID_NDK_VERSION: 28.2.13676358
   APPCAST_GITEE_BASE_URL: https://gitee.com/EasyTier-Pro/easytier-pro-app/releases/download/latest
   APPCAST_OSS_BASE_URL: https://easytier.net/releases
   APPCAST_GITHUB_BASE_URL: https://github.com/EasyTier-Pro/easytier-pro-app/releases/latest/download
@@ -364,6 +365,72 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  android:
+    name: Android signed APK
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Write Android release signing files
+        shell: pwsh
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: ./scripts/write_android_release_signing.ps1
+
+      - name: Verify Android release inputs
+        shell: pwsh
+        run: ./scripts/verify_android_release_inputs.ps1 -RequireSigning
+
+      - name: Build Android signed APK
+        run: flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
+
+      - name: Package Android signed APKs
+        shell: pwsh
+        run: ./scripts/package_android_release_apks.ps1
+
+      - name: Upload Android arm64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-android-arm64-v8a
+          path: dist/easytier-pro-android-arm64-v8a.apk
+          if-no-files-found: error
+
+      - name: Upload Android x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-pro-android-x86_64
+          path: dist/easytier-pro-android-x86_64.apk
+          if-no-files-found: error
+
   appcast:
     name: Appcast feed XML
     if: github.event_name != 'pull_request'
@@ -423,6 +490,7 @@ jobs:
     needs:
       - windows
       - macos
+      - android
       - appcast
     permissions:
       contents: write
@@ -475,6 +543,8 @@ jobs:
             "easytier-pro-macos-arm64.zip"
             "easytier-pro-macos-x64.dmg"
             "easytier-pro-macos-x64.zip"
+            "easytier-pro-android-arm64-v8a.apk"
+            "easytier-pro-android-x86_64.apk"
           )
 
           for pattern in "${required_patterns[@]}"; do
