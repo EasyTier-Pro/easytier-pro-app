@@ -92,6 +92,10 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,EasyTier Pro}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /T /F >NUL 2>&1 || exit /B 0"; Flags: runhidden waituntilterminated; RunOnceId: "StopEasyTierProApp"
+Filename: "{app}\resources\easytier-pro-installer.exe"; Parameters: "uninstall"; StatusMsg: "Stopping EasyTier Pro background service..."; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopEasyTierProService"
 "@
 
 Set-Content -Path $issPath -Value $iss -Encoding UTF8
