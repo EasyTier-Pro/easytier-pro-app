@@ -388,7 +388,7 @@ void main() {
     expect(find.textContaining('正在读取网络实例'), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('token-header-traffic-strip')),
-      findsNothing,
+      findsOneWidget,
     );
     expect(find.text('网络'), findsOneWidget);
     expect(find.text('只读'), findsOneWidget);
@@ -549,6 +549,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('已连接'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('token-header-traffic-strip')),
+      findsOneWidget,
+    );
+    expect(find.text('1.0K/s'), findsOneWidget);
+    expect(find.text('2.0K/s'), findsOneWidget);
     expect(find.textContaining('1.00 KiB/s'), findsNothing);
     expect(find.textContaining('2.00 KiB/s'), findsNothing);
   });

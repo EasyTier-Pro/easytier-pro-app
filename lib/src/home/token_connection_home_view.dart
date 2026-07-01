@@ -658,6 +658,14 @@ class _TokenOverview extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = traffic.entries.toList()
       ..sort((left, right) => left.key.compareTo(right.key));
+    var totalDownloadRate = 0.0;
+    var totalUploadRate = 0.0;
+    var hasTrafficStats = false;
+    for (final entry in entries) {
+      hasTrafficStats = true;
+      totalDownloadRate += entry.value.downloadBytesPerSecond ?? 0;
+      totalUploadRate += entry.value.uploadBytesPerSecond ?? 0;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -665,6 +673,9 @@ class _TokenOverview extends StatelessWidget {
         _TokenStatusSummary(
           status: status,
           instanceCount: running ? entries.length : 0,
+          downloadRate: totalDownloadRate,
+          uploadRate: totalUploadRate,
+          hasTrafficStats: hasTrafficStats,
         ),
         const SizedBox(height: 24),
         _TokenNetworkInstanceList(
@@ -685,10 +696,16 @@ class _TokenStatusSummary extends StatelessWidget {
   const _TokenStatusSummary({
     required this.status,
     required this.instanceCount,
+    required this.downloadRate,
+    required this.uploadRate,
+    required this.hasTrafficStats,
   });
 
   final CoreRunStatus status;
   final int instanceCount;
+  final double downloadRate;
+  final double uploadRate;
+  final bool hasTrafficStats;
 
   @override
   Widget build(BuildContext context) {
@@ -819,6 +836,14 @@ class _TokenStatusSummary extends StatelessWidget {
       ],
     );
 
+    final trafficStrip = running && hasTrafficStats && instanceCount > 0
+        ? HomeTrafficRateStrip(
+            stripKey: const ValueKey<String>('token-header-traffic-strip'),
+            downloadRate: downloadRate,
+            uploadRate: uploadRate,
+          )
+        : null;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -833,7 +858,30 @@ class _TokenStatusSummary extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(children: [Expanded(child: statusBody)]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (trafficStrip != null && constraints.maxWidth < 240) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                statusBody,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: trafficStrip),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: statusBody),
+              if (trafficStrip != null) ...[
+                const SizedBox(width: 10),
+                trafficStrip,
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 }

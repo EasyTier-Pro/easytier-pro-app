@@ -312,15 +312,17 @@ class HomeTrafficRateStrip extends StatelessWidget {
     super.key,
     required this.downloadRate,
     required this.uploadRate,
+    this.stripKey = const ValueKey<String>('status-traffic-strip'),
   });
 
   final double downloadRate;
   final double uploadRate;
+  final Key stripKey;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      key: const ValueKey<String>('status-traffic-strip'),
+      key: stripKey,
       width: 128,
       height: 26,
       child: DecoratedBox(
