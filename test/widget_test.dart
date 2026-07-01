@@ -458,6 +458,37 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
+  testWidgets('token mobile header does not repeat default display name', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+    final authService = _LoginFlowAuthService();
+    final tokenStore = TokenConnectionProfileStore.memory();
+    await tokenStore.save(
+      TokenConnectionProfile.fromInput(
+        input: 'device-token',
+        defaultConfigServer: 'tcp://et-web.console.easytier.net:22020',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: tokenStore,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-token',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('EasyTier Pro'), findsOneWidget);
+    expect(find.text('设备令牌连接'), findsOneWidget);
+    expect(find.text('设备令牌连接 · 设备令牌连接'), findsNothing);
+  });
+
   testWidgets('token connection without networks shows console guidance', (
     WidgetTester tester,
   ) async {

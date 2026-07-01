@@ -542,7 +542,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
       ),
       mobileHeader: HomeShellMobileHeader(
         title: 'EasyTier Pro',
-        subtitle: '设备令牌连接 · ${widget.profile.effectiveDisplayName}',
+        subtitle: _tokenHomeHeaderSubtitle(widget.profile),
         suffixes: [
           HomeCoreStatusDot(
             statusListenable: widget.coreLifecycleService.status,
@@ -1608,6 +1608,14 @@ String _tokenRuntimeDisplayName(String runtimeName) {
     }
   }
   return trimmed;
+}
+
+String _tokenHomeHeaderSubtitle(TokenConnectionProfile profile) {
+  final displayName = profile.displayName.trim();
+  if (displayName.isEmpty || displayName == '设备令牌连接') {
+    return '设备令牌连接';
+  }
+  return '设备令牌连接 · $displayName';
 }
 
 bool _looksLikeUuid(String value) {
