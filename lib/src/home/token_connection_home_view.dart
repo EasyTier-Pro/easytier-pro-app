@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/console_auth_service.dart';
 import '../core/core_peer_status.dart';
@@ -19,6 +20,10 @@ import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
+
+const _tokenConsoleNetworksFragment = '/networks';
+const _tokenProductionApiConsoleHost = 'api.console.easytier.net';
+const _tokenProductionWebConsoleHost = 'console.easytier.net';
 
 class TokenConnectionHomeView extends StatefulWidget {
   const TokenConnectionHomeView({
@@ -373,6 +378,13 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
     showHomeSettingsToast(context, '已复制到剪贴板');
   }
 
+  Future<void> _openConsoleNetworks() async {
+    await launchUrl(
+      _tokenConsoleNetworksUri(),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
   void _showOverview() {
     if (_activeView == _TokenHomeView.overview) {
       return;
@@ -553,6 +565,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
           trafficError: _trafficError,
           running: status.isRunning,
           onOpenInstance: _openNetworkInstance,
+          onOpenConsole: () => unawaited(_openConsoleNetworks()),
+          onRetry: () => unawaited(_pollTraffic()),
         ),
         _TokenHomeView.network => _TokenNetworkInstanceDetailPage(
           runtimeName: selectedRuntimeName,
@@ -570,6 +584,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
           scrollDeltaCoordinator: _coordinateNetworkDetailScrollDelta,
           onStaticContentShown: _handleNetworkDetailStaticViewportShown,
           onRefresh: () => unawaited(_pollSelectedPeerStatuses()),
+          onOpenConsole: () => unawaited(_openConsoleNetworks()),
+          onRetry: () => unawaited(_pollTraffic()),
         ),
         _TokenHomeView.settings => _TokenSettingsPanel(
           profile: widget.profile,
@@ -610,6 +626,8 @@ class _TokenOverview extends StatelessWidget {
     required this.trafficError,
     required this.running,
     required this.onOpenInstance,
+    required this.onOpenConsole,
+    required this.onRetry,
   });
 
   final CoreRunStatus status;
@@ -617,6 +635,8 @@ class _TokenOverview extends StatelessWidget {
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
+  final VoidCallback onOpenConsole;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -645,6 +665,8 @@ class _TokenOverview extends StatelessWidget {
           trafficError: trafficError,
           running: running,
           onOpenInstance: onOpenInstance,
+          onOpenConsole: onOpenConsole,
+          onRetry: onRetry,
         ),
       ],
     );
@@ -1064,12 +1086,16 @@ class _TokenNetworkInstanceList extends StatelessWidget {
     required this.trafficError,
     required this.running,
     required this.onOpenInstance,
+    required this.onOpenConsole,
+    required this.onRetry,
   });
 
   final List<MapEntry<String, _TokenTrafficSnapshot>> entries;
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
+  final VoidCallback onOpenConsole;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1114,9 +1140,15 @@ class _TokenNetworkInstanceList extends StatelessWidget {
         if (!running)
           const _TokenNetworkInstanceEmpty(message: '连接建立后会显示本机网络实例。')
         else if (trafficError != null && trafficError!.isNotEmpty)
-          _TokenNetworkInstanceEmpty(message: trafficError!)
+          _TokenNetworkSetupGuide(
+            onOpenConsole: onOpenConsole,
+            onRetry: onRetry,
+          )
         else if (entries.isEmpty)
-          const _TokenNetworkInstanceEmpty(message: '暂无网络实例')
+          _TokenNetworkSetupGuide(
+            onOpenConsole: onOpenConsole,
+            onRetry: onRetry,
+          )
         else
           Column(
             children: [
@@ -1145,6 +1177,8 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
     required this.scrollDeltaCoordinator,
     required this.onStaticContentShown,
     required this.onRefresh,
+    required this.onOpenConsole,
+    required this.onRetry,
   });
 
   final String? runtimeName;
@@ -1155,6 +1189,8 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
   final AppScrollDeltaCoordinator scrollDeltaCoordinator;
   final VoidCallback onStaticContentShown;
   final VoidCallback onRefresh;
+  final VoidCallback onOpenConsole;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1206,10 +1242,11 @@ class _TokenNetworkInstanceDetailPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          const Expanded(
+          Expanded(
             child: Center(
-              child: _TokenNetworkInstanceEmpty(
-                message: '暂无网络实例，请在控制台将本设备挂载到网络。',
+              child: _TokenNetworkSetupGuide(
+                onOpenConsole: onOpenConsole,
+                onRetry: onRetry,
               ),
             ),
           ),
@@ -1265,6 +1302,98 @@ class _TokenReadonlyHint extends StatelessWidget {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: const Color(0xFF64748B),
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenNetworkSetupGuide extends StatelessWidget {
+  const _TokenNetworkSetupGuide({
+    required this.onOpenConsole,
+    required this.onRetry,
+  });
+
+  final VoidCallback onOpenConsole;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FCard.raw(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: const Icon(
+                    Icons.add_link,
+                    size: 18,
+                    color: Color(0xFF16A34A),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '还没有可用网络',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '请在控制台创建网络，并在该网络中挂载当前设备。完成后回到 EasyTier Pro，应用会自动刷新网络实例。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF475569),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FButton(
+                  onPress: onOpenConsole,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.open_in_new, size: 16),
+                      SizedBox(width: 8),
+                      Text('打开控制台'),
+                    ],
+                  ),
+                ),
+                FButton(
+                  variant: .outline,
+                  onPress: onRetry,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, size: 16),
+                      SizedBox(width: 8),
+                      Text('重新读取'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -1567,4 +1696,24 @@ String _formatBytes(num bytes) {
   }
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
+}
+
+Uri _tokenConsoleNetworksUri() {
+  final base = Uri.tryParse(defaultConsoleBaseUrl.trim());
+  if (base == null || base.scheme.trim().isEmpty || base.host.trim().isEmpty) {
+    return Uri.https(
+      _tokenProductionWebConsoleHost,
+      '/',
+    ).replace(fragment: _tokenConsoleNetworksFragment);
+  }
+
+  final host = base.host == _tokenProductionApiConsoleHost
+      ? _tokenProductionWebConsoleHost
+      : base.host;
+  return base.replace(
+    host: host,
+    path: '/',
+    query: null,
+    fragment: _tokenConsoleNetworksFragment,
+  );
 }

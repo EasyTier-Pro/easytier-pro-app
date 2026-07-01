@@ -333,6 +333,57 @@ void main() {
     expect(find.widgetWithText(FButton, '断开连接'), findsOneWidget);
   });
 
+  testWidgets('token connection without networks shows console guidance', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    final launcher = _FakeUrlLauncherPlatform();
+    UrlLauncherPlatform.instance = launcher;
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+      trafficError: StateError('Instance Not Found RPC ERROR'),
+    );
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+          traySupport: createTraySupport(),
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('token-connect-input')),
+        'device-token',
+      );
+      final connectButton = find.widgetWithText(FButton, '连接');
+      await tester.ensureVisible(connectButton);
+      await tester.tap(connectButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('还没有可用网络'), findsOneWidget);
+      expect(find.textContaining('创建网络'), findsOneWidget);
+      expect(find.textContaining('挂载当前设备'), findsOneWidget);
+      expect(find.text('打开控制台'), findsOneWidget);
+      expect(find.text('重新读取'), findsOneWidget);
+      expect(find.textContaining('Instance Not Found'), findsNothing);
+
+      await tester.tap(find.widgetWithText(FButton, '打开控制台'));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(launcher.launchCount, 1);
+    } finally {
+      UrlLauncherPlatform.instance = previousLauncher;
+    }
+  });
+
   testWidgets('token settings reuses app-level settings sections', (
     WidgetTester tester,
   ) async {
@@ -5846,6 +5897,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     required this.machineId,
     this.instanceRunning = true,
     this.trafficSamples = const <Map<String, CoreNetworkTrafficTotals>>[],
+    this.trafficError,
     this.peerSamples = const <Map<String, CorePeerStatus>>[],
     this.peerError,
     this.userExitStopError,
@@ -5854,6 +5906,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   final String? machineId;
   final bool instanceRunning;
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
+  final Object? trafficError;
   final List<Map<String, CorePeerStatus>> peerSamples;
   final Object? peerError;
   final Object? userExitStopError;
@@ -5918,6 +5971,10 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   @override
   Future<Map<String, CoreNetworkTrafficTotals>>
   readNetworkTrafficTotals() async {
+    final error = trafficError;
+    if (error != null) {
+      throw error;
+    }
     if (trafficSamples.isEmpty) {
       return const <String, CoreNetworkTrafficTotals>{};
     }
