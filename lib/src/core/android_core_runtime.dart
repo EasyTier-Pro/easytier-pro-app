@@ -270,7 +270,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     final statuses = <String, CorePeerStatus>{};
     for (final peer in instance.peers) {
       final status = CorePeerStatus.fromJson(_normalizeAndroidPeer(peer));
-      if (status.ipv4.isNotEmpty && status.isCredentialPeer) {
+      if (status.ipv4.isNotEmpty &&
+          (status.isLocal || status.isCredentialPeer)) {
         statuses[status.ipv4] = status;
       }
     }

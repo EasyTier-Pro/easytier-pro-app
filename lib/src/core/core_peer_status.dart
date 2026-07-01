@@ -83,7 +83,7 @@ Map<String, CorePeerStatus> parseCorePeerStatusesFromJson(String output) {
       continue;
     }
     final status = CorePeerStatus.fromJson(_peerStatusJsonFromItem(item));
-    if (status.ipv4.isEmpty || !status.isCredentialPeer) {
+    if (status.ipv4.isEmpty || (!status.isLocal && !status.isCredentialPeer)) {
       continue;
     }
     statuses[status.ipv4] = status;
@@ -101,7 +101,7 @@ CorePeerStatus? parseCoreLocalPeerStatusFromNodeInfoJson(String output) {
   final status = CorePeerStatus.fromJson(
     _localPeerStatusJsonFromNodeInfo(item),
   );
-  if (status.ipv4.isEmpty || !status.isCredentialPeer) {
+  if (status.ipv4.isEmpty) {
     return null;
   }
   return status;
@@ -112,7 +112,7 @@ Map<String, CorePeerStatus> filterCredentialPeerStatuses(
 ) {
   final visible = <String, CorePeerStatus>{};
   for (final entry in statuses.entries) {
-    if (entry.value.isCredentialPeer) {
+    if (entry.value.isLocal || entry.value.isCredentialPeer) {
       visible[entry.key] = entry.value;
     }
   }

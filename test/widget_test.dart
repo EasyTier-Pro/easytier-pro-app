@@ -201,6 +201,7 @@ void main() {
             natType: 'cone',
             peerId: 'peer-token',
             version: 'v2.6.4',
+            featureFlag: CorePeerFeatureFlag(isCredentialPeer: false),
           ),
           '10.147.0.254': CorePeerStatus(
             cidr: '10.147.0.254/24',
@@ -309,6 +310,7 @@ void main() {
     expect(find.text('设备令牌连接 · 只读实例'), findsOneWidget);
     expect(find.textContaining('节点'), findsWidgets);
     expect(find.text('token-peer'), findsOneWidget);
+    expect(find.textContaining('本机'), findsOneWidget);
     expect(find.text('non-user-peer'), findsNothing);
     expect(find.textContaining('10.147.0.2'), findsOneWidget);
     expect(coreLifecycleService.peerReadCount, greaterThan(0));
@@ -4229,13 +4231,23 @@ void main() {
           'feature_flag': {'is_credential_peer': false},
         },
         {'cidr': '10.144.0.4/24', 'hostname': 'legacy-peer'},
+        {
+          'cidr': '10.144.0.5/24',
+          'hostname': 'local-peer',
+          'cost': 'Local',
+          'feature_flag': {'is_credential_peer': false},
+        },
       ]),
     );
 
-    expect(statuses.keys, containsAll(<String>['10.144.0.2', '10.144.0.4']));
+    expect(
+      statuses.keys,
+      containsAll(<String>['10.144.0.2', '10.144.0.4', '10.144.0.5']),
+    );
     expect(statuses.keys, isNot(contains('10.144.0.3')));
     expect(statuses['10.144.0.2']?.featureFlag?.isCredentialPeer, isTrue);
     expect(statuses['10.144.0.4']?.featureFlag, isNull);
+    expect(statuses['10.144.0.5']?.isLocal, isTrue);
   });
 
   test('parses verbose peer route pairs and hides non credential peers', () {
@@ -4300,6 +4312,7 @@ void main() {
         },
         'hostname': 'local-peer',
         'version': '2.6.4',
+        'feature_flag': {'is_credential_peer': false},
       }),
     );
 
