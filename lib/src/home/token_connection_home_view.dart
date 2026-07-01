@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:math' as math;
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
@@ -22,6 +20,7 @@ import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
+import 'network_traffic_sparkline.dart';
 
 const _tokenConsoleNetworksFragment = '/networks';
 const _tokenProductionApiConsoleHost = 'api.console.easytier.net';
@@ -69,8 +68,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
       const <String, CoreNetworkTrafficTotals>{};
   Map<String, _TokenTrafficSnapshot> _traffic =
       const <String, _TokenTrafficSnapshot>{};
-  final Map<String, List<_TokenTrafficHistoryPoint>> _trafficHistories =
-      <String, List<_TokenTrafficHistoryPoint>>{};
+  final Map<String, List<HomeTrafficHistoryPoint>> _trafficHistories =
+      <String, List<HomeTrafficHistoryPoint>>{};
   Map<String, Map<String, CorePeerStatus>> _peerStatusesByRuntime =
       const <String, Map<String, CorePeerStatus>>{};
   Map<String, String> _peerStatusErrorsByRuntime = const <String, String>{};
@@ -323,7 +322,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
         return;
       }
       final next = <String, _TokenTrafficSnapshot>{};
-      final nextHistories = Map<String, List<_TokenTrafficHistoryPoint>>.from(
+      final nextHistories = Map<String, List<HomeTrafficHistoryPoint>>.from(
         _trafficHistories,
       );
       for (final entry in totals.entries) {
@@ -334,10 +333,10 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
         next[entry.key] = snapshot;
 
         final history =
-            List<_TokenTrafficHistoryPoint>.from(
-              nextHistories[entry.key] ?? const <_TokenTrafficHistoryPoint>[],
+            List<HomeTrafficHistoryPoint>.from(
+              nextHistories[entry.key] ?? const <HomeTrafficHistoryPoint>[],
             )..add(
-              _TokenTrafficHistoryPoint(
+              HomeTrafficHistoryPoint(
                 timestamp: DateTime.now(),
                 downloadRate: snapshot.downloadBytesPerSecond ?? 0,
                 uploadRate: snapshot.uploadBytesPerSecond ?? 0,
@@ -649,7 +648,7 @@ class _TokenOverview extends StatelessWidget {
 
   final CoreRunStatus status;
   final Map<String, _TokenTrafficSnapshot> traffic;
-  final Map<String, List<_TokenTrafficHistoryPoint>> trafficHistories;
+  final Map<String, List<HomeTrafficHistoryPoint>> trafficHistories;
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
@@ -1065,7 +1064,7 @@ class _TokenNetworkInstanceList extends StatelessWidget {
   });
 
   final List<MapEntry<String, _TokenTrafficSnapshot>> entries;
-  final Map<String, List<_TokenTrafficHistoryPoint>> trafficHistories;
+  final Map<String, List<HomeTrafficHistoryPoint>> trafficHistories;
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
@@ -1134,7 +1133,7 @@ class _TokenNetworkInstanceList extends StatelessWidget {
                   snapshot: entries[i].value,
                   history:
                       trafficHistories[entries[i].key] ??
-                      const <_TokenTrafficHistoryPoint>[],
+                      const <HomeTrafficHistoryPoint>[],
                   onOpen: () => onOpenInstance(entries[i].key),
                 ),
               ],
@@ -1404,7 +1403,7 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
 
   final String runtimeName;
   final _TokenTrafficSnapshot snapshot;
-  final List<_TokenTrafficHistoryPoint> history;
+  final List<HomeTrafficHistoryPoint> history;
   final VoidCallback onOpen;
 
   @override
@@ -1432,7 +1431,7 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
       ],
       trailingVisualization: history.isEmpty
           ? null
-          : _TokenTrafficSparkline(
+          : HomeNetworkTrafficSparkline(
               key: ValueKey<String>('token-network-traffic-$runtimeName'),
               history: history,
             ),
@@ -1440,26 +1439,6 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
       switchLoading: false,
       switchTooltip: '设备令牌连接由控制台下发，客户端仅展示状态。',
       onOpen: onOpen,
-    );
-  }
-}
-
-class _TokenTrafficSparkline extends StatelessWidget {
-  const _TokenTrafficSparkline({super.key, required this.history});
-
-  final List<_TokenTrafficHistoryPoint> history;
-
-  @override
-  Widget build(BuildContext context) {
-    return ExcludeSemantics(
-      child: SizedBox(
-        width: 100,
-        height: 40,
-        child: LineChart(
-          _tokenTrafficSparklineChartData(history),
-          duration: Duration.zero,
-        ),
-      ),
     );
   }
 }
@@ -1537,18 +1516,6 @@ class _TokenMutedText extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TokenTrafficHistoryPoint {
-  const _TokenTrafficHistoryPoint({
-    required this.timestamp,
-    required this.downloadRate,
-    required this.uploadRate,
-  });
-
-  final DateTime timestamp;
-  final double downloadRate;
-  final double uploadRate;
 }
 
 class _TokenTrafficSnapshot {
@@ -1714,83 +1681,6 @@ String _formatBytes(num bytes) {
   }
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
-}
-
-LineChartData _tokenTrafficSparklineChartData(
-  List<_TokenTrafficHistoryPoint> history,
-) {
-  final visibleHistory = history.length <= 30
-      ? history
-      : history.sublist(history.length - 30);
-  var maxRate = 0.0;
-  for (final point in visibleHistory) {
-    maxRate = math.max(maxRate, point.downloadRate);
-    maxRate = math.max(maxRate, point.uploadRate);
-  }
-  final yMax = _tokenTrafficSparklineYMax(maxRate);
-  final xOffset = 30 - visibleHistory.length;
-
-  List<FlSpot> spotsFor(double Function(_TokenTrafficHistoryPoint) rateFor) {
-    return [
-      for (var i = 0; i < visibleHistory.length; i++)
-        FlSpot((xOffset + i).toDouble(), rateFor(visibleHistory[i])),
-    ];
-  }
-
-  return LineChartData(
-    minX: 0,
-    maxX: 29,
-    minY: 0,
-    maxY: yMax,
-    lineTouchData: const LineTouchData(enabled: false),
-    gridData: const FlGridData(show: false),
-    titlesData: const FlTitlesData(show: false),
-    borderData: FlBorderData(show: false),
-    lineBarsData: [
-      _tokenTrafficLine(
-        spotsFor((point) => point.downloadRate),
-        const Color(0xFF16A34A),
-      ),
-      _tokenTrafficLine(
-        spotsFor((point) => point.uploadRate),
-        const Color(0xFF2563EB),
-      ),
-    ],
-  );
-}
-
-LineChartBarData _tokenTrafficLine(List<FlSpot> spots, Color color) {
-  return LineChartBarData(
-    spots: spots,
-    isCurved: false,
-    barWidth: 1.8,
-    color: color,
-    isStrokeCapRound: true,
-    dotData: const FlDotData(show: false),
-    belowBarData: BarAreaData(show: false),
-  );
-}
-
-double _tokenTrafficSparklineYMax(double maxRate) {
-  const scales = <double>[
-    1024,
-    10 * 1024,
-    100 * 1024,
-    1024 * 1024,
-    10 * 1024 * 1024,
-    100 * 1024 * 1024,
-    1024 * 1024 * 1024,
-    10 * 1024 * 1024 * 1024,
-    100 * 1024 * 1024 * 1024,
-    1024 * 1024 * 1024 * 1024,
-  ];
-
-  for (final scale in scales) {
-    if (maxRate <= scale) {
-      return scale;
-    }
-  }
-  return math.pow(1024, 5).toDouble();
 }
 
 Uri _tokenConsoleNetworksUri() {

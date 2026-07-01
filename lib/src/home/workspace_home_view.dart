@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +25,7 @@ import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
+import 'network_traffic_sparkline.dart';
 
 part 'workspace_home_models.dart';
 part 'workspace_home_data_actions.dart';
