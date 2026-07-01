@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
 import '../shared/selectable_text_hit_boundary.dart';
+import 'home_shell.dart';
+
+bool homeNetworkSwitchTileShowsInlineMetrics(BuildContext context) {
+  return MediaQuery.sizeOf(context).width >= homeShellMobileBreakpoint;
+}
 
 class HomeNetworkSwitchTile extends StatelessWidget {
   const HomeNetworkSwitchTile({

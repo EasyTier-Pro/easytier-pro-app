@@ -23,6 +23,7 @@ import 'home_shell.dart';
 import 'home_settings_page.dart';
 import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
+import 'network_list_section.dart';
 import 'network_switch_tile.dart';
 import 'network_node_list_panel.dart';
 import 'network_traffic_sparkline.dart';

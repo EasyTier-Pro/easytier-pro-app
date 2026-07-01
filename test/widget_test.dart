@@ -489,6 +489,70 @@ void main() {
     expect(find.text('设备令牌连接 · 设备令牌连接'), findsNothing);
   });
 
+  testWidgets('token network list uses compact tile metrics on mobile', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester, size: const Size(390, 760));
+    final authService = _LoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+      trafficSamples: <Map<String, CoreNetworkTrafficTotals>>[
+        {
+          'nt-token': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-token',
+            downloadBytes: 0,
+            uploadBytes: 0,
+            sampledAt: DateTime.utc(2026, 1, 1),
+          ),
+        },
+        {
+          'nt-token': CoreNetworkTrafficTotals(
+            runtimeNetworkName: 'nt-token',
+            downloadBytes: 2048,
+            uploadBytes: 4096,
+            sampledAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+          ),
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: TokenConnectionProfileStore.memory(),
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FButton, '使用设备令牌连接'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('token-connect-input')),
+      'device-token',
+    );
+    final connectButton = find.widgetWithText(FButton, '连接');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    final tokenTrafficChart = find.byKey(
+      const ValueKey<String>('token-network-traffic-nt-token'),
+    );
+    expect(tokenTrafficChart, findsOneWidget);
+    expect(
+      find.descendant(of: tokenTrafficChart, matching: find.byType(LineChart)),
+      findsOneWidget,
+    );
+    expect(find.text('已连接'), findsOneWidget);
+    expect(find.textContaining('1.00 KiB/s'), findsNothing);
+    expect(find.textContaining('2.00 KiB/s'), findsNothing);
+  });
+
   testWidgets('token connection without networks shows console guidance', (
     WidgetTester tester,
   ) async {

@@ -31,66 +31,26 @@ class _NetworkSwitchList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return HomeNetworkListSection(
+      trailing: _NetworkActionGroup(
+        refreshing: refreshing,
+        onRefresh: onRefresh,
+        onCreate: onCreate,
+      ),
       children: [
-        Row(
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A).withAlpha(8),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.hub_outlined,
-                    size: 18,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '网络',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                    fontSize: 18,
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            _NetworkActionGroup(
-              refreshing: refreshing,
-              onRefresh: onRefresh,
-              onCreate: onCreate,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Column(
-          children: [
-            for (var i = 0; i < networks.length; i++) ...[
-              if (i > 0) const SizedBox(height: 8),
-              _NetworkSwitchTile(
-                key: ValueKey<String>('network-switch-${networks[i].id}'),
-                network: networks[i],
-                devices:
-                    networkDevices[networks[i].id] ?? const <NetworkDevice>[],
-                state: joinStateFor(networks[i]),
-                traffic: trafficByNetworkId[networks[i].id],
-                instanceReady: networkInstanceReady[networks[i].id] == true,
-                trafficHistory: trafficHistoryFor[networks[i].id],
-                onJoin: () => unawaited(onJoin(networks[i])),
-                onLeave: () => unawaited(onLeave(networks[i])),
-                onOpen: () => onOpen(networks[i]),
-              ),
-            ],
-          ],
-        ),
+        for (final network in networks)
+          _NetworkSwitchTile(
+            key: ValueKey<String>('network-switch-${network.id}'),
+            network: network,
+            devices: networkDevices[network.id] ?? const <NetworkDevice>[],
+            state: joinStateFor(network),
+            traffic: trafficByNetworkId[network.id],
+            instanceReady: networkInstanceReady[network.id] == true,
+            trafficHistory: trafficHistoryFor[network.id],
+            onJoin: () => unawaited(onJoin(network)),
+            onLeave: () => unawaited(onLeave(network)),
+            onOpen: () => onOpen(network),
+          ),
       ],
     );
   }
@@ -209,8 +169,7 @@ class _NetworkSwitchTile extends StatelessWidget {
     final localIpv4 = state.localIpv4?.trim();
     final cidrText = network.ipv4Cidr.trim();
     final history = trafficHistory;
-    final showMiniTraffic =
-        MediaQuery.sizeOf(context).width >= _mobileShellBreakpoint;
+    final showMiniTraffic = homeNetworkSwitchTileShowsInlineMetrics(context);
 
     final switchValue = joined || joining;
     final isLoading = joining || leaving;
@@ -230,16 +189,17 @@ class _NetworkSwitchTile extends StatelessWidget {
       if (!instanceReady) {
         metaChildren.add(const HomeStatusChip(label: '实例启动中', active: false));
       }
-      if (showMiniTraffic && instanceReady && traffic != null) {
+      final trafficSnapshot = traffic;
+      if (showMiniTraffic && instanceReady && trafficSnapshot != null) {
         metaChildren.addAll([
           HomeMiniTrafficPill(
             icon: Icons.arrow_downward,
-            label: _formatTrafficRate(traffic!.downloadBytesPerSecond),
+            label: _formatTrafficRate(trafficSnapshot.downloadBytesPerSecond),
             color: const Color(0xFF16A34A),
           ),
           HomeMiniTrafficPill(
             icon: Icons.arrow_upward,
-            label: _formatTrafficRate(traffic!.uploadBytesPerSecond),
+            label: _formatTrafficRate(trafficSnapshot.uploadBytesPerSecond),
             color: const Color(0xFF2563EB),
           ),
         ]);

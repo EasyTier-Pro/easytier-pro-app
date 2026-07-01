@@ -19,6 +19,7 @@ import 'home_shell.dart';
 import 'home_settings_page.dart';
 import 'home_tray_actions.dart';
 import 'network_detail_layout.dart';
+import 'network_list_section.dart';
 import 'network_node_list_panel.dart';
 import 'network_switch_tile.dart';
 import 'network_traffic_sparkline.dart';
@@ -1071,72 +1072,29 @@ class _TokenNetworkInstanceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final hasTrafficError = trafficError != null && trafficError!.isNotEmpty;
+    final showInstances = running && !hasTrafficError && entries.isNotEmpty;
+    final Widget empty = !running
+        ? const _TokenNetworkInstanceEmpty(message: '连接建立后会显示本机网络实例。')
+        : _TokenNetworkSetupGuide(
+            onOpenConsole: onOpenConsole,
+            onRetry: onRetry,
+          );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return HomeNetworkListSection(
+      trailing: const _TokenReadonlyHint(),
+      empty: empty,
       children: [
-        Row(
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A).withAlpha(8),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.hub_outlined,
-                    size: 18,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '网络',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                    fontSize: 18,
-                  ),
-                ),
-              ],
+        if (showInstances)
+          for (final entry in entries)
+            _TokenNetworkInstanceTile(
+              runtimeName: entry.key,
+              snapshot: entry.value,
+              history:
+                  trafficHistories[entry.key] ??
+                  const <HomeTrafficHistoryPoint>[],
+              onOpen: () => onOpenInstance(entry.key),
             ),
-            const Spacer(),
-            const _TokenReadonlyHint(),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (!running)
-          const _TokenNetworkInstanceEmpty(message: '连接建立后会显示本机网络实例。')
-        else if (trafficError != null && trafficError!.isNotEmpty)
-          _TokenNetworkSetupGuide(
-            onOpenConsole: onOpenConsole,
-            onRetry: onRetry,
-          )
-        else if (entries.isEmpty)
-          _TokenNetworkSetupGuide(
-            onOpenConsole: onOpenConsole,
-            onRetry: onRetry,
-          )
-        else
-          Column(
-            children: [
-              for (var i = 0; i < entries.length; i++) ...[
-                if (i > 0) const SizedBox(height: 8),
-                _TokenNetworkInstanceTile(
-                  runtimeName: entries[i].key,
-                  snapshot: entries[i].value,
-                  history:
-                      trafficHistories[entries[i].key] ??
-                      const <HomeTrafficHistoryPoint>[],
-                  onOpen: () => onOpenInstance(entries[i].key),
-                ),
-              ],
-            ],
-          ),
       ],
     );
   }
@@ -1408,6 +1366,7 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final downloadRate = _formatTrafficRate(snapshot.downloadBytesPerSecond);
     final uploadRate = _formatTrafficRate(snapshot.uploadBytesPerSecond);
+    final showMiniTraffic = homeNetworkSwitchTileShowsInlineMetrics(context);
 
     return HomeNetworkSwitchTile(
       title: _tokenRuntimeDisplayName(runtimeName),
@@ -1416,16 +1375,18 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
       failed: false,
       metaChildren: [
         const HomeStatusChip(label: '已连接', active: true),
-        HomeMiniTrafficPill(
-          icon: Icons.arrow_downward,
-          label: downloadRate,
-          color: const Color(0xFF16A34A),
-        ),
-        HomeMiniTrafficPill(
-          icon: Icons.arrow_upward,
-          label: uploadRate,
-          color: const Color(0xFF2563EB),
-        ),
+        if (showMiniTraffic) ...[
+          HomeMiniTrafficPill(
+            icon: Icons.arrow_downward,
+            label: downloadRate,
+            color: const Color(0xFF16A34A),
+          ),
+          HomeMiniTrafficPill(
+            icon: Icons.arrow_upward,
+            label: uploadRate,
+            color: const Color(0xFF2563EB),
+          ),
+        ],
       ],
       trailingVisualization: history.isEmpty
           ? null
