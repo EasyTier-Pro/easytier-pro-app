@@ -70,8 +70,10 @@ Future<void> main() async {
     windowBehaviorPreferences: windowBehaviorPreferences,
   );
   final appUpdateService = AppUpdateService(
-    onBeforeQuitForUpdate: () =>
-        traySupport.quitApp(reason: AppExitReason.update),
+    onBeforeQuitForUpdate: () => quitForAppUpdate(
+      coreLifecycleService: coreLifecycleService,
+      traySupport: traySupport,
+    ),
   );
 
   await traySupport.initialize();
@@ -88,6 +90,15 @@ Future<void> main() async {
       windowBehaviorPreferences: windowBehaviorPreferences,
     ),
   );
+}
+
+@visibleForTesting
+Future<void> quitForAppUpdate({
+  required CoreLifecycleService coreLifecycleService,
+  required TraySupport traySupport,
+}) async {
+  await coreLifecycleService.stopRuntimeForUserExit();
+  await traySupport.quitApp(reason: AppExitReason.update);
 }
 
 class MyApp extends StatefulWidget {

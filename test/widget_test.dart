@@ -3385,6 +3385,29 @@ void main() {
     expect(traySupport.quitReasons, <AppExitReason>[AppExitReason.user]);
   });
 
+  test(
+    'app update quit handler stops background service before quitting',
+    () async {
+      final events = <String>[];
+      final authService = _FakeAuthService();
+      final traySupport = _RecordingTraySupport(events: events);
+      final coreLifecycleService = _OrderedCoreLifecycleService(
+        authService: authService,
+        machineId: 'machine-1',
+        events: events,
+      );
+
+      await quitForAppUpdate(
+        coreLifecycleService: coreLifecycleService,
+        traySupport: traySupport,
+      );
+
+      expect(events, <String>['stop-runtime', 'quit:update']);
+      expect(coreLifecycleService.userExitStopCount, 1);
+      expect(traySupport.quitReasons, <AppExitReason>[AppExitReason.update]);
+    },
+  );
+
   testWidgets(
     'tray exit action stays open when background service stop fails',
     (WidgetTester tester) async {
@@ -5925,6 +5948,22 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   }
 }
 
+class _OrderedCoreLifecycleService extends _NoopCoreLifecycleService {
+  _OrderedCoreLifecycleService({
+    required super.authService,
+    required super.machineId,
+    required this.events,
+  });
+
+  final List<String> events;
+
+  @override
+  Future<void> stopRuntimeForUserExit() async {
+    events.add('stop-runtime');
+    await super.stopRuntimeForUserExit();
+  }
+}
+
 class _FakeAppUpdateService extends AppUpdateService {
   _FakeAppUpdateService(this.result);
 
@@ -5939,6 +5978,9 @@ class _FakeAppUpdateService extends AppUpdateService {
 }
 
 class _RecordingTraySupport implements TraySupport {
+  _RecordingTraySupport({List<String>? events}) : events = events ?? <String>[];
+
+  final List<String> events;
   TrayConnectionAction? connectionAction;
   TrayEngineAction? engineAction;
   TrayMenuAction? settingsAction;
@@ -5956,6 +5998,7 @@ class _RecordingTraySupport implements TraySupport {
 
   @override
   Future<void> quitApp({AppExitReason reason = AppExitReason.user}) async {
+    events.add('quit:${reason.name}');
     quitCount++;
     quitReasons.add(reason);
   }
