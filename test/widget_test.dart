@@ -4507,6 +4507,55 @@ void main() {
     expect(requestedPaths, ['/api/v1/auth/device/token', '/api/v1/auth/me']);
   });
 
+  test('console service fast polls pending device authorization', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    var tokenRequestCount = 0;
+    final service = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/device/token') {
+          tokenRequestCount++;
+          if (tokenRequestCount == 1) {
+            return _jsonResponse({'error': 'authorization_pending'}, 400);
+          }
+          return _jsonResponse({
+            'access_token': 'access-token',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+          });
+        }
+        if (request.url.path == '/api/v1/auth/me') {
+          return _jsonResponse({
+            'user': {'email': 'tester@example.com', 'display_name': 'Tester'},
+            'tenants': [
+              {'id': 'tenant-1', 'name': 'Test Workspace'},
+            ],
+          });
+        }
+        return _jsonResponse({'message': 'not found'}, 404);
+      }),
+    );
+
+    final session = await service
+        .completeDeviceAuth(
+          const DeviceAuthInfo(
+            deviceCode: 'device-code',
+            userCode: 'USER-CODE',
+            verificationUri: 'https://console.test/login/oauth/device',
+            verificationUriComplete:
+                'https://console.test/login/oauth/device/USER-CODE',
+            expiresIn: 600,
+            interval: 5,
+          ),
+        )
+        .timeout(const Duration(seconds: 3));
+
+    expect(session.user.email, 'tester@example.com');
+    expect(tokenRequestCount, 2);
+  });
+
   test('console service preserves node operating system metadata', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

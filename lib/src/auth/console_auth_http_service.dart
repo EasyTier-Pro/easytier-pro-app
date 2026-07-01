@@ -1,6 +1,8 @@
 part of 'console_auth_service.dart';
 
 const _deviceAuthAppReturnUri = 'easytierpro://auth/device-complete';
+const _deviceAuthFastPollIntervalSeconds = 1;
+const _deviceAuthFastPollAttemptLimit = 20;
 
 class ConsoleAuthService implements AuthService {
   ConsoleAuthService({
@@ -87,13 +89,15 @@ class ConsoleAuthService implements AuthService {
       Duration(seconds: info.expiresIn),
     );
     var intervalSeconds = info.interval;
+    var delaySeconds = 0;
+    var fastPollAttemptsRemaining = _deviceAuthFastPollAttemptLimit;
     var firstAttempt = true;
 
     while (DateTime.now().toUtc().isBefore(deadline)) {
       if (firstAttempt) {
         firstAttempt = false;
       } else {
-        await Future<void>.delayed(Duration(seconds: intervalSeconds));
+        await Future<void>.delayed(Duration(seconds: delaySeconds));
       }
 
       final response = await _post(
@@ -136,9 +140,19 @@ class ConsoleAuthService implements AuthService {
 
       switch (error) {
         case 'authorization_pending':
+          if (fastPollAttemptsRemaining > 0) {
+            fastPollAttemptsRemaining--;
+            delaySeconds = _deviceAuthFastPollIntervalSeconds < intervalSeconds
+                ? _deviceAuthFastPollIntervalSeconds
+                : intervalSeconds;
+          } else {
+            delaySeconds = intervalSeconds;
+          }
           continue;
         case 'slow_down':
+          fastPollAttemptsRemaining = 0;
           intervalSeconds += ((body?['interval'] as num?)?.toInt() ?? 5);
+          delaySeconds = intervalSeconds;
           continue;
         case 'expired_token':
           throw const AuthException('登录验证码已过期，请重新发起登录。');
