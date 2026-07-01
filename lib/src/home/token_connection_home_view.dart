@@ -461,6 +461,13 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
   Widget build(BuildContext context) {
     final status = widget.coreLifecycleService.status.value;
     final selectedRuntimeName = _fallbackRuntimeName;
+    var totalDownloadRate = 0.0;
+    var totalUploadRate = 0.0;
+    for (final snapshot in _traffic.values) {
+      totalDownloadRate += snapshot.downloadBytesPerSecond ?? 0;
+      totalUploadRate += snapshot.uploadBytesPerSecond ?? 0;
+    }
+    final showHeaderTraffic = status.isRunning && _traffic.isNotEmpty;
     final contentKey = ValueKey<String>(
       [
         'token-home',
@@ -493,6 +500,14 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
             value: '$_knownPeerCount',
             icon: Icons.devices_other_outlined,
           ),
+          if (showHeaderTraffic)
+            KeyedSubtree(
+              key: const ValueKey<String>('token-header-traffic-strip'),
+              child: HomeTrafficRateStrip(
+                downloadRate: totalDownloadRate,
+                uploadRate: totalUploadRate,
+              ),
+            ),
           HomeCoreStatusLabel(
             statusListenable: widget.coreLifecycleService.status,
             label: '引擎',

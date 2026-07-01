@@ -272,6 +272,10 @@ void main() {
     expect(find.textContaining('正在读取网络实例'), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsWidgets,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('token-header-traffic-strip')),
       findsOneWidget,
     );
     expect(find.text('网络'), findsOneWidget);
