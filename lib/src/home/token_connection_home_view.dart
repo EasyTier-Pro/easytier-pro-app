@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
@@ -56,6 +58,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
     with HomeTrayActionsMixin<TokenConnectionHomeView> {
   static const double _mobileSwipeDistanceThreshold = 72;
   static const double _mobileSwipeHorizontalDominance = 1.25;
+  static const int _maxTrafficHistoryPoints = 1800;
 
   _TokenHomeView _activeView = _TokenHomeView.overview;
   Timer? _trafficTimer;
@@ -66,6 +69,8 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
       const <String, CoreNetworkTrafficTotals>{};
   Map<String, _TokenTrafficSnapshot> _traffic =
       const <String, _TokenTrafficSnapshot>{};
+  final Map<String, List<_TokenTrafficHistoryPoint>> _trafficHistories =
+      <String, List<_TokenTrafficHistoryPoint>>{};
   Map<String, Map<String, CorePeerStatus>> _peerStatusesByRuntime =
       const <String, Map<String, CorePeerStatus>>{};
   Map<String, String> _peerStatusErrorsByRuntime = const <String, String>{};
@@ -318,15 +323,40 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
         return;
       }
       final next = <String, _TokenTrafficSnapshot>{};
+      final nextHistories = Map<String, List<_TokenTrafficHistoryPoint>>.from(
+        _trafficHistories,
+      );
       for (final entry in totals.entries) {
-        next[entry.key] = _TokenTrafficSnapshot.fromTotals(
+        final snapshot = _TokenTrafficSnapshot.fromTotals(
           entry.value,
           previous: _previousTotals[entry.key],
         );
+        next[entry.key] = snapshot;
+
+        final history =
+            List<_TokenTrafficHistoryPoint>.from(
+              nextHistories[entry.key] ?? const <_TokenTrafficHistoryPoint>[],
+            )..add(
+              _TokenTrafficHistoryPoint(
+                timestamp: DateTime.now(),
+                downloadRate: snapshot.downloadBytesPerSecond ?? 0,
+                uploadRate: snapshot.uploadBytesPerSecond ?? 0,
+              ),
+            );
+        while (history.length > _maxTrafficHistoryPoints) {
+          history.removeAt(0);
+        }
+        nextHistories[entry.key] = history;
       }
+      nextHistories.removeWhere(
+        (runtimeName, _) => !totals.containsKey(runtimeName),
+      );
       setState(() {
         _traffic = next;
         _previousTotals = totals;
+        _trafficHistories
+          ..clear()
+          ..addAll(nextHistories);
         _trafficError = null;
         if (_activeView == _TokenHomeView.network &&
             (_selectedRuntimeName == null ||
@@ -473,13 +503,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
   Widget build(BuildContext context) {
     final status = widget.coreLifecycleService.status.value;
     final selectedRuntimeName = _fallbackRuntimeName;
-    var totalDownloadRate = 0.0;
-    var totalUploadRate = 0.0;
-    for (final snapshot in _traffic.values) {
-      totalDownloadRate += snapshot.downloadBytesPerSecond ?? 0;
-      totalUploadRate += snapshot.uploadBytesPerSecond ?? 0;
-    }
-    final showHeaderTraffic = status.isRunning && _traffic.isNotEmpty;
     final contentKey = ValueKey<String>(
       [
         'token-home',
@@ -512,14 +535,6 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
             value: '$_knownPeerCount',
             icon: Icons.devices_other_outlined,
           ),
-          if (showHeaderTraffic)
-            KeyedSubtree(
-              key: const ValueKey<String>('token-header-traffic-strip'),
-              child: HomeTrafficRateStrip(
-                downloadRate: totalDownloadRate,
-                uploadRate: totalUploadRate,
-              ),
-            ),
           HomeCoreStatusLabel(
             statusListenable: widget.coreLifecycleService.status,
             label: '引擎',
@@ -562,6 +577,7 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
         _TokenHomeView.overview => _TokenOverview(
           status: status,
           traffic: _traffic,
+          trafficHistories: _trafficHistories,
           trafficError: _trafficError,
           running: status.isRunning,
           onOpenInstance: _openNetworkInstance,
@@ -623,6 +639,7 @@ class _TokenOverview extends StatelessWidget {
   const _TokenOverview({
     required this.status,
     required this.traffic,
+    required this.trafficHistories,
     required this.trafficError,
     required this.running,
     required this.onOpenInstance,
@@ -632,6 +649,7 @@ class _TokenOverview extends StatelessWidget {
 
   final CoreRunStatus status;
   final Map<String, _TokenTrafficSnapshot> traffic;
+  final Map<String, List<_TokenTrafficHistoryPoint>> trafficHistories;
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
@@ -642,12 +660,6 @@ class _TokenOverview extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = traffic.entries.toList()
       ..sort((left, right) => left.key.compareTo(right.key));
-    var totalDownloadRate = 0.0;
-    var totalUploadRate = 0.0;
-    for (final entry in entries) {
-      totalDownloadRate += entry.value.downloadBytesPerSecond ?? 0;
-      totalUploadRate += entry.value.uploadBytesPerSecond ?? 0;
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,13 +667,11 @@ class _TokenOverview extends StatelessWidget {
         _TokenStatusSummary(
           status: status,
           instanceCount: running ? entries.length : 0,
-          downloadRate: totalDownloadRate,
-          uploadRate: totalUploadRate,
-          hasTrafficStats: entries.isNotEmpty,
         ),
         const SizedBox(height: 24),
         _TokenNetworkInstanceList(
           entries: entries,
+          trafficHistories: trafficHistories,
           trafficError: trafficError,
           running: running,
           onOpenInstance: onOpenInstance,
@@ -677,16 +687,10 @@ class _TokenStatusSummary extends StatelessWidget {
   const _TokenStatusSummary({
     required this.status,
     required this.instanceCount,
-    required this.downloadRate,
-    required this.uploadRate,
-    required this.hasTrafficStats,
   });
 
   final CoreRunStatus status;
   final int instanceCount;
-  final double downloadRate;
-  final double uploadRate;
-  final bool hasTrafficStats;
 
   @override
   Widget build(BuildContext context) {
@@ -817,14 +821,6 @@ class _TokenStatusSummary extends StatelessWidget {
       ],
     );
 
-    final trafficStrip =
-        hasTrafficStats && instanceCount > 0 && !error && !needsAuthorization
-        ? HomeTrafficRateStrip(
-            downloadRate: downloadRate,
-            uploadRate: uploadRate,
-          )
-        : null;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -839,30 +835,7 @@ class _TokenStatusSummary extends StatelessWidget {
           ),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (trafficStrip != null && constraints.maxWidth < 240) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                statusBody,
-                const SizedBox(height: 10),
-                Align(alignment: Alignment.centerRight, child: trafficStrip),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(child: statusBody),
-              if (trafficStrip != null) ...[
-                const SizedBox(width: 10),
-                trafficStrip,
-              ],
-            ],
-          );
-        },
-      ),
+      child: Row(children: [Expanded(child: statusBody)]),
     );
   }
 }
@@ -1083,6 +1056,7 @@ class _TokenLoginSettingsSection extends StatelessWidget {
 class _TokenNetworkInstanceList extends StatelessWidget {
   const _TokenNetworkInstanceList({
     required this.entries,
+    required this.trafficHistories,
     required this.trafficError,
     required this.running,
     required this.onOpenInstance,
@@ -1091,6 +1065,7 @@ class _TokenNetworkInstanceList extends StatelessWidget {
   });
 
   final List<MapEntry<String, _TokenTrafficSnapshot>> entries;
+  final Map<String, List<_TokenTrafficHistoryPoint>> trafficHistories;
   final String? trafficError;
   final bool running;
   final ValueChanged<String> onOpenInstance;
@@ -1157,6 +1132,9 @@ class _TokenNetworkInstanceList extends StatelessWidget {
                 _TokenNetworkInstanceTile(
                   runtimeName: entries[i].key,
                   snapshot: entries[i].value,
+                  history:
+                      trafficHistories[entries[i].key] ??
+                      const <_TokenTrafficHistoryPoint>[],
                   onOpen: () => onOpenInstance(entries[i].key),
                 ),
               ],
@@ -1420,11 +1398,13 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
   const _TokenNetworkInstanceTile({
     required this.runtimeName,
     required this.snapshot,
+    required this.history,
     required this.onOpen,
   });
 
   final String runtimeName;
   final _TokenTrafficSnapshot snapshot;
+  final List<_TokenTrafficHistoryPoint> history;
   final VoidCallback onOpen;
 
   @override
@@ -1450,10 +1430,36 @@ class _TokenNetworkInstanceTile extends StatelessWidget {
           color: const Color(0xFF2563EB),
         ),
       ],
+      trailingVisualization: history.isEmpty
+          ? null
+          : _TokenTrafficSparkline(
+              key: ValueKey<String>('token-network-traffic-$runtimeName'),
+              history: history,
+            ),
       switchValue: true,
       switchLoading: false,
       switchTooltip: '设备令牌连接由控制台下发，客户端仅展示状态。',
       onOpen: onOpen,
+    );
+  }
+}
+
+class _TokenTrafficSparkline extends StatelessWidget {
+  const _TokenTrafficSparkline({super.key, required this.history});
+
+  final List<_TokenTrafficHistoryPoint> history;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: 100,
+        height: 40,
+        child: LineChart(
+          _tokenTrafficSparklineChartData(history),
+          duration: Duration.zero,
+        ),
+      ),
     );
   }
 }
@@ -1531,6 +1537,18 @@ class _TokenMutedText extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TokenTrafficHistoryPoint {
+  const _TokenTrafficHistoryPoint({
+    required this.timestamp,
+    required this.downloadRate,
+    required this.uploadRate,
+  });
+
+  final DateTime timestamp;
+  final double downloadRate;
+  final double uploadRate;
 }
 
 class _TokenTrafficSnapshot {
@@ -1696,6 +1714,83 @@ String _formatBytes(num bytes) {
   }
   final decimals = value >= 10 ? 1 : 2;
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
+}
+
+LineChartData _tokenTrafficSparklineChartData(
+  List<_TokenTrafficHistoryPoint> history,
+) {
+  final visibleHistory = history.length <= 30
+      ? history
+      : history.sublist(history.length - 30);
+  var maxRate = 0.0;
+  for (final point in visibleHistory) {
+    maxRate = math.max(maxRate, point.downloadRate);
+    maxRate = math.max(maxRate, point.uploadRate);
+  }
+  final yMax = _tokenTrafficSparklineYMax(maxRate);
+  final xOffset = 30 - visibleHistory.length;
+
+  List<FlSpot> spotsFor(double Function(_TokenTrafficHistoryPoint) rateFor) {
+    return [
+      for (var i = 0; i < visibleHistory.length; i++)
+        FlSpot((xOffset + i).toDouble(), rateFor(visibleHistory[i])),
+    ];
+  }
+
+  return LineChartData(
+    minX: 0,
+    maxX: 29,
+    minY: 0,
+    maxY: yMax,
+    lineTouchData: const LineTouchData(enabled: false),
+    gridData: const FlGridData(show: false),
+    titlesData: const FlTitlesData(show: false),
+    borderData: FlBorderData(show: false),
+    lineBarsData: [
+      _tokenTrafficLine(
+        spotsFor((point) => point.downloadRate),
+        const Color(0xFF16A34A),
+      ),
+      _tokenTrafficLine(
+        spotsFor((point) => point.uploadRate),
+        const Color(0xFF2563EB),
+      ),
+    ],
+  );
+}
+
+LineChartBarData _tokenTrafficLine(List<FlSpot> spots, Color color) {
+  return LineChartBarData(
+    spots: spots,
+    isCurved: false,
+    barWidth: 1.8,
+    color: color,
+    isStrokeCapRound: true,
+    dotData: const FlDotData(show: false),
+    belowBarData: BarAreaData(show: false),
+  );
+}
+
+double _tokenTrafficSparklineYMax(double maxRate) {
+  const scales = <double>[
+    1024,
+    10 * 1024,
+    100 * 1024,
+    1024 * 1024,
+    10 * 1024 * 1024,
+    100 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    10 * 1024 * 1024 * 1024,
+    100 * 1024 * 1024 * 1024,
+    1024 * 1024 * 1024 * 1024,
+  ];
+
+  for (final scale in scales) {
+    if (maxRate <= scale) {
+      return scale;
+    }
+  }
+  return math.pow(1024, 5).toDouble();
 }
 
 Uri _tokenConsoleNetworksUri() {

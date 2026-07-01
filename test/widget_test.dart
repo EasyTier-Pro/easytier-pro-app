@@ -271,16 +271,24 @@ void main() {
     expect(find.text('1 个网络实例'), findsOneWidget);
     expect(find.textContaining('正在读取网络实例'), findsNothing);
     expect(
-      find.byKey(const ValueKey<String>('status-traffic-strip')),
-      findsWidgets,
-    );
-    expect(
       find.byKey(const ValueKey<String>('token-header-traffic-strip')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('网络'), findsOneWidget);
     expect(find.text('只读'), findsOneWidget);
     expect(find.text('nt-token'), findsWidgets);
+    final tokenTrafficChart = find.byKey(
+      const ValueKey<String>('token-network-traffic-nt-token'),
+    );
+    expect(tokenTrafficChart, findsOneWidget);
+    expect(
+      find.descendant(of: tokenTrafficChart, matching: find.byType(LineChart)),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('status-traffic-strip')),
+      findsNothing,
+    );
     expect(find.byType(FSwitch), findsOneWidget);
     final tokenSwitch = tester.widget<FSwitch>(find.byType(FSwitch));
     expect(tokenSwitch.value, isTrue);
