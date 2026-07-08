@@ -62,6 +62,8 @@ class _ElevatedDesktopCommandFailure implements Exception {
 }
 
 class CoreLifecycleService {
+  static const String _needsElevationRepairMessage = '管理员权限修复/重试';
+
   CoreLifecycleService({
     required this.authService,
     CorePlatformRuntime? runtime,
@@ -424,33 +426,19 @@ class CoreLifecycleService {
                 : 'Elevation repair failed',
             context: {'error': cause.toString()},
           );
-          if (error.command == 'uninstall') {
-            status.value = CoreRunStatus(
-              phase: CoreRunPhase.error,
-              message: '旧连接引擎停止失败',
-              lastError: _normalizeError(cause),
-            );
-            return;
-          }
-          if (elevatedUninstallRequested) {
+          if (elevatedUninstallRequested && error.command != 'uninstall') {
             _cliPath = null;
             _logger.info(
               'core',
               'Elevated pre-install uninstall completed before install failure',
             );
           }
-          if (cause is _ElevationRequiredException) {
-            status.value = CoreRunStatus(
-              phase: CoreRunPhase.needsElevation,
-              message: '需要管理员权限以安装连接引擎',
-              lastError: _elevationLastError(cause),
-            );
-            return;
-          }
           status.value = CoreRunStatus(
-            phase: CoreRunPhase.error,
-            message: '连接引擎启动失败',
-            lastError: _normalizeError(cause),
+            phase: CoreRunPhase.needsElevation,
+            message: _needsElevationRepairMessage,
+            lastError: cause is _ElevationRequiredException
+                ? _elevationLastError(cause)
+                : _normalizeError(cause),
           );
         } catch (error) {
           _logger.error(
@@ -461,7 +449,7 @@ class CoreLifecycleService {
           if (error is _ElevationRequiredException) {
             status.value = CoreRunStatus(
               phase: CoreRunPhase.needsElevation,
-              message: '需要管理员权限以安装连接引擎',
+              message: _needsElevationRepairMessage,
               lastError: _elevationLastError(error),
             );
             return;
@@ -1181,7 +1169,7 @@ exit 3
         if (error is _ElevationRequiredException) {
           status.value = CoreRunStatus(
             phase: CoreRunPhase.needsElevation,
-            message: '需要管理员权限以安装连接引擎',
+            message: _needsElevationRepairMessage,
             lastError: _elevationLastError(error),
           );
           return;
@@ -1287,7 +1275,7 @@ exit 3
         if (error is _ElevationRequiredException) {
           status.value = CoreRunStatus(
             phase: CoreRunPhase.needsElevation,
-            message: '需要管理员权限以安装连接引擎',
+            message: _needsElevationRepairMessage,
             lastError: _elevationLastError(error),
           );
           return;
@@ -1720,13 +1708,15 @@ exit 3
           'Desktop command returned error event',
           context: {'command': command, 'event': data},
         );
-        if (_isElevationRequired(
-          0,
-          message,
-          includeUnixPermissionErrors: _shouldTreatUnixPermissionAsElevation(
-            command,
-          ),
-        )) {
+        final needsElevation =
+            _shouldTreatDesktopCommandFailureAsElevation(command) ||
+            _isElevationRequired(
+              0,
+              message,
+              includeUnixPermissionErrors:
+                  _shouldTreatUnixPermissionAsElevation(command),
+            );
+        if (needsElevation) {
           throw _ElevationRequiredException(message);
         }
         throw StateError(message);
@@ -1744,20 +1734,21 @@ exit 3
           'stderr': stderrText,
         },
       );
-      if (_isElevationRequired(
-        exitCode,
-        stderrText,
-        includeUnixPermissionErrors: _shouldTreatUnixPermissionAsElevation(
-          command,
-        ),
-      )) {
-        throw _ElevationRequiredException(stderrText);
+      final message = stderrText.isEmpty
+          ? 'desktop $command 执行失败 (exit=$exitCode)'
+          : stderrText;
+      final needsElevation =
+          _shouldTreatDesktopCommandFailureAsElevation(command) ||
+          _isElevationRequired(
+            exitCode,
+            stderrText,
+            includeUnixPermissionErrors:
+                _shouldTreatUnixPermissionAsElevation(command),
+          );
+      if (needsElevation) {
+        throw _ElevationRequiredException(message);
       }
-      throw StateError(
-        stderrText.isEmpty
-            ? 'desktop $command 执行失败 (exit=$exitCode)'
-            : stderrText,
-      );
+      throw StateError(message);
     }
 
     for (var index = events.length - 1; index >= 0; index--) {
@@ -2130,6 +2121,33 @@ exit 3
         text.contains('无法写入') ||
         text.contains('不能写入') ||
         text.contains('写入失败');
+  }
+
+  @visibleForTesting
+  static bool shouldTreatDesktopCommandFailureAsElevationForTesting(
+    String command, {
+    required bool isWindows,
+    required bool isMacOS,
+  }) {
+    return _shouldTreatDesktopCommandFailureAsElevation(
+      command,
+      isWindows: isWindows,
+      isMacOS: isMacOS,
+    );
+  }
+
+  static bool _shouldTreatDesktopCommandFailureAsElevation(
+    String command, {
+    bool? isWindows,
+    bool? isMacOS,
+  }) {
+    if (command != 'install' && command != 'uninstall') {
+      return false;
+    }
+    return supportsDesktopElevationRepairForPlatform(
+      isWindows: isWindows ?? Platform.isWindows,
+      isMacOS: isMacOS ?? Platform.isMacOS,
+    );
   }
 
   @visibleForTesting

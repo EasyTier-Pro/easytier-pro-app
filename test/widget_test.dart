@@ -3527,11 +3527,11 @@ void main() {
 
     coreLifecycleService.status.value = const CoreRunStatus(
       phase: CoreRunPhase.needsElevation,
-      message: '需要管理员权限以安装连接引擎',
+      message: '管理员权限修复/重试',
     );
     await tester.pump();
 
-    expect(traySupport.engineAction?.label, '授权修复连接引擎');
+    expect(traySupport.engineAction?.label, '管理员权限修复/重试');
     expect(traySupport.engineAction?.enabled, isTrue);
     expect(traySupport.engineAction?.onSelected, isNotNull);
   });

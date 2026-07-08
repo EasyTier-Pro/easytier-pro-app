@@ -954,6 +954,54 @@ void main() {
       );
     });
 
+    test('treats desktop install and uninstall failures as elevation', () {
+      bool treatsAsElevation(
+        String command, {
+        required bool isWindows,
+        required bool isMacOS,
+      }) {
+        return CoreLifecycleService
+            .shouldTreatDesktopCommandFailureAsElevationForTesting(
+              command,
+              isWindows: isWindows,
+              isMacOS: isMacOS,
+            );
+      }
+
+      expect(
+        treatsAsElevation(
+          'install',
+          isWindows: true,
+          isMacOS: false,
+        ),
+        isTrue,
+      );
+      expect(
+        treatsAsElevation(
+          'uninstall',
+          isWindows: false,
+          isMacOS: true,
+        ),
+        isTrue,
+      );
+      expect(
+        treatsAsElevation(
+          'status',
+          isWindows: true,
+          isMacOS: false,
+        ),
+        isFalse,
+      );
+      expect(
+        treatsAsElevation(
+          'install',
+          isWindows: false,
+          isMacOS: false,
+        ),
+        isFalse,
+      );
+    });
+
     test('detects real desktop install artifacts from status event', () {
       expect(
         CoreLifecycleService.desktopStatusHasInstallArtifactsForTesting(
@@ -1180,8 +1228,8 @@ void main() {
       await service.repairWithElevation();
 
       expect(elevatedCommands, ['uninstall']);
-      expect(service.status.value.phase, CoreRunPhase.error);
-      expect(service.status.value.message, '旧连接引擎停止失败');
+      expect(service.status.value.phase, CoreRunPhase.needsElevation);
+      expect(service.status.value.message, '管理员权限修复/重试');
       expect(service.status.value.lastError, contains('uninstall failed'));
     });
 
@@ -1213,8 +1261,8 @@ void main() {
         await service.repairWithElevation();
 
         expect(elevatedCommands, ['uninstall']);
-        expect(service.status.value.phase, CoreRunPhase.error);
-        expect(service.status.value.message, '旧连接引擎停止失败');
+        expect(service.status.value.phase, CoreRunPhase.needsElevation);
+        expect(service.status.value.message, '管理员权限修复/重试');
         expect(service.status.value.lastError, contains('uninstall failed'));
       },
     );

@@ -101,7 +101,7 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
   ) {
     return switch (status.phase) {
       CoreRunPhase.needsElevation => _JoinNetworkState.blockedByCore(
-        '需要授权修复连接引擎后才能加入网络。',
+        '需要先执行管理员权限修复/重试后才能加入网络。',
       ),
       CoreRunPhase.needsVpnPermission => _JoinNetworkState.blockedByCore(
         '需要授权 VPN 连接后才能加入网络。',

@@ -348,7 +348,7 @@ HomeCoreEngineActionSpec? homeCoreEngineActionSpec({
 }) {
   return switch (status.phase) {
     CoreRunPhase.needsElevation => HomeCoreEngineActionSpec(
-      label: '授权修复连接引擎',
+      label: '管理员权限修复/重试',
       icon: Icons.admin_panel_settings_outlined,
       enabled: true,
       onRun: onRepairWithElevation,
