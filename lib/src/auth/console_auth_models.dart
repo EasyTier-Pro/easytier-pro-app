@@ -9,6 +9,10 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+class SessionExpiredException extends AuthException {
+  const SessionExpiredException([super.message = '当前登录态已失效，请重新登录。']);
+}
+
 class DeviceAuthInfo {
   const DeviceAuthInfo({
     required this.deviceCode,
@@ -44,12 +48,12 @@ class TokenSet {
   final int expiresIn;
   final DateTime obtainedAt;
 
-  bool get isExpired {
+  DateTime get refreshAt {
     final bufferSeconds = expiresIn > 120 ? 60 : 0;
-    return DateTime.now().toUtc().isAfter(
-      obtainedAt.toUtc().add(Duration(seconds: expiresIn - bufferSeconds)),
-    );
+    return obtainedAt.toUtc().add(Duration(seconds: expiresIn - bufferSeconds));
   }
+
+  bool get isExpired => !DateTime.now().toUtc().isBefore(refreshAt);
 
   Map<String, dynamic> toJson() {
     return {

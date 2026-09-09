@@ -149,6 +149,28 @@ class CoreLifecycleService {
     });
   }
 
+  Future<void> updateSession(AuthSession session) {
+    return _enqueue(() async {
+      if (_session == null ||
+          _engineVersionScopeForSession(_session) !=
+              _engineVersionScopeForSession(session)) {
+        return;
+      }
+      _session = session;
+      _invalidateEngineVersionChecks();
+      _logger.debug('core', 'Updated session credentials');
+    });
+  }
+
+  Future<void> onSessionExpired(Object error) {
+    return _enqueue(() async {
+      _session = null;
+      _invalidateEngineVersionChecks();
+      _stopEngineVersionCheckTimer();
+      await _stopRuntimeForAuthInvalid(error);
+    });
+  }
+
   Future<void> onLogout() {
     return _enqueue(() async {
       _session = null;

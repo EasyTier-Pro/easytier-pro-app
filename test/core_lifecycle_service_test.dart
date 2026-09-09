@@ -1322,6 +1322,28 @@ void main() {
   });
 
   group('CoreLifecycleService auth invalidation', () {
+    test(
+      'uses refreshed session credentials without restarting runtime',
+      () async {
+        final authService = _LifecycleAuthService();
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: authService,
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+
+        await service.bindSession(_session('tenant-1'));
+        await service.updateSession(
+          _session('tenant-1', accessToken: 'refreshed-token'),
+        );
+        await service.repair();
+
+        expect(runtime.ensureRunningCount, 2);
+        expect(authService.accessTokens, ['access-token', 'refreshed-token']);
+      },
+    );
+
     test('stops runtime when local token has expired', () async {
       final authService = _LifecycleAuthService();
       final runtime = _LifecycleRuntime();
@@ -1803,7 +1825,10 @@ void main() {
   });
 }
 
-AuthSession _session(String workspaceId) {
+AuthSession _session(
+  String workspaceId, {
+  String accessToken = 'access-token',
+}) {
   return AuthSession(
     user: ConsoleUser(
       email: 'tester@example.com',
@@ -1813,7 +1838,7 @@ AuthSession _session(String workspaceId) {
       ],
     ),
     tokenSet: TokenSet(
-      accessToken: 'access-token',
+      accessToken: accessToken,
       tokenType: 'Bearer',
       expiresIn: 3600,
       obtainedAt: DateTime.now().toUtc(),
@@ -2054,6 +2079,7 @@ class _LifecycleAuthService implements AuthService {
   Completer<String>? versionCompleter;
   Object? bootstrapError;
   final workspaceIds = <String>[];
+  final accessTokens = <String>[];
 
   @override
   Future<AuthSession?> restoreSession() async => null;
@@ -2228,6 +2254,7 @@ class _LifecycleAuthService implements AuthService {
   }) async {
     prepareBootstrapCount++;
     workspaceIds.add(workspaceId);
+    accessTokens.add(accessToken);
     final error = bootstrapError;
     if (error != null) {
       throw error;

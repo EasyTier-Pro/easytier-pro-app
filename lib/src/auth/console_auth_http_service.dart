@@ -4,7 +4,7 @@ const _deviceAuthAppReturnUri = 'easytierpro://auth/device-complete';
 const _deviceAuthFastPollIntervalSeconds = 1;
 const _deviceAuthFastPollAttemptLimit = 20;
 
-class ConsoleAuthService implements AuthService {
+class ConsoleAuthService implements AuthService, RefreshableAuthService {
   ConsoleAuthService({
     required this.tokenStore,
     http.Client? httpClient,
@@ -15,17 +15,21 @@ class ConsoleAuthService implements AuthService {
   final http.Client _httpClient;
   final String consoleBaseUrl;
   final AppLogger _logger = AppLogger.instance;
+  TokenSet? _activeTokenSet;
+  Future<TokenSet>? _tokenRefreshInFlight;
+  int _authGeneration = 0;
 
   @override
   Future<AuthSession?> restoreSession() async {
     _logger.info('auth', 'Restoring local session');
-    final tokenSet = await tokenStore.load();
-    if (tokenSet == null || tokenSet.isExpired) {
-      await tokenStore.clear();
+    final storedTokenSet = await tokenStore.load();
+    if (storedTokenSet == null) {
       return null;
     }
+    _activateStoredTokenSet(storedTokenSet);
 
     try {
+      final tokenSet = await _ensureFreshToken(storedTokenSet);
       final user = await _fetchCurrentUser(tokenSet.accessToken);
       _logger.info(
         'auth',
@@ -33,11 +37,17 @@ class ConsoleAuthService implements AuthService {
         context: {'workspace_count': user.workspaces.length},
       );
       return AuthSession(user: user, tokenSet: tokenSet);
+    } on SessionExpiredException {
+      _logger.warn('auth', 'Stored refresh token is no longer valid');
+      await _clearActiveTokenSet();
+      return null;
+    } on _TokenRefreshException {
+      rethrow;
     } on _ConsoleNetworkException {
       rethrow;
     } on AuthException {
       _logger.warn('auth', 'Stored session invalid, clearing local token');
-      await tokenStore.clear();
+      await _clearActiveTokenSet();
       return null;
     }
   }
@@ -121,7 +131,7 @@ class ConsoleAuthService implements AuthService {
           obtainedAt: DateTime.now().toUtc(),
         );
 
-        await tokenStore.save(tokenSet);
+        await _saveNewTokenSet(tokenSet);
         final user = await _fetchCurrentUser(tokenSet.accessToken);
         _logger.info(
           'auth',
@@ -169,7 +179,16 @@ class ConsoleAuthService implements AuthService {
   @override
   Future<void> logout() async {
     _logger.info('auth', 'Clearing local auth token');
-    await tokenStore.clear();
+    await _clearActiveTokenSet();
+  }
+
+  @override
+  Future<AuthSession> refreshSession(
+    AuthSession session, {
+    bool force = false,
+  }) async {
+    final tokenSet = await _ensureFreshToken(session.tokenSet, force: force);
+    return AuthSession(user: session.user, tokenSet: tokenSet);
   }
 
   @override
@@ -931,7 +950,8 @@ class ConsoleAuthService implements AuthService {
     return _request(
       operation: operation,
       uri: uri,
-      send: () => _httpClient.get(uri, headers: headers),
+      headers: headers,
+      send: (requestHeaders) => _httpClient.get(uri, headers: requestHeaders),
     );
   }
 
@@ -944,7 +964,9 @@ class ConsoleAuthService implements AuthService {
     return _request(
       operation: operation,
       uri: uri,
-      send: () => _httpClient.post(uri, headers: headers, body: body),
+      headers: headers,
+      send: (requestHeaders) =>
+          _httpClient.post(uri, headers: requestHeaders, body: body),
     );
   }
 
@@ -956,14 +978,17 @@ class ConsoleAuthService implements AuthService {
     return _request(
       operation: operation,
       uri: uri,
-      send: () => _httpClient.delete(uri, headers: headers),
+      headers: headers,
+      send: (requestHeaders) =>
+          _httpClient.delete(uri, headers: requestHeaders),
     );
   }
 
   Future<http.Response> _request({
     required String operation,
     required Uri uri,
-    required Future<http.Response> Function() send,
+    required Map<String, String>? headers,
+    required Future<http.Response> Function(Map<String, String>? headers) send,
   }) async {
     _logger.debug(
       'auth.http',
@@ -972,7 +997,14 @@ class ConsoleAuthService implements AuthService {
     );
 
     try {
-      final response = await send();
+      var requestHeaders = await _freshAuthorizationHeaders(headers);
+      var response = await send(requestHeaders);
+      final rejectedAccessToken = _bearerAccessToken(requestHeaders);
+      if (response.statusCode == 401 && rejectedAccessToken != null) {
+        final tokenSet = await _refreshAfterUnauthorized(rejectedAccessToken);
+        requestHeaders = _withAccessToken(requestHeaders, tokenSet.accessToken);
+        response = await send(requestHeaders);
+      }
       _logger.debug(
         'auth.http',
         'Console API request completed',
@@ -991,6 +1023,146 @@ class ConsoleAuthService implements AuthService {
     } on IOException catch (error) {
       _throwNetworkAuthException(operation, uri, error);
     }
+  }
+
+  Future<Map<String, String>?> _freshAuthorizationHeaders(
+    Map<String, String>? headers,
+  ) async {
+    if (_bearerAccessToken(headers) == null || _activeTokenSet == null) {
+      return headers;
+    }
+    final tokenSet = await _ensureFreshToken(_activeTokenSet!);
+    return _withAccessToken(headers, tokenSet.accessToken);
+  }
+
+  Future<TokenSet> _refreshAfterUnauthorized(String rejectedAccessToken) {
+    final tokenSet = _activeTokenSet;
+    if (tokenSet == null) {
+      throw const SessionExpiredException();
+    }
+    if (tokenSet.accessToken != rejectedAccessToken) {
+      return Future<TokenSet>.value(tokenSet);
+    }
+    return _ensureFreshToken(tokenSet, force: true);
+  }
+
+  Future<TokenSet> _ensureFreshToken(TokenSet fallback, {bool force = false}) {
+    final tokenSet = _activeTokenSet ?? fallback;
+    _activeTokenSet = tokenSet;
+    if (!force && !tokenSet.isExpired) {
+      return Future<TokenSet>.value(tokenSet);
+    }
+
+    final refreshToken = tokenSet.refreshToken?.trim() ?? '';
+    if (refreshToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    final inFlight = _tokenRefreshInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    late final Future<TokenSet> tracked;
+    tracked = _refreshToken(tokenSet).whenComplete(() {
+      if (identical(_tokenRefreshInFlight, tracked)) {
+        _tokenRefreshInFlight = null;
+      }
+    });
+    _tokenRefreshInFlight = tracked;
+    return tracked;
+  }
+
+  Future<TokenSet> _refreshToken(TokenSet previous) async {
+    final generation = _authGeneration;
+    _logger.info('auth', 'Refreshing access token');
+    final response = await _post(
+      Uri.parse('$consoleBaseUrl/api/v1/auth/device/refresh'),
+      operation: 'refreshDeviceToken',
+      body: {'refresh_token': previous.refreshToken},
+    );
+    final body = _tryDecodeObject(response.body);
+    final error = body?['error']?.toString() ?? '';
+    if (error == 'invalid_grant') {
+      await _clearActiveTokenSet();
+      throw const SessionExpiredException();
+    }
+    if (!response.statusCode.toString().startsWith('2')) {
+      throw _TokenRefreshException(
+        '暂时无法刷新登录状态：${_extractErrorMessage(response.body)}',
+      );
+    }
+
+    final accessToken = body?['access_token']?.toString().trim() ?? '';
+    if (accessToken.isEmpty) {
+      throw const _TokenRefreshException('刷新登录状态时服务端未返回 access_token。');
+    }
+    final rotatedRefreshToken = body?['refresh_token']?.toString().trim() ?? '';
+    final tokenSet = TokenSet(
+      accessToken: accessToken,
+      idToken: body?['id_token']?.toString() ?? previous.idToken,
+      refreshToken: rotatedRefreshToken.isEmpty
+          ? previous.refreshToken
+          : rotatedRefreshToken,
+      tokenType: body?['token_type']?.toString() ?? previous.tokenType,
+      expiresIn: (body?['expires_in'] as num?)?.toInt() ?? previous.expiresIn,
+      obtainedAt: DateTime.now().toUtc(),
+    );
+    if (generation != _authGeneration ||
+        !identical(_activeTokenSet, previous)) {
+      throw const SessionExpiredException();
+    }
+    await tokenStore.save(tokenSet);
+    if (generation != _authGeneration) {
+      final current = _activeTokenSet;
+      if (current == null) {
+        await tokenStore.clear();
+      } else {
+        await tokenStore.save(current);
+      }
+      throw const SessionExpiredException();
+    }
+    _activeTokenSet = tokenSet;
+    _logger.info('auth', 'Access token refreshed');
+    return tokenSet;
+  }
+
+  void _activateStoredTokenSet(TokenSet tokenSet) {
+    _authGeneration++;
+    _tokenRefreshInFlight = null;
+    _activeTokenSet = tokenSet;
+  }
+
+  Future<void> _saveNewTokenSet(TokenSet tokenSet) async {
+    _activateStoredTokenSet(tokenSet);
+    await tokenStore.save(tokenSet);
+  }
+
+  Future<void> _clearActiveTokenSet() async {
+    _authGeneration++;
+    _activeTokenSet = null;
+    _tokenRefreshInFlight = null;
+    await tokenStore.clear();
+  }
+
+  static String? _bearerAccessToken(Map<String, String>? headers) {
+    final authorization = headers?['Authorization']?.trim() ?? '';
+    const prefix = 'Bearer ';
+    if (!authorization.startsWith(prefix)) {
+      return null;
+    }
+    final token = authorization.substring(prefix.length).trim();
+    return token.isEmpty ? null : token;
+  }
+
+  static Map<String, String> _withAccessToken(
+    Map<String, String>? headers,
+    String accessToken,
+  ) {
+    return <String, String>{
+      ...?headers,
+      'Authorization': 'Bearer $accessToken',
+    };
   }
 
   Never _throwNetworkAuthException(String operation, Uri uri, Object error) {
@@ -1190,4 +1362,8 @@ class _ConsoleNetworkException extends AuthException {
   final String operation;
   final String host;
   final String cause;
+}
+
+class _TokenRefreshException extends AuthException {
+  const _TokenRefreshException(super.message);
 }

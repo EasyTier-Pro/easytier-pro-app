@@ -35,6 +35,34 @@ void main() {
     );
   });
 
+  testWidgets('authenticated session refreshes before access token expires', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final authService = _RefreshableLoginFlowAuthService();
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(authService.refreshCount, 0);
+      await tester.pump(const Duration(seconds: 62));
+      await tester.pump();
+
+      expect(authService.refreshCount, 1);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('android login waits until app resumes before polling token', (
     WidgetTester tester,
   ) async {
@@ -5930,6 +5958,49 @@ class _LoginFlowAuthService implements AuthService {
       bootstrapToken: 'bootstrap-token',
       version: 'v1.0.0',
       configServer: 'tcp://et-web.console.easytier.net:22020',
+    );
+  }
+}
+
+class _RefreshableLoginFlowAuthService extends _LoginFlowAuthService
+    implements RefreshableAuthService {
+  int refreshCount = 0;
+
+  @override
+  Future<AuthSession?> restoreSession() async {
+    return AuthSession(
+      user: const ConsoleUser(
+        email: 'tester@example.com',
+        displayName: 'Test User',
+        workspaces: <ConsoleWorkspace>[
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+        ],
+      ),
+      tokenSet: TokenSet(
+        accessToken: 'access-old',
+        refreshToken: 'refresh-old',
+        tokenType: 'Bearer',
+        expiresIn: 121,
+        obtainedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  @override
+  Future<AuthSession> refreshSession(
+    AuthSession session, {
+    bool force = false,
+  }) async {
+    refreshCount++;
+    return AuthSession(
+      user: session.user,
+      tokenSet: TokenSet(
+        accessToken: 'access-new',
+        refreshToken: 'refresh-new',
+        tokenType: 'Bearer',
+        expiresIn: 3600,
+        obtainedAt: DateTime.now().toUtc(),
+      ),
     );
   }
 }

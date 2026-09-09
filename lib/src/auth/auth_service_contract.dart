@@ -80,3 +80,7 @@ abstract class AuthService {
 
   Future<void> logout();
 }
+
+abstract interface class RefreshableAuthService {
+  Future<AuthSession> refreshSession(AuthSession session, {bool force = false});
+}
