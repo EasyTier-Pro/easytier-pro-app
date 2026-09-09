@@ -581,6 +581,9 @@ class _TokenConnectionHomeViewState extends State<TokenConnectionHomeView>
           onOpenInstance: _openNetworkInstance,
           onOpenConsole: () => unawaited(_openConsoleNetworks()),
           onRetry: () => unawaited(_pollTraffic()),
+          onRepair: widget.coreLifecycleService.repair,
+          onRepairWithElevation:
+              widget.coreLifecycleService.repairWithElevation,
         ),
         _TokenHomeView.network => _TokenNetworkInstanceDetailPage(
           runtimeName: selectedRuntimeName,
@@ -643,6 +646,8 @@ class _TokenOverview extends StatelessWidget {
     required this.onOpenInstance,
     required this.onOpenConsole,
     required this.onRetry,
+    required this.onRepair,
+    required this.onRepairWithElevation,
   });
 
   final CoreRunStatus status;
@@ -653,6 +658,8 @@ class _TokenOverview extends StatelessWidget {
   final ValueChanged<String> onOpenInstance;
   final VoidCallback onOpenConsole;
   final VoidCallback onRetry;
+  final Future<void> Function() onRepair;
+  final Future<void> Function() onRepairWithElevation;
 
   @override
   Widget build(BuildContext context) {
@@ -676,6 +683,8 @@ class _TokenOverview extends StatelessWidget {
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,
           hasTrafficStats: hasTrafficStats,
+          onRepair: onRepair,
+          onRepairWithElevation: onRepairWithElevation,
         ),
         const SizedBox(height: 24),
         _TokenNetworkInstanceList(
@@ -699,6 +708,8 @@ class _TokenStatusSummary extends StatelessWidget {
     required this.downloadRate,
     required this.uploadRate,
     required this.hasTrafficStats,
+    required this.onRepair,
+    required this.onRepairWithElevation,
   });
 
   final CoreRunStatus status;
@@ -706,6 +717,8 @@ class _TokenStatusSummary extends StatelessWidget {
   final double downloadRate;
   final double uploadRate;
   final bool hasTrafficStats;
+  final Future<void> Function() onRepair;
+  final Future<void> Function() onRepairWithElevation;
 
   @override
   Widget build(BuildContext context) {
@@ -843,6 +856,32 @@ class _TokenStatusSummary extends StatelessWidget {
             uploadRate: uploadRate,
           )
         : null;
+    final coreAction = homeCoreEngineActionSpec(
+      status: status,
+      engineVersionStatus: CoreEngineVersionStatus.unknown,
+      onRepair: onRepair,
+      onRepairWithElevation: onRepairWithElevation,
+      includeRoutineAction: false,
+    );
+    final actionButton = coreAction == null
+        ? null
+        : FButton(
+            key: const ValueKey<String>('token-core-action-button'),
+            variant: .primary,
+            size: .sm,
+            onPress: coreAction.canRun
+                ? () => unawaited(coreAction.onRun!())
+                : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(coreAction.icon, size: 15),
+                const SizedBox(width: 6),
+                Text(coreAction.label),
+              ],
+            ),
+          );
+    final trailing = actionButton ?? trafficStrip;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -860,13 +899,14 @@ class _TokenStatusSummary extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (trafficStrip != null && constraints.maxWidth < 240) {
+          if (trailing != null &&
+              constraints.maxWidth < (actionButton == null ? 240 : 420)) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 statusBody,
-                const SizedBox(height: 10),
-                Align(alignment: Alignment.centerRight, child: trafficStrip),
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerRight, child: trailing),
               ],
             );
           }
@@ -874,9 +914,9 @@ class _TokenStatusSummary extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: statusBody),
-              if (trafficStrip != null) ...[
+              if (trailing != null) ...[
                 const SizedBox(width: 10),
-                trafficStrip,
+                trailing,
               ],
             ],
           );
