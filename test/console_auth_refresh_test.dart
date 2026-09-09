@@ -128,6 +128,148 @@ void main() {
     expect(results[1].single.code, 'ap-east');
   });
 
+  test('notifies the app when an API refresh token is rejected', () async {
+    final store = await _activeTokenStore();
+    final service = ConsoleAuthService(
+      tokenStore: store,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/me') {
+          return _userResponse();
+        }
+        if (request.url.path == '/api/v1/regions') {
+          return _jsonResponse({'message': 'unauthorized'}, 401);
+        }
+        if (request.url.path == '/api/v1/auth/device/refresh') {
+          return _jsonResponse({
+            'error': 'invalid_grant',
+            'error_description': 'refresh token expired',
+          }, 400);
+        }
+        return _jsonResponse({'message': 'not found'}, 404);
+      }),
+    );
+    final session = await service.restoreSession();
+    final expiration = service.sessionExpirations.first;
+
+    await expectLater(
+      service.fetchRegions(accessToken: session!.tokenSet.accessToken),
+      throwsA(isA<SessionExpiredException>()),
+    );
+
+    expect(
+      await expiration.timeout(const Duration(seconds: 1)),
+      isA<SessionExpiredException>(),
+    );
+    expect(await store.load(), isNull);
+  });
+
+  test('does not replay a stale request with a new session token', () async {
+    final store = await _activeTokenStore();
+    final requestStarted = Completer<void>();
+    final releaseRequest = Completer<void>();
+    final regionAuthorizations = <String?>[];
+    final service = ConsoleAuthService(
+      tokenStore: store,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/me') {
+          return _userResponse();
+        }
+        if (request.url.path == '/api/v1/regions') {
+          regionAuthorizations.add(request.headers['authorization']);
+          if (!requestStarted.isCompleted) {
+            requestStarted.complete();
+          }
+          await releaseRequest.future;
+          return _jsonResponse({'message': 'unauthorized'}, 401);
+        }
+        return _jsonResponse({'message': 'not found'}, 404);
+      }),
+    );
+    final sessionA = await service.restoreSession();
+    final staleRequest = expectLater(
+      service.fetchRegions(accessToken: sessionA!.tokenSet.accessToken),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          contains('登录状态已更新'),
+        ),
+      ),
+    );
+    await requestStarted.future;
+
+    await service.logout();
+    await store.save(_activeTokenSet('access-b', 'refresh-b'));
+    final sessionB = await service.restoreSession();
+    releaseRequest.complete();
+
+    await staleRequest;
+    await expectLater(
+      service.fetchRegions(accessToken: sessionA.tokenSet.accessToken),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          contains('登录状态已更新'),
+        ),
+      ),
+    );
+    expect(sessionB?.tokenSet.accessToken, 'access-b');
+    expect(regionAuthorizations, ['Bearer access-old']);
+    expect((await store.load())?.accessToken, 'access-b');
+  });
+
+  test('a stale invalid grant does not clear the new session', () async {
+    final store = await _activeTokenStore();
+    final refreshStarted = Completer<void>();
+    final releaseRefresh = Completer<void>();
+    final expirations = <SessionExpiredException>[];
+    final service = ConsoleAuthService(
+      tokenStore: store,
+      consoleBaseUrl: 'https://console.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/me') {
+          return _userResponse();
+        }
+        if (request.url.path == '/api/v1/regions') {
+          return _jsonResponse({'message': 'unauthorized'}, 401);
+        }
+        if (request.url.path == '/api/v1/auth/device/refresh') {
+          refreshStarted.complete();
+          await releaseRefresh.future;
+          return _jsonResponse({
+            'error': 'invalid_grant',
+            'error_description': 'refresh token expired',
+          }, 400);
+        }
+        return _jsonResponse({'message': 'not found'}, 404);
+      }),
+    );
+    final expirationSubscription = service.sessionExpirations.listen(
+      expirations.add,
+    );
+    addTearDown(expirationSubscription.cancel);
+    final sessionA = await service.restoreSession();
+    final staleRequest = expectLater(
+      service.fetchRegions(accessToken: sessionA!.tokenSet.accessToken),
+      throwsA(isA<SessionExpiredException>()),
+    );
+    await refreshStarted.future;
+
+    await service.logout();
+    await store.save(_activeTokenSet('access-b', 'refresh-b'));
+    final sessionB = await service.restoreSession();
+    releaseRefresh.complete();
+
+    await staleRequest;
+    await Future<void>.delayed(Duration.zero);
+    expect(sessionB?.tokenSet.accessToken, 'access-b');
+    expect((await store.load())?.accessToken, 'access-b');
+    expect(expirations, isEmpty);
+  });
+
   test('clears a session only when the refresh token is rejected', () async {
     final store = await _expiredTokenStore();
     final service = ConsoleAuthService(
@@ -222,16 +364,18 @@ Future<OAuthTokenStore> _expiredTokenStore() async {
 
 Future<OAuthTokenStore> _activeTokenStore() async {
   final store = await _tokenStore();
-  await store.save(
-    TokenSet(
-      accessToken: 'access-old',
-      refreshToken: 'refresh-old',
-      tokenType: 'Bearer',
-      expiresIn: 3600,
-      obtainedAt: DateTime.now().toUtc(),
-    ),
-  );
+  await store.save(_activeTokenSet('access-old', 'refresh-old'));
   return store;
+}
+
+TokenSet _activeTokenSet(String accessToken, String refreshToken) {
+  return TokenSet(
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+    tokenType: 'Bearer',
+    expiresIn: 3600,
+    obtainedAt: DateTime.now().toUtc(),
+  );
 }
 
 Future<OAuthTokenStore> _tokenStore() async {

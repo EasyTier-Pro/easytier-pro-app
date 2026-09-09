@@ -15,9 +15,16 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   final http.Client _httpClient;
   final String consoleBaseUrl;
   final AppLogger _logger = AppLogger.instance;
+  final StreamController<SessionExpiredException> _sessionExpirations =
+      StreamController<SessionExpiredException>.broadcast();
   TokenSet? _activeTokenSet;
+  final Set<String> _activeAccessTokens = <String>{};
   Future<TokenSet>? _tokenRefreshInFlight;
   int _authGeneration = 0;
+
+  @override
+  Stream<SessionExpiredException> get sessionExpirations =>
+      _sessionExpirations.stream;
 
   @override
   Future<AuthSession?> restoreSession() async {
@@ -998,12 +1005,31 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
 
     try {
       var requestHeaders = await _freshAuthorizationHeaders(headers);
+      final requestGeneration = _authGeneration;
       var response = await send(requestHeaders);
       final rejectedAccessToken = _bearerAccessToken(requestHeaders);
       if (response.statusCode == 401 && rejectedAccessToken != null) {
-        final tokenSet = await _refreshAfterUnauthorized(rejectedAccessToken);
-        requestHeaders = _withAccessToken(requestHeaders, tokenSet.accessToken);
-        response = await send(requestHeaders);
+        try {
+          final tokenSet = await _refreshAfterUnauthorized(
+            rejectedAccessToken,
+            requestGeneration,
+          );
+          if (requestGeneration != _authGeneration) {
+            throw const AuthException('登录状态已更新，请重试。');
+          }
+          requestHeaders = _withAccessToken(
+            requestHeaders,
+            tokenSet.accessToken,
+          );
+          response = await send(requestHeaders);
+        } on SessionExpiredException catch (error) {
+          await _expireRequestSessionIfCurrent(
+            error,
+            requestGeneration: requestGeneration,
+            rejectedAccessToken: rejectedAccessToken,
+          );
+          rethrow;
+        }
       }
       _logger.debug(
         'auth.http',
@@ -1028,14 +1054,28 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   Future<Map<String, String>?> _freshAuthorizationHeaders(
     Map<String, String>? headers,
   ) async {
-    if (_bearerAccessToken(headers) == null || _activeTokenSet == null) {
+    final requestedAccessToken = _bearerAccessToken(headers);
+    if (requestedAccessToken == null) {
       return headers;
     }
-    final tokenSet = await _ensureFreshToken(_activeTokenSet!);
+    final activeTokenSet = _activeTokenSet;
+    if (activeTokenSet == null) {
+      throw const SessionExpiredException();
+    }
+    if (!_activeAccessTokens.contains(requestedAccessToken)) {
+      throw const AuthException('登录状态已更新，请重试。');
+    }
+    final tokenSet = await _ensureFreshToken(activeTokenSet);
     return _withAccessToken(headers, tokenSet.accessToken);
   }
 
-  Future<TokenSet> _refreshAfterUnauthorized(String rejectedAccessToken) {
+  Future<TokenSet> _refreshAfterUnauthorized(
+    String rejectedAccessToken,
+    int requestGeneration,
+  ) {
+    if (requestGeneration != _authGeneration) {
+      throw const AuthException('登录状态已更新，请重试。');
+    }
     final tokenSet = _activeTokenSet;
     if (tokenSet == null) {
       throw const SessionExpiredException();
@@ -1047,8 +1087,13 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   }
 
   Future<TokenSet> _ensureFreshToken(TokenSet fallback, {bool force = false}) {
-    final tokenSet = _activeTokenSet ?? fallback;
-    _activeTokenSet = tokenSet;
+    final tokenSet = _activeTokenSet;
+    if (tokenSet == null) {
+      throw const SessionExpiredException();
+    }
+    if (!_activeAccessTokens.contains(fallback.accessToken)) {
+      throw const AuthException('登录状态已更新，请重试。');
+    }
     if (!force && !tokenSet.isExpired) {
       return Future<TokenSet>.value(tokenSet);
     }
@@ -1084,8 +1129,9 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
     final body = _tryDecodeObject(response.body);
     final error = body?['error']?.toString() ?? '';
     if (error == 'invalid_grant') {
-      await _clearActiveTokenSet();
-      throw const SessionExpiredException();
+      const exception = SessionExpiredException();
+      await _expireTokenSetIfCurrent(exception, previous, generation);
+      throw exception;
     }
     if (!response.statusCode.toString().startsWith('2')) {
       throw _TokenRefreshException(
@@ -1123,6 +1169,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
       throw const SessionExpiredException();
     }
     _activeTokenSet = tokenSet;
+    _activeAccessTokens.add(tokenSet.accessToken);
     _logger.info('auth', 'Access token refreshed');
     return tokenSet;
   }
@@ -1131,6 +1178,9 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
     _authGeneration++;
     _tokenRefreshInFlight = null;
     _activeTokenSet = tokenSet;
+    _activeAccessTokens
+      ..clear()
+      ..add(tokenSet.accessToken);
   }
 
   Future<void> _saveNewTokenSet(TokenSet tokenSet) async {
@@ -1138,11 +1188,47 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
     await tokenStore.save(tokenSet);
   }
 
-  Future<void> _clearActiveTokenSet() async {
-    _authGeneration++;
+  Future<int> _clearActiveTokenSet() async {
+    final clearGeneration = ++_authGeneration;
     _activeTokenSet = null;
+    _activeAccessTokens.clear();
     _tokenRefreshInFlight = null;
     await tokenStore.clear();
+    if (clearGeneration != _authGeneration) {
+      final current = _activeTokenSet;
+      if (current != null) {
+        await tokenStore.save(current);
+      }
+    }
+    return clearGeneration;
+  }
+
+  Future<void> _expireTokenSetIfCurrent(
+    SessionExpiredException error,
+    TokenSet tokenSet,
+    int generation,
+  ) async {
+    if (generation != _authGeneration ||
+        !identical(_activeTokenSet, tokenSet)) {
+      return;
+    }
+    final clearGeneration = await _clearActiveTokenSet();
+    if (clearGeneration == _authGeneration) {
+      _sessionExpirations.add(error);
+    }
+  }
+
+  Future<void> _expireRequestSessionIfCurrent(
+    SessionExpiredException error, {
+    required int requestGeneration,
+    required String rejectedAccessToken,
+  }) async {
+    final tokenSet = _activeTokenSet;
+    if (requestGeneration != _authGeneration ||
+        tokenSet?.accessToken != rejectedAccessToken) {
+      return;
+    }
+    await _expireTokenSetIfCurrent(error, tokenSet!, requestGeneration);
   }
 
   static String? _bearerAccessToken(Map<String, String>? headers) {

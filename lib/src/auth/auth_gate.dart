@@ -63,14 +63,23 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _approvalWaitInFlight = false;
   bool _waitForBrowserReturn = false;
   bool _sessionRefreshInFlight = false;
+  bool _sessionExpirationInFlight = false;
+  bool _logoutInFlight = false;
   int _approvalGeneration = 0;
   Timer? _sessionRefreshTimer;
+  StreamSubscription<SessionExpiredException>? _sessionExpirationSubscription;
   final AppLogger _logger = AppLogger.instance;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final authService = widget.authService;
+    if (authService is RefreshableAuthService) {
+      _sessionExpirationSubscription = (authService as RefreshableAuthService)
+          .sessionExpirations
+          .listen(_handleSessionExpired);
+    }
     unawaited(_bootstrap());
   }
 
@@ -78,6 +87,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _sessionRefreshTimer?.cancel();
+    unawaited(_sessionExpirationSubscription?.cancel());
     super.dispose();
   }
 
@@ -236,25 +246,33 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   Future<void> _logout() async {
-    _logger.info('auth.gate', 'Logout requested from UI');
-    _sessionRefreshTimer?.cancel();
-    await widget.coreLifecycleService.onLogout();
-    await widget.authService.logout();
-    if (!mounted) {
+    if (_logoutInFlight || _sessionExpirationInFlight) {
       return;
     }
+    _logoutInFlight = true;
+    _logger.info('auth.gate', 'Logout requested from UI');
+    _sessionRefreshTimer?.cancel();
+    try {
+      await widget.coreLifecycleService.onLogout();
+      await widget.authService.logout();
+      if (!mounted) {
+        return;
+      }
 
-    setState(() {
-      _session = null;
-      _tokenProfile = null;
-      _deviceAuthInfo = null;
-      _pendingApprovalInfo = null;
-      _approvalWaitInFlight = false;
-      _waitForBrowserReturn = false;
-      _sessionRefreshInFlight = false;
-      _approvalGeneration++;
-      _stage = AuthStage.loginRequired;
-    });
+      setState(() {
+        _session = null;
+        _tokenProfile = null;
+        _deviceAuthInfo = null;
+        _pendingApprovalInfo = null;
+        _approvalWaitInFlight = false;
+        _waitForBrowserReturn = false;
+        _sessionRefreshInFlight = false;
+        _approvalGeneration++;
+        _stage = AuthStage.loginRequired;
+      });
+    } finally {
+      _logoutInFlight = false;
+    }
   }
 
   Future<void> _startTokenConnection({
@@ -390,7 +408,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       });
       _scheduleSessionRefresh(refreshed);
     } on SessionExpiredException catch (error) {
-      if (mounted && identical(_session, session)) {
+      if (mounted && !_logoutInFlight && identical(_session, session)) {
         await _expireSession(error, session);
       }
     } catch (error) {
@@ -414,17 +432,39 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     SessionExpiredException error,
     AuthSession expiredSession,
   ) async {
-    _sessionRefreshTimer?.cancel();
-    await widget.coreLifecycleService.onSessionExpired(error);
-    await widget.authService.logout();
-    if (!mounted || !identical(_session, expiredSession)) {
+    if (!mounted ||
+        _logoutInFlight ||
+        _sessionExpirationInFlight ||
+        !identical(_session, expiredSession)) {
       return;
     }
-    setState(() {
-      _session = null;
-      _stage = AuthStage.loginRequired;
-      _statusMessage = '登录已失效，请重新登录。';
-    });
+    _sessionExpirationInFlight = true;
+    _sessionRefreshTimer?.cancel();
+    try {
+      await widget.coreLifecycleService.onSessionExpired(error);
+      if (!mounted || !identical(_session, expiredSession)) {
+        return;
+      }
+      await widget.authService.logout();
+      if (!mounted || !identical(_session, expiredSession)) {
+        return;
+      }
+      setState(() {
+        _session = null;
+        _stage = AuthStage.loginRequired;
+        _statusMessage = '登录已失效，请重新登录。';
+      });
+    } finally {
+      _sessionExpirationInFlight = false;
+    }
+  }
+
+  void _handleSessionExpired(SessionExpiredException error) {
+    final session = _session;
+    if (session == null || _logoutInFlight) {
+      return;
+    }
+    unawaited(_expireSession(error, session));
   }
 
   void _setTokenConnection(TokenConnectionProfile profile) {

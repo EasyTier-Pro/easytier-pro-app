@@ -63,6 +63,38 @@ void main() {
     }
   });
 
+  testWidgets('API session expiration returns the app to login', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    final authService = _RefreshableLoginFlowAuthService();
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-1',
+    );
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: coreLifecycleService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      authService.expireSession();
+      await tester.pumpAndSettle();
+
+      expect(coreLifecycleService.sessionExpiredCount, 1);
+      expect(find.text('开始登录'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      await authService.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('android login waits until app resumes before polling token', (
     WidgetTester tester,
   ) async {
@@ -5964,7 +5996,19 @@ class _LoginFlowAuthService implements AuthService {
 
 class _RefreshableLoginFlowAuthService extends _LoginFlowAuthService
     implements RefreshableAuthService {
+  final StreamController<SessionExpiredException> _sessionExpirations =
+      StreamController<SessionExpiredException>.broadcast();
   int refreshCount = 0;
+
+  @override
+  Stream<SessionExpiredException> get sessionExpirations =>
+      _sessionExpirations.stream;
+
+  void expireSession() {
+    _sessionExpirations.add(const SessionExpiredException());
+  }
+
+  Future<void> dispose() => _sessionExpirations.close();
 
   @override
   Future<AuthSession?> restoreSession() async {
@@ -6302,6 +6346,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   int elevationRepairCount = 0;
   int peerReadCount = 0;
   int userExitStopCount = 0;
+  int sessionExpiredCount = 0;
 
   @override
   Future<void> bindSession(AuthSession session) async {
@@ -6329,6 +6374,12 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
 
   @override
   Future<void> onLogout() async {
+    status.value = CoreRunStatus.signedOut;
+  }
+
+  @override
+  Future<void> onSessionExpired(Object error) async {
+    sessionExpiredCount++;
     status.value = CoreRunStatus.signedOut;
   }
 

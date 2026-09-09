@@ -82,5 +82,7 @@ abstract class AuthService {
 }
 
 abstract interface class RefreshableAuthService {
+  Stream<SessionExpiredException> get sessionExpirations;
+
   Future<AuthSession> refreshSession(AuthSession session, {bool force = false});
 }
