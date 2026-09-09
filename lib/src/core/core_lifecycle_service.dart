@@ -332,19 +332,11 @@ class CoreLifecycleService {
       _pauseEngineVersionChecks();
       try {
         final session = _session;
-        if (session == null) {
-          final profile = _tokenConnectionProfile;
-          if (profile != null) {
-            _logger.info(
-              'core',
-              'Elevation repair requested for token connection; using token repair path',
-            );
-            await _ensureTokenConnection(forceReinstall: true);
-            return;
-          }
+        final profile = _tokenConnectionProfile;
+        if (session == null && profile == null) {
           _logger.warn(
             'core',
-            'Elevation repair requested without active session',
+            'Elevation repair requested without active connection',
           );
           status.value = CoreRunStatus.signedOut;
           return;
@@ -355,12 +347,15 @@ class CoreLifecycleService {
             'Elevation repair is not supported by current runtime',
             context: {'runtime': _runtime.runtimeType.toString()},
           );
-          await _ensureRunning(forceReinstall: true);
+          if (session != null) {
+            await _ensureRunning(forceReinstall: true);
+          } else {
+            await _ensureTokenConnection(forceReinstall: true);
+          }
           return;
         }
 
-        final workspace = session.user.currentWorkspace;
-        if (workspace == null) {
+        if (session != null && session.user.currentWorkspace == null) {
           status.value = const CoreRunStatus(
             phase: CoreRunPhase.error,
             message: '当前账号未绑定工作区',
@@ -372,14 +367,31 @@ class CoreLifecycleService {
           phase: CoreRunPhase.repairing,
           message: '正在以管理员身份安装连接引擎...',
         );
-        _logger.info('core', 'Elevation repair requested');
+        _logger.info(
+          'core',
+          'Elevation repair requested',
+          context: {'connection_mode': session == null ? 'token' : 'account'},
+        );
 
         var elevatedUninstallRequested = false;
         try {
-          final bootstrap = await authService.prepareCoreBootstrap(
-            accessToken: session.tokenSet.accessToken,
-            workspaceId: workspace.id,
-          );
+          final CoreBootstrapConfig bootstrap;
+          if (session != null) {
+            final workspace = session.user.currentWorkspace!;
+            bootstrap = await authService.prepareCoreBootstrap(
+              accessToken: session.tokenSet.accessToken,
+              workspaceId: workspace.id,
+            );
+          } else {
+            final defaults = await authService.fetchCoreBootstrapDefaults();
+            bootstrap = profile!.toBootstrap(
+              version: defaults.version,
+              configServerOverride: _tokenConfigServerOverride(
+                configured: profile.configServer,
+                releaseConfigServer: defaults.configServer,
+              ),
+            );
+          }
           final request = {
             'bootstrap_token': bootstrap.bootstrapToken,
             'version': bootstrap.version,
@@ -416,6 +428,7 @@ class CoreLifecycleService {
             session: session,
             bootstrap: bootstrap,
             event: event,
+            tokenConnection: session == null,
           );
         } on _ElevatedDesktopCommandFailure catch (error) {
           final cause = error.cause;
@@ -467,9 +480,10 @@ class CoreLifecycleService {
   }
 
   void _completeElevatedInstall({
-    required AuthSession session,
+    required AuthSession? session,
     required CoreBootstrapConfig bootstrap,
     required Map<String, dynamic> event,
+    required bool tokenConnection,
   }) {
     final machineId = parseMachineIdFromDesktopEvent(event);
     _rememberCliPath(parseCliPathFromDesktopEvent(event));
@@ -480,7 +494,11 @@ class CoreLifecycleService {
     );
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
-      message: machineId == null || machineId.isEmpty ? '连接引擎运行中' : '本机设备已就绪',
+      message: machineId == null || machineId.isEmpty
+          ? '连接引擎运行中'
+          : tokenConnection
+          ? '令牌连接已建立'
+          : '本机设备已就绪',
       machineId: machineId,
       details: 'EasyTier ${bootstrap.version}',
     );
@@ -488,7 +506,9 @@ class CoreLifecycleService {
       installedVersion: bootstrap.version,
       consoleVersion: bootstrap.version,
     );
-    _reportMachineReady(session, machineId);
+    if (session != null) {
+      _reportMachineReady(session, machineId);
+    }
   }
 
   Future<Map<String, dynamic>> _runElevatedDesktopCommand(

@@ -1089,6 +1089,59 @@ void main() {
       expect(service.status.value.phase, CoreRunPhase.running);
     });
 
+    test('elevated repair installs an active token connection', () async {
+      final elevatedCommands = <String>[];
+      final elevatedRequests = <Map<String, Object?>>[];
+      final authService = _LifecycleAuthService();
+      final runtime = _LifecycleRuntime()
+        ..supportsElevationRepairValue = true
+        ..ensureRunningError = CoreLifecycleService.elevationRequiredForTesting(
+          'Permission denied: /usr/local/easytier',
+        );
+      final service = CoreLifecycleService(
+        authService: authService,
+        runtime: runtime,
+        elevatedDesktopCommandRunner: (command, request) async {
+          elevatedCommands.add(command);
+          elevatedRequests.add(request);
+          return const <String, dynamic>{
+            'event': 'finished',
+            'data': <String, dynamic>{
+              'machine_id': 'machine-token',
+              'cli_path': '/usr/local/bin/easytier-cli',
+            },
+          };
+        },
+      );
+      addTearDown(service.dispose);
+
+      await service.bindTokenConnection(
+        TokenConnectionProfile(
+          bootstrapToken: 'device-token',
+          configServer: 'tcp://127.0.0.1:22020',
+          displayName: 'token profile',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      expect(service.status.value.phase, CoreRunPhase.needsElevation);
+
+      await service.repairWithElevation();
+
+      expect(runtime.ensureRunningCount, 1);
+      expect(runtime.preElevatedInstallCheckCount, 1);
+      expect(elevatedCommands, ['install']);
+      expect(elevatedRequests, [
+        {
+          'bootstrap_token': 'device-token',
+          'version': '2.6.4',
+          'config_server': 'tcp://127.0.0.1:22020',
+        },
+      ]);
+      expect(service.status.value.phase, CoreRunPhase.running);
+      expect(service.status.value.message, '令牌连接已建立');
+      expect(service.status.value.machineId, 'machine-token');
+    });
+
     test(
       'pending version check is ignored after elevated repair publishes version',
       () async {

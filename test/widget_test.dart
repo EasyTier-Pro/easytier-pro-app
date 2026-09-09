@@ -489,6 +489,53 @@ void main() {
     expect(find.text('设备令牌连接 · 设备令牌连接'), findsNothing);
   });
 
+  testWidgets('token overview offers administrator authorization repair', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+    final authService = _LoginFlowAuthService();
+    final tokenStore = TokenConnectionProfileStore.memory();
+    await tokenStore.save(
+      TokenConnectionProfile.fromInput(
+        input: 'device-token',
+        defaultConfigServer: 'tcp://et-web.console.easytier.net:22020',
+      ),
+    );
+    final coreLifecycleService = _NoopCoreLifecycleService(
+      authService: authService,
+      machineId: 'machine-token',
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        tokenConnectionProfileStore: tokenStore,
+        traySupport: createTraySupport(),
+        coreLifecycleService: coreLifecycleService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    coreLifecycleService.status.value = const CoreRunStatus(
+      phase: CoreRunPhase.needsElevation,
+      message: '需要管理员权限以安装连接引擎',
+      lastError: '无法写入 /usr/local/easytier：权限不足',
+    );
+    await tester.pump();
+
+    final authorizeButton = find.byKey(
+      const ValueKey<String>('token-core-action-button'),
+    );
+    expect(authorizeButton, findsOneWidget);
+    expect(find.widgetWithText(FButton, '授权修复连接引擎'), findsOneWidget);
+
+    await tester.tap(authorizeButton);
+    await tester.pumpAndSettle();
+
+    expect(coreLifecycleService.elevationRepairCount, 1);
+    expect(coreLifecycleService.status.value.phase, CoreRunPhase.running);
+  });
+
   testWidgets('token network list uses compact tile metrics on mobile', (
     WidgetTester tester,
   ) async {
@@ -6181,6 +6228,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   TokenConnectionProfile? tokenProfile;
   int _trafficReadCount = 0;
   int repairCount = 0;
+  int elevationRepairCount = 0;
   int peerReadCount = 0;
   int userExitStopCount = 0;
 
@@ -6232,6 +6280,16 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
       message: '本机设备已就绪',
+      machineId: machineId,
+    );
+  }
+
+  @override
+  Future<void> repairWithElevation() async {
+    elevationRepairCount++;
+    status.value = CoreRunStatus(
+      phase: CoreRunPhase.running,
+      message: '令牌连接已建立',
       machineId: machineId,
     );
   }
