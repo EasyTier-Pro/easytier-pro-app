@@ -587,7 +587,7 @@ void main() {
       const ValueKey<String>('token-core-action-button'),
     );
     expect(authorizeButton, findsOneWidget);
-    expect(find.widgetWithText(FButton, '授权修复连接引擎'), findsOneWidget);
+    expect(find.widgetWithText(FButton, '管理员权限修复/重试'), findsOneWidget);
 
     await tester.tap(authorizeButton);
     await tester.pumpAndSettle();
@@ -4714,10 +4714,10 @@ void main() {
   test('console service decodes regions and managed devices', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
-    final service = ConsoleAuthService(
+    final service = await _authenticatedConsoleService(
       tokenStore: OAuthTokenStore(preferences),
       consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
+      handler: (request) async {
         if (request.url.path == '/api/v1/regions') {
           return _jsonResponse({
             'regions': [
@@ -4766,7 +4766,7 @@ void main() {
           ]);
         }
         return http.Response('{}', 404);
-      }),
+      },
     );
 
     final regions = await service.fetchRegions(accessToken: 'token');
@@ -5012,10 +5012,10 @@ void main() {
   test('console service preserves node operating system metadata', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
-    final service = ConsoleAuthService(
+    final service = await _authenticatedConsoleService(
       tokenStore: OAuthTokenStore(preferences),
       consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
+      handler: (request) async {
         if (request.url.path ==
             '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
           return _jsonResponse([
@@ -5036,7 +5036,7 @@ void main() {
           ]);
         }
         return http.Response('{}', 404);
-      }),
+      },
     );
 
     final nodes = await service.fetchNetworkDevices(
@@ -5056,10 +5056,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final requests = <http.Request>[];
-    final service = ConsoleAuthService(
+    final service = await _authenticatedConsoleService(
       tokenStore: OAuthTokenStore(preferences),
       consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
+      handler: (request) async {
         requests.add(request);
         if (request.url.path ==
             '/api/v1/tenants/tenant-1/networks/net-1/subnet-routes') {
@@ -5131,7 +5131,7 @@ void main() {
           });
         }
         return http.Response('{}', 404);
-      }),
+      },
     );
 
     final routes = await service.fetchNetworkSubnetRoutes(
@@ -5180,10 +5180,10 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
-      final service = ConsoleAuthService(
+      final service = await _authenticatedConsoleService(
         tokenStore: OAuthTokenStore(preferences),
         consoleBaseUrl: 'https://console.test',
-        httpClient: MockClient((request) async {
+        handler: (request) async {
           if (request.url.path ==
               '/api/v1/tenants/tenant-1/networks/net-1/nodes') {
             return _jsonResponse([
@@ -5200,7 +5200,7 @@ void main() {
             ]);
           }
           return http.Response('{}', 404);
-        }),
+        },
       );
 
       final nodes = await service.fetchNetworkDevices(
@@ -5226,10 +5226,10 @@ void main() {
       Future<String> createKeyNameFor(TargetPlatform platform) async {
         debugDefaultTargetPlatformOverride = platform;
         final requests = <http.Request>[];
-        final service = ConsoleAuthService(
+        final service = await _authenticatedConsoleService(
           tokenStore: OAuthTokenStore(preferences),
           consoleBaseUrl: 'https://console.test',
-          httpClient: MockClient((request) async {
+          handler: (request) async {
             requests.add(request);
             if (request.url.path == '/api/v1/releases/latest') {
               return _jsonResponse({
@@ -5245,7 +5245,7 @@ void main() {
               return _jsonResponse({'bootstrap_token': 'bootstrap-token'}, 201);
             }
             return http.Response('{}', 404);
-          }),
+          },
         );
 
         await service.prepareCoreBootstrap(
@@ -5284,10 +5284,10 @@ void main() {
     });
 
     final requests = <http.Request>[];
-    final service = ConsoleAuthService(
+    final service = await _authenticatedConsoleService(
       tokenStore: OAuthTokenStore(preferences),
       consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
+      handler: (request) async {
         requests.add(request);
         if (request.url.path == '/api/v1/releases/latest') {
           return _jsonResponse({
@@ -5317,7 +5317,7 @@ void main() {
           return _jsonResponse({'bootstrap_token': 'desktop-token'});
         }
         return http.Response('{}', 404);
-      }),
+      },
     );
 
     final bootstrap = await service.prepareCoreBootstrap(
@@ -5346,10 +5346,10 @@ void main() {
       });
 
       final requests = <http.Request>[];
-      final service = ConsoleAuthService(
+      final service = await _authenticatedConsoleService(
         tokenStore: OAuthTokenStore(preferences),
         consoleBaseUrl: 'https://console.test',
-        httpClient: MockClient((request) async {
+        handler: (request) async {
           requests.add(request);
           if (request.url.path == '/api/v1/releases/latest') {
             return _jsonResponse({
@@ -5382,7 +5382,7 @@ void main() {
             return _jsonResponse({'bootstrap_token': 'desktop-token'});
           }
           return http.Response('{}', 404);
-        }),
+        },
       );
 
       final bootstrap = await service.prepareCoreBootstrap(
@@ -5417,10 +5417,10 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
 
       Future<String> prepareConfigServer(String consoleBaseUrl) async {
-        final service = ConsoleAuthService(
+        final service = await _authenticatedConsoleService(
           tokenStore: OAuthTokenStore(preferences),
           consoleBaseUrl: consoleBaseUrl,
-          httpClient: MockClient((request) async {
+          handler: (request) async {
             if (request.url.path == '/api/v1/releases/latest') {
               return _jsonResponse({
                 'stable': {'version': 'v2.6.4'},
@@ -5435,7 +5435,7 @@ void main() {
               return _jsonResponse({'bootstrap_token': 'bootstrap-token'}, 201);
             }
             return http.Response('{}', 404);
-          }),
+          },
         );
 
         final bootstrap = await service.prepareCoreBootstrap(
@@ -5496,10 +5496,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final requests = <http.Request>[];
-    final service = ConsoleAuthService(
+    final service = await _authenticatedConsoleService(
       tokenStore: OAuthTokenStore(preferences),
       consoleBaseUrl: 'https://console.test',
-      httpClient: MockClient((request) async {
+      handler: (request) async {
         requests.add(request);
         if (request.url.path == '/api/v1/tenants/tenant-1/networks') {
           return _jsonResponse({
@@ -5531,7 +5531,7 @@ void main() {
           });
         }
         return http.Response('{}', 404);
-      }),
+      },
     );
 
     final network = await service.createNetwork(
@@ -5782,6 +5782,41 @@ Future<void> _pumpAppMotionFrames(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 100));
   }
   await tester.pump();
+}
+
+Future<ConsoleAuthService> _authenticatedConsoleService({
+  required OAuthTokenStore tokenStore,
+  required Future<http.Response> Function(http.Request request) handler,
+  required String consoleBaseUrl,
+}) async {
+  await tokenStore.save(
+    TokenSet(
+      accessToken: 'token',
+      refreshToken: 'refresh-token',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      obtainedAt: DateTime.now().toUtc(),
+    ),
+  );
+  final service = ConsoleAuthService(
+    tokenStore: tokenStore,
+    consoleBaseUrl: consoleBaseUrl,
+    httpClient: MockClient((request) async {
+      if (request.url.path == '/api/v1/auth/me') {
+        return _jsonResponse({
+          'user': {'email': 'tester@example.com', 'display_name': 'Tester'},
+          'tenants': [
+            {'id': 'tenant-1', 'name': 'Test Workspace'},
+          ],
+        });
+      }
+      return handler(request);
+    }),
+  );
+
+  final session = await service.restoreSession();
+  expect(session?.tokenSet.accessToken, 'token');
+  return service;
 }
 
 http.Response _jsonResponse(Object body, [int statusCode = 200]) {
