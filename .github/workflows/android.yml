@@ -27,9 +27,18 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.4"
+          flutter-version: "3.47.2"
           channel: stable
           cache: true
+
+      # Remove after a stable Flutter release includes flutter/flutter#191587.
+      - name: Apply Flutter semantics regression fix
+        shell: bash
+        run: |
+          semantics_patch="$GITHUB_WORKSPACE/.github/patches/flutter-3.47-merge-semantics.patch"
+          if ! git -C "$FLUTTER_ROOT" apply --reverse --check "$semantics_patch"; then
+            git -C "$FLUTTER_ROOT" apply "$semantics_patch"
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4

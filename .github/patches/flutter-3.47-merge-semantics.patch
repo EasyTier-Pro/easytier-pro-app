@@ -1,0 +1,15 @@
+diff --git a/packages/flutter/lib/src/rendering/object.dart b/packages/flutter/lib/src/rendering/object.dart
+index 18a456ea..fa73de54 100644
+--- a/packages/flutter/lib/src/rendering/object.dart
++++ b/packages/flutter/lib/src/rendering/object.dart
+@@ -6401,7 +6401,9 @@ class _RenderObjectSemantics extends _SemanticsFragment with DiagnosticableTreeM
+             node.tags!.addAll(tags);
+           }
+         }
+-        node.isMergedIntoParent = parentData?.mergeIntoParent ?? false;
++        node.isMergedIntoParent =
++            configProvider.effective.isMergingSemanticsOfDescendants ||
++            (parentData?.mergeIntoParent ?? false);
+       }
+     }
+     _updateSiblingNodesGeometries();
