@@ -1350,13 +1350,18 @@ exit 3
   }
 
   Future<void> _stopRuntimeForAuthInvalid(Object error) async {
+    var message = '登录态已失效，连接已停止';
     try {
-      await _runtime.stop();
+      await _stopRuntimeAllowingElevation(
+        elevatedStatusMessage: '登录态已失效，正在以管理员身份停止连接引擎...',
+        elevatedLogMessage: 'Elevated auth expiration cleanup requested',
+      );
       _logger.info(
         'core',
         'Stopped runtime because the auth session is invalid',
       );
     } catch (stopError) {
+      message = '登录态已失效，连接停止失败：${_normalizeError(stopError)}';
       _logger.warn(
         'core',
         'Failed to stop runtime after auth became invalid',
@@ -1365,7 +1370,7 @@ exit 3
     }
     status.value = CoreRunStatus(
       phase: CoreRunPhase.error,
-      message: '登录态已失效，连接已停止',
+      message: message,
       lastError: _normalizeError(error),
     );
     engineVersionStatus.value = CoreEngineVersionStatus.unknown;

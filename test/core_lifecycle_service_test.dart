@@ -1383,6 +1383,57 @@ void main() {
       expect(service.status.value.message, '登录态已失效，连接已停止');
     });
 
+    test('uses elevated uninstall when the session expires', () async {
+      final elevatedCommands = <String>[];
+      final runtime = _LifecycleRuntime()
+        ..stopError = CoreLifecycleService.elevationRequiredForTesting(
+          'desktop uninstall must be run as root',
+        );
+      final service = CoreLifecycleService(
+        authService: _LifecycleAuthService(),
+        runtime: runtime,
+        elevatedDesktopCommandRunner: (command, request) async {
+          elevatedCommands.add(command);
+          expect(request, {'purge': false});
+          return const <String, dynamic>{
+            'event': 'finished',
+            'data': <String, dynamic>{},
+          };
+        },
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.onSessionExpired(const AuthException('请重新登录'));
+
+      expect(runtime.stopCount, 1);
+      expect(elevatedCommands, ['uninstall']);
+      expect(service.status.value.message, '登录态已失效，连接已停止');
+    });
+
+    test('reports failed elevated cleanup when the session expires', () async {
+      final runtime = _LifecycleRuntime()
+        ..stopError = CoreLifecycleService.elevationRequiredForTesting(
+          'desktop uninstall must be run as root',
+        );
+      final service = CoreLifecycleService(
+        authService: _LifecycleAuthService(),
+        runtime: runtime,
+        elevatedDesktopCommandRunner: (command, request) async {
+          throw StateError('authorization cancelled');
+        },
+      );
+      addTearDown(service.dispose);
+
+      await service.bindSession(_session('tenant-1'));
+      await service.onSessionExpired(const AuthException('请重新登录'));
+
+      expect(runtime.stopCount, 1);
+      expect(service.status.value.phase, CoreRunPhase.error);
+      expect(service.status.value.message, contains('连接停止失败'));
+      expect(service.status.value.message, contains('authorization cancelled'));
+    });
+
     test(
       'uses elevated uninstall when logout cleanup needs elevation',
       () async {
