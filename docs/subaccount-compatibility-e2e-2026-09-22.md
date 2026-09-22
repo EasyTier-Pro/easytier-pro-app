@@ -68,9 +68,12 @@ Auto Key display name. It ignores `is_member_default` and otherwise creates a
 manual, pre-approved key. The first enrollment created `Android Auto Key` even
 though the subaccount already had a valid default key requiring approval.
 
-To exercise the failure, the isolated Auto Key was renamed and four additional
-manual keys were created through Console. Five recent manual creations exhausted
-the normal creation burst allowance. On the next real App login:
+To exercise the failure, the isolated Auto Key was unassigned by the owner and
+four additional manual keys were created through Console. The test had attempted
+to rename the key, but PATCH accepts owner changes only: the omitted owner
+unassigned it, removing it from the member-visible list. Five recent manual
+creations exhausted the normal creation burst allowance. On the next real App
+login:
 
 1. Reading enrollment keys returned 200.
 2. App attempted `prepareCoreBootstrap.createKey`, which returned 429 with
@@ -123,9 +126,10 @@ Workspace and lifecycle/audit records remain for diagnosis. Temporary public
 release metadata was restored. No production deployment or Casdoor change was
 made.
 
-Proposed follow-up is limited to App key selection, authentication failure
-handling and capability-based UI. It must preserve existing device bindings when
-adopting default member keys; confirm that behavior before implementation.
+Subsequent scope was approved in Console ADR 0052: compatibility for automatic
+key requests and Account checks during device-token exchange/refresh, keeping
+App and Casdoor source unchanged. The member menu and 403 copy limitation
+remains a future App change. This report records the pre-fix observations.
 
 Domain context impact: none because this report records existing contracts and
 observed defects without changing domain meaning.
