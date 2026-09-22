@@ -1,0 +1,191 @@
+[
+  {
+    "time": "2026-09-22T15:10:40.620810",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchCurrentUser",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:10:40.852015",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:12:14.553184",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "createNetwork",
+    "status": 403
+  },
+  {
+    "time": "2026-09-22T15:13:17.362660",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.keys",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:13:18.361445",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.createKey",
+    "status": 201
+  },
+  {
+    "time": "2026-09-22T15:14:01.559734",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "attachDeviceToNetwork",
+    "status": 201
+  },
+  {
+    "time": "2026-09-22T15:14:02.625905",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNodeConfig",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:14:40.155949",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNodeConfig",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:14:41.136272",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNodeConfig",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:15:14.554310",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "removeNetworkNode",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:15:35.488432",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchCurrentUser",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:15:36.189650",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:15:37.187193",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.keys",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:34.725510",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "refreshDeviceToken",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:35.232369",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchCurrentUser",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:36.231469",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:37.230797",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.keys",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:45.927303",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "refreshDeviceToken",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:16:46.729746",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 401
+  },
+  {
+    "time": "2026-09-22T15:17:14.751180",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "refreshDeviceToken",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:17:15.752518",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 401
+  },
+  {
+    "time": "2026-09-22T15:17:28.761380",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "refreshDeviceToken",
+    "status": 400
+  },
+  {
+    "time": "2026-09-22T15:18:53.386373",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchCurrentUser",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:18:53.658594",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "fetchNetworks",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:18:53.687308",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.keys",
+    "status": 200
+  },
+  {
+    "time": "2026-09-22T15:18:53.727960",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "prepareCoreBootstrap.createKey",
+    "status": 429
+  },
+  {
+    "time": "2026-09-22T15:19:57.318231",
+    "scope": "auth.http",
+    "message": "Console API request completed",
+    "operation": "refreshDeviceToken",
+    "status": 400
+  }
+]
