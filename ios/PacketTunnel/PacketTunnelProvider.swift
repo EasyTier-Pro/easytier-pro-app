@@ -179,8 +179,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       guard config != appliedConfig || bridge == nil else { return }
       apply(config)
     } catch {
-      // A DHCP address may not exist yet immediately after instance creation.
-      if (error as NSError).domain != "EasyTier" || (error as NSError).code != 2 {
+      // DHCP can remove an existing NIC as well as delay the initial address.
+      // Clear its settings so recovery to the same IP still reattaches the fd.
+      if (error as NSError).domain == "EasyTier" && (error as NSError).code == 2 {
+        if appliedConfig != nil { apply(nil) }
+      } else {
         recordError(error)
       }
     }
@@ -210,11 +213,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
           if let error { throw error }
           if let config {
+            let needsAttachment = self.bridge == nil || addressChanged
             if self.bridge == nil {
               self.bridge = try EasyTierPacketBridge(flow: self.packetFlow)
               self.bridge?.start()
             }
-            if addressChanged, let bridge = self.bridge {
+            if needsAttachment, let bridge = self.bridge {
               // Core DHCP replaces its NIC when the virtual address changes.
               // Reuse the owned socketpair; route-only changes need no fd swap.
               try self.check(set_tun_fd(name, bridge.coreFD))
@@ -224,7 +228,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                        "addresses": [config.address], "routes": config.routes,
                                        "dns": config.dns])
           } else {
-            self.emit("vpn_stopped", ["reason": "network_removed"])
+            self.emit("vpn_stopped", ["reason": name.isEmpty ? "network_removed" : "address_unassigned"])
           }
           self.persistStatus()
           self.refresh()

@@ -9,7 +9,8 @@ struct EasyTierVpnConfig: Equatable {
   let mtu = 1280
 
   init(node: [String: Any], routes: [[String: Any]], network: [String: Any] = [:]) throws {
-    guard let cidr = Self.cidr(node["virtual_ipv4"] ?? node["virtualIpv4"]),
+    // show_node_info returns api.instance.NodeInfo, not collect's MyNodeInfo.
+    guard let cidr = Self.cidr(node["ipv4_addr"]),
           Self.ipv4(cidr) != nil else {
       throw NSError(domain: "EasyTier", code: 2, userInfo: [NSLocalizedDescriptionKey: "等待控制台分配虚拟 IP。"])
     }
