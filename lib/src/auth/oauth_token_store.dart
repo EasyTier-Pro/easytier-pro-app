@@ -8,7 +8,7 @@ class OAuthTokenStore {
   final SharedPreferences _preferences;
 
   Future<TokenSet?> load() async {
-    final raw = _preferences.getString(_tokenKey);
+    final raw = await _loadCredential(_preferences, _tokenKey);
     if (raw == null || raw.isEmpty) {
       return null;
     }
@@ -18,10 +18,14 @@ class OAuthTokenStore {
   }
 
   Future<void> save(TokenSet tokenSet) async {
-    await _preferences.setString(_tokenKey, jsonEncode(tokenSet.toJson()));
+    await _saveCredential(
+      _preferences,
+      _tokenKey,
+      jsonEncode(tokenSet.toJson()),
+    );
   }
 
   Future<void> clear() async {
-    await _preferences.remove(_tokenKey);
+    await _clearCredential(_preferences, _tokenKey);
   }
 }

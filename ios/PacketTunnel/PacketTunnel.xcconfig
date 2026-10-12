@@ -1,0 +1,16 @@
+#include "../Flutter/Generated.xcconfig"
+#include "../Flutter/Signing.xcconfig"
+#include "../Frameworks/CoreVersion.xcconfig"
+PRODUCT_BUNDLE_IDENTIFIER = $(EASYTIER_BUNDLE_ID).PacketTunnel
+CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements
+INFOPLIST_FILE = PacketTunnel/Info.plist
+SWIFT_OBJC_BRIDGING_HEADER = PacketTunnel/PacketTunnel-Bridging-Header.h
+SWIFT_VERSION = 5.0
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+APPLICATION_EXTENSION_API_ONLY = YES
+SKIP_INSTALL = YES
+ENABLE_BITCODE = NO
+CURRENT_PROJECT_VERSION = $(FLUTTER_BUILD_NUMBER)
+MARKETING_VERSION = $(FLUTTER_BUILD_NAME)
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+OTHER_LDFLAGS = $(inherited) -framework SystemConfiguration -framework Security -framework NetworkExtension

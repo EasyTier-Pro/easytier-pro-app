@@ -15,6 +15,7 @@ part 'core_lifecycle_models.dart';
 part 'core_platform_runtime.dart';
 part 'desktop_core_runtime.dart';
 part 'android_core_runtime.dart';
+part 'ios_core_runtime.dart';
 
 @visibleForTesting
 typedef CoreElevatedDesktopCommandRunner =
@@ -2331,6 +2332,7 @@ exit 3
   }
 
   void _handleRuntimeEvent(CoreRuntimeEvent event) {
+    final platform = event.data['platform']?.toString() ?? 'Android';
     _logger.debug(
       'core.runtime',
       'Runtime event received',
@@ -2362,7 +2364,7 @@ exit 3
           const <String>[];
       _logger.info(
         'core.vpn',
-        'Android VPN established',
+        '$platform VPN established',
         context: {
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
@@ -2412,13 +2414,13 @@ exit 3
               '',
         },
       );
-      _restoreRunningStatusAfterVpnRecovery();
+      _restoreRunningStatusAfterVpnRecovery(platform);
     }
     if (event.type == CoreRuntimeEventTypes.vpnConfigRefreshed) {
       final payload = _runtimeEventPayload(event);
       _logger.info(
         'core.vpn',
-        'Android VPN config refresh requested',
+        '$platform VPN config refresh requested',
         context: {
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
@@ -2433,7 +2435,7 @@ exit 3
       final stopReason = payload['reason']?.toString().trim() ?? '';
       _logger.info(
         'core.vpn',
-        'Android VPN stopped',
+        '$platform VPN stopped',
         context: {
           'instance_name':
               payload['instanceName'] ?? payload['instance_name'] ?? '',
@@ -2450,7 +2452,7 @@ exit 3
       final payload = _runtimeEventPayload(event);
       _logger.info(
         'core.runtime',
-        'Android config server client started',
+        '$platform config server client started',
         context: {
           'hostname': payload['hostname'] ?? '',
           'already_started':
@@ -2462,7 +2464,7 @@ exit 3
       final payload = _runtimeEventPayload(event);
       _logger.info(
         'core.runtime',
-        'Android config server client stopped',
+        '$platform config server client stopped',
         context: {'reason': payload['reason'] ?? ''},
       );
     }
@@ -2482,7 +2484,7 @@ exit 3
       status.value = CoreRunStatus(
         phase: CoreRunPhase.needsVpnPermission,
         message: '需要授权 VPN 连接',
-        lastError: '用户已拒绝 Android VPN 授权，请重新授权后继续。',
+        lastError: '用户已拒绝 $platform VPN 授权，请重新授权后继续。',
         machineId: current.machineId,
         details: current.details,
       );
@@ -2491,7 +2493,8 @@ exit 3
     if (event.type == CoreRuntimeEventTypes.configServerStopped) {
       final payload = _runtimeEventPayload(event);
       final stopReason = payload['reason']?.toString().trim() ?? '';
-      if (_isIntentionalAndroidRuntimeStop(stopReason)) {
+      if (_isIntentionalRuntimeStop(stopReason) ||
+          (event.data['platform'] == 'iOS' && stopReason == 'system_stop')) {
         status.value = CoreRunStatus(
           phase: CoreRunPhase.stopped,
           message: stopReason == 'revoked' ? 'VPN 已由系统断开' : '连接已断开',
@@ -2509,7 +2512,7 @@ exit 3
       if (_isInstanceNotReadyMessage(message)) {
         _logger.warn(
           'core.runtime',
-          'Android runtime instance is not ready',
+          '$platform runtime instance is not ready',
           context: {
             'error': message,
             'instance_name':
@@ -2520,7 +2523,7 @@ exit 3
       }
       _logger.error(
         'core.runtime',
-        'Android runtime error',
+        '$platform runtime error',
         context: {
           'error': message,
           'action': payload['action'] ?? '',
@@ -2556,7 +2559,7 @@ exit 3
     }
   }
 
-  bool _isIntentionalAndroidRuntimeStop(String reason) {
+  bool _isIntentionalRuntimeStop(String reason) {
     return reason == 'user_disconnect' || reason == 'revoked';
   }
 
@@ -2566,7 +2569,7 @@ exit 3
     }
     _logger.warn(
       'core.runtime',
-      'Android runtime stopped while session is active; reconnecting',
+      '${_runtime is IosCoreRuntime ? 'iOS' : 'Android'} runtime stopped while session is active; reconnecting',
     );
     status.value = CoreRunStatus(
       phase: CoreRunPhase.repairing,
@@ -2588,7 +2591,7 @@ exit 3
     return value == null ? 0 : 1;
   }
 
-  void _restoreRunningStatusAfterVpnRecovery() {
+  void _restoreRunningStatusAfterVpnRecovery(String platform) {
     if (!_hasActiveConnection) {
       return;
     }
@@ -2599,7 +2602,7 @@ exit 3
     }
     status.value = CoreRunStatus(
       phase: CoreRunPhase.running,
-      message: 'Android 连接引擎运行中',
+      message: '$platform 连接引擎运行中',
       machineId: current.machineId,
       details: current.details,
     );

@@ -11,6 +11,7 @@ EasyTier Pro App 是 EasyTier Pro 的跨平台客户端，用于把桌面和移�
 - 加入或断开已授权网络，查看虚拟 IP、路由、流量和连接状态。
 - Windows 和 macOS 桌面客户端随包携带 `easytier-pro-installer`，用于安装和管理本机 EasyTier runtime。
 - Android 客户端通过系统 `VpnService` 建立可见 VPN 连接，把授权网络和子网路由交给 EasyTier 处理。
+- iOS 客户端通过独立 Packet Tunnel 扩展运行 EasyTier，支持应用退到后台后继续连接。
 - 桌面端使用 `auto_updater` 接入自动更新；macOS 使用 Sparkle appcast，Windows 使用 WinSparkle appcast。
 - 诊断日志覆盖认证、控制面连接、runtime 启停、VPN 授权、路由下发和更新检查等关键路径。
 
@@ -83,7 +84,7 @@ flutter build apk --release --target-platform android-arm64,android-x64 --split-
 - `scripts/generate_appcast.dart` 生成桌面自动更新使用的 appcast XML。
 - `scripts/verify_android_release_inputs.ps1` 和 `scripts/verify_android_porting_readiness.ps1` 用于 Android 发布前检查。
 
-更完整的自动更新和发布说明见 [docs/auto-update-desktop.md](docs/auto-update-desktop.md) 与 [docs/android-release.md](docs/android-release.md)。
+更完整的说明见 [桌面自动更新](docs/auto-update-desktop.md)、[Android 发布](docs/android-release.md) 与 [iOS 开发与验证](docs/ios-development.md)。
 
 ## 自动更新
 
@@ -124,7 +125,7 @@ git push origin v1.0.7
 ```text
 lib/        Flutter 应用代码
 android/    Android runner、VpnService 与 JNI 集成
-ios/        iOS runner
+ios/        iOS runner、Packet Tunnel 扩展与共享 Keychain
 macos/      macOS runner 与 Sparkle 配置
 windows/    Windows runner、安装器资源与 WinSparkle 配置
 linux/      Linux runner

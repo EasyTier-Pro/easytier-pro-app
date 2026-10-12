@@ -1,0 +1,61 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: iOS core, extension and app
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+      # Remove after a stable Flutter release includes flutter/flutter#191587.
+      - name: Apply Flutter semantics regression fix
+        run: |
+          semantics_patch="$GITHUB_WORKSPACE/.github/patches/flutter-3.47-merge-semantics.patch"
+          if ! git -C "$FLUTTER_ROOT" apply --reverse --check "$semantics_patch"; then
+            git -C "$FLUTTER_ROOT" apply "$semantics_patch"
+          fi
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95"
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - name: Install Protocol Buffers compiler
+        run: brew install protobuf
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Analyze and test Dart
+        run: |
+          dart analyze
+          flutter test
+      - name: Restore core framework
+        id: core-cache
+        uses: actions/cache@v5
+        with:
+          path: ios/Frameworks
+          key: ios-core-${{ runner.os }}-${{ runner.arch }}-rust-1.95-${{ hashFiles('scripts/ios_core_revision', 'scripts/build_ios_core.sh', 'ios/PacketTunnel/EasyTierCore.h') }}
+      - name: Build pinned EasyTier core
+        if: steps.core-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build_ios_core.sh
+      - name: Build unsigned device app and extension
+        run: flutter build ios --release --no-codesign
+      - name: Build simulator app and extension
+        run: flutter build ios --simulator --debug
+      - name: Test native credentials, routes and simulator behavior
+        run: |
+          device_id="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPhone")))')"
+          xcodebuild test -project ios/Runner.xcodeproj -scheme Runner \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            -only-testing:RunnerTests CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-

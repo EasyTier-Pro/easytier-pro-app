@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDisplayName</key><string>EasyTier Pro VPN</string>
+  <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
+  <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
+  <key>EasyTierAppGroup</key><string>$(EASYTIER_APP_GROUP)</string>
+  <key>EasyTierKeychainGroup</key><string>$(AppIdentifierPrefix)$(EASYTIER_BUNDLE_ID)</string>
+  <key>EasyTierCoreVersion</key><string>$(EASYTIER_CORE_VERSION)</string>
+  <key>NSLocalNetworkUsageDescription</key><string>连接已授权网络中的设备和您配置的本地控制台。</string>
+  <key>NSExtension</key><dict>
+    <key>NSExtensionPointIdentifier</key><string>com.apple.networkextension.packet-tunnel</string>
+    <key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).PacketTunnelProvider</string>
+  </dict>
+</dict></plist>

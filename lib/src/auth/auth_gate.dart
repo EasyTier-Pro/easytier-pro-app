@@ -529,7 +529,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   bool get _shouldWaitForBrowserReturn {
-    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    return !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
   }
 
   @override

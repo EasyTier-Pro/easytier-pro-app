@@ -22,9 +22,32 @@ import 'package:easytier_pro_app/src/desktop/app_update_service.dart';
 import 'package:easytier_pro_app/src/desktop/tray_support.dart';
 import 'package:easytier_pro_app/src/desktop/window_behavior_preferences.dart';
 import 'package:easytier_pro_app/src/home/network_detail_layout.dart';
+import 'package:easytier_pro_app/src/home/home_settings_page.dart';
 import 'package:easytier_pro_app/src/shared/app_text_selection.dart';
 
 void main() {
+  test(
+    'iOS reconnect action does not offer downloading a replacement core',
+    () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      const version = CoreEngineVersionStatus(
+        relation: CoreEngineVersionRelation.updateAvailable,
+        installedVersion: '2.7.0',
+        consoleVersion: '9.0.0',
+      );
+      expect(homeCoreEngineActionLabel(version), '重新连接');
+      final action = homeCoreEngineActionSpec(
+        status: const CoreRunStatus(phase: CoreRunPhase.running, message: ''),
+        engineVersionStatus: version,
+        onRepair: () async {},
+        onRepairWithElevation: () async {},
+        settingsLabel: true,
+      );
+      expect(action?.label, '重新连接');
+      expect(action?.icon, Icons.refresh);
+    },
+  );
   setUp(() {
     PackageInfo.setMockInitialValues(
       appName: 'EasyTier Pro',
@@ -95,47 +118,54 @@ void main() {
     }
   });
 
-  testWidgets('android login waits until app resumes before polling token', (
-    WidgetTester tester,
-  ) async {
-    final previousLauncher = UrlLauncherPlatform.instance;
-    final launcher = _FakeUrlLauncherPlatform();
-    final authService = _LoginFlowAuthService();
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    UrlLauncherPlatform.instance = launcher;
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets(
+      '${platform.name} login waits until app resumes before polling token',
+      (WidgetTester tester) async {
+        final previousLauncher = UrlLauncherPlatform.instance;
+        final launcher = _FakeUrlLauncherPlatform();
+        final authService = _LoginFlowAuthService();
+        debugDefaultTargetPlatformOverride = platform;
+        UrlLauncherPlatform.instance = launcher;
 
-    try {
-      await tester.pumpWidget(
-        MyApp(
-          authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
-            authService: authService,
-            machineId: 'machine-1',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        try {
+          await tester.pumpWidget(
+            MyApp(
+              authService: authService,
+              traySupport: createTraySupport(),
+              coreLifecycleService: _NoopCoreLifecycleService(
+                authService: authService,
+                machineId: 'machine-1',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(FButton).first);
-      await tester.pumpAndSettle();
+          await tester.tap(find.byType(FButton).first);
+          await tester.pumpAndSettle();
 
-      expect(launcher.launchCount, 1);
-      expect(authService.startDeviceAuthCount, 1);
-      expect(authService.completeDeviceAuthCount, 0);
+          expect(launcher.launchCount, 1);
+          expect(authService.startDeviceAuthCount, 1);
+          expect(authService.completeDeviceAuthCount, 0);
 
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump();
-      expect(authService.completeDeviceAuthCount, 0);
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+          await tester.pump();
+          expect(authService.completeDeviceAuthCount, 0);
 
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
-      expect(authService.completeDeviceAuthCount, 1);
-    } finally {
-      UrlLauncherPlatform.instance = previousLauncher;
-      debugDefaultTargetPlatformOverride = null;
-    }
-  });
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pumpAndSettle();
+          expect(authService.completeDeviceAuthCount, 1);
+        } finally {
+          UrlLauncherPlatform.instance = previousLauncher;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
 
   test('network detail collapse controller coordinates list scroll', () {
     final controller = HomeNetworkDetailHeaderCollapseController();
@@ -183,10 +213,15 @@ void main() {
       await tester.pumpAndSettle();
 
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-      final routeFuture = navigator.pushNamed<void>('/device-complete');
-      await tester.pump();
-      await tester.pump();
-      await routeFuture;
+      for (final route in [
+        '/device-complete',
+        'easytierpro://auth/device-complete',
+      ]) {
+        final routeFuture = navigator.pushNamed<void>(route);
+        await tester.pump();
+        await tester.pump();
+        await routeFuture;
+      }
 
       expect(flutterErrors, isEmpty);
       expect(navigator.canPop(), isFalse);
@@ -3291,34 +3326,36 @@ void main() {
     expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
   });
 
-  testWidgets('android settings keeps diagnostics mobile friendly', (
-    WidgetTester tester,
-  ) async {
-    _useDesktopViewport(tester, size: const Size(390, 760));
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      final authService = _FakeAuthService();
-      await tester.pumpWidget(
-        MyApp(
-          authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('${platform.name} settings keeps diagnostics mobile friendly', (
+      WidgetTester tester,
+    ) async {
+      _useDesktopViewport(tester, size: const Size(390, 760));
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        final authService = _FakeAuthService();
+        await tester.pumpWidget(
+          MyApp(
             authService: authService,
-            machineId: 'machine-1',
+            traySupport: createTraySupport(),
+            coreLifecycleService: _NoopCoreLifecycleService(
+              authService: authService,
+              machineId: 'machine-1',
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      await _openSettingsFromUserMenu(tester);
-      await _tapSettingsCategory(tester, '诊断日志');
+        await _openSettingsFromUserMenu(tester);
+        await _tapSettingsCategory(tester, '诊断日志');
 
-      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
-  });
+        expect(find.byIcon(Icons.download_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
 
   test('window behavior preferences default minimize to taskbar', () async {
     SharedPreferences.setMockInitialValues({});
@@ -4841,43 +4878,45 @@ void main() {
     );
   });
 
-  test(
-    'console service includes app return URI in Android device auth request',
-    () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      addTearDown(() {
-        debugDefaultTargetPlatformOverride = null;
-      });
-      SharedPreferences.setMockInitialValues({});
-      final preferences = await SharedPreferences.getInstance();
-      late Map<String, String> requestBody;
-      final service = ConsoleAuthService(
-        tokenStore: OAuthTokenStore(preferences),
-        consoleBaseUrl: 'https://console.test',
-        httpClient: MockClient((request) async {
-          requestBody = request.bodyFields;
-          return _jsonResponse({
-            'device_code': 'device-code',
-            'user_code': 'USER-CODE',
-            'verification_uri':
-                'https://casdoor.test/login/oauth/device/USER-CODE',
-            'expires_in': 600,
-            'interval': 5,
-          });
-        }),
-      );
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    test(
+      'console service includes app return URI on ${platform.name}',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
+        });
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        late Map<String, String> requestBody;
+        final service = ConsoleAuthService(
+          tokenStore: OAuthTokenStore(preferences),
+          consoleBaseUrl: 'https://console.test',
+          httpClient: MockClient((request) async {
+            requestBody = request.bodyFields;
+            return _jsonResponse({
+              'device_code': 'device-code',
+              'user_code': 'USER-CODE',
+              'verification_uri':
+                  'https://casdoor.test/login/oauth/device/USER-CODE',
+              'expires_in': 600,
+              'interval': 5,
+            });
+          }),
+        );
 
-      final info = await service.startDeviceAuth();
+        final info = await service.startDeviceAuth();
 
-      expect(info.deviceCode, 'device-code');
-      expect(requestBody['client_id'], '');
-      expect(requestBody['scope'], 'openid profile email');
-      expect(
-        requestBody['app_return_uri'],
-        'easytierpro://auth/device-complete',
-      );
-    },
-  );
+        expect(info.deviceCode, 'device-code');
+        expect(requestBody['client_id'], '');
+        expect(requestBody['scope'], 'openid profile email');
+        expect(
+          requestBody['app_return_uri'],
+          'easytierpro://auth/device-complete',
+        );
+      },
+    );
+  }
 
   test(
     'console service omits app return URI in desktop device auth request',

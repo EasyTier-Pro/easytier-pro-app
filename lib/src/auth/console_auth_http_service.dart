@@ -1433,7 +1433,9 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   }
 
   static bool _shouldRequestDeviceAuthAppReturnUri() {
-    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    return !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
   }
 }
 

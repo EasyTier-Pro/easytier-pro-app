@@ -180,7 +180,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     if (kIsWeb) {
       return false;
     }
-    return Platform.isAndroid;
+    return Platform.isAndroid || Platform.isIOS;
   }
 
   ConsoleNetwork? get _selectedNetwork {

@@ -26,6 +26,19 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>EasyTierAppGroup</key>
+	<string>$(EASYTIER_APP_GROUP)</string>
+	<key>EasyTierCoreVersion</key>
+	<string>$(EASYTIER_CORE_VERSION)</string>
+	<key>EasyTierKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)$(EASYTIER_BUNDLE_ID)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>连接已授权网络中的设备和您配置的本地控制台。</string>
+	<key>CFBundleURLTypes</key>
+	<array><dict>
+		<key>CFBundleURLName</key><string>$(EASYTIER_BUNDLE_ID).auth</string>
+		<key>CFBundleURLSchemes</key><array><string>easytierpro</string></array>
+	</dict></array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

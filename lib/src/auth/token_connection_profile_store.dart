@@ -78,8 +78,9 @@ class TokenConnectionProfileStore {
   final Map<String, String>? _memoryValues;
 
   Future<TokenConnectionProfile?> load() async {
-    final source =
-        _memoryValues?[_profileKey] ?? preferences?.getString(_profileKey);
+    final source = _memoryValues != null
+        ? _memoryValues[_profileKey]
+        : await _loadCredential(preferences!, _profileKey);
     if (source == null || source.trim().isEmpty) {
       return null;
     }
@@ -111,7 +112,7 @@ class TokenConnectionProfileStore {
       memory[_profileKey] = source;
       return;
     }
-    await preferences?.setString(_profileKey, source);
+    await _saveCredential(preferences!, _profileKey, source);
   }
 
   Future<void> clear() async {
@@ -120,7 +121,7 @@ class TokenConnectionProfileStore {
       memory.remove(_profileKey);
       return;
     }
-    await preferences?.remove(_profileKey);
+    await _clearCredential(preferences!, _profileKey);
   }
 
   static bool _isUsableProfile(TokenConnectionProfile profile) {

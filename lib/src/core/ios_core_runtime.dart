@@ -1,0 +1,208 @@
+part of 'core_lifecycle_service.dart';
+
+class IosCoreRuntime extends CorePlatformRuntime {
+  IosCoreRuntime({MethodChannel? methodChannel, EventChannel? eventChannel})
+    : _methodChannel =
+          methodChannel ??
+          const MethodChannel('net.easytier.pro/core_runtime') {
+    _nativeEvents =
+        (eventChannel ??
+                const EventChannel('net.easytier.pro/core_runtime_events'))
+            .receiveBroadcastStream()
+            .listen(
+              (value) {
+                final event = CoreJsonValue.readMap(value);
+                if (event != null) {
+                  _events.add(
+                    CoreRuntimeEvent(
+                      type: event['type']?.toString() ?? '',
+                      data: {...event, 'platform': 'iOS'},
+                    ),
+                  );
+                }
+              },
+              onError: (Object error) => _events.add(
+                CoreRuntimeEvent(
+                  type: CoreRuntimeEventTypes.error,
+                  data: {'error': error.toString(), 'platform': 'iOS'},
+                ),
+              ),
+            );
+  }
+
+  final MethodChannel _methodChannel;
+  final _events = StreamController<CoreRuntimeEvent>.broadcast();
+  late final StreamSubscription<dynamic> _nativeEvents;
+
+  @override
+  Stream<CoreRuntimeEvent> get events => _events.stream;
+
+  @override
+  Future<CoreRuntimeStartResult?> readStatus(
+    CoreBootstrapConfig bootstrap,
+  ) async {
+    final status = await _methodChannel.invokeMapMethod<String, Object?>(
+      'readStatus',
+      {
+        'url': _configServerUrl(bootstrap),
+        'token': bootstrap.bootstrapToken.trim(),
+      },
+    );
+    return status?['running'] == true ? _startResult(status!) : null;
+  }
+
+  @override
+  Future<CoreRuntimeStartResult> ensureRunning(
+    CoreBootstrapConfig bootstrap, {
+    required bool forceReinstall,
+  }) async {
+    final machineId = await _methodChannel.invokeMethod<String>('getMachineId');
+    final hostname = await _methodChannel.invokeMethod<String>('getHostname');
+    if (machineId == null || machineId.isEmpty) {
+      throw StateError('iOS machineId 为空');
+    }
+    try {
+      final status = await _methodChannel
+          .invokeMapMethod<String, Object?>('ensureRunning', {
+            'url': _configServerUrl(bootstrap),
+            'token': bootstrap.bootstrapToken.trim(),
+            'hostname': hostname ?? 'iPhone',
+            'forceReinstall': forceReinstall,
+          });
+      if (status?['running'] != true) {
+        throw StateError('iOS VPN 扩展未运行');
+      }
+      return _startResult(status!);
+    } on PlatformException catch (error) {
+      if (error.code != 'VPN_PERMISSION_DENIED') rethrow;
+      return CoreRuntimeStartResult(
+        phase: CoreRunPhase.needsVpnPermission,
+        message: '需要授权 VPN 连接',
+        machineId: machineId,
+        lastError: error.message,
+      );
+    }
+  }
+
+  String _configServerUrl(CoreBootstrapConfig bootstrap) {
+    final base = Uri.parse(bootstrap.configServer.trim());
+    return base
+        .replace(
+          pathSegments: [
+            ...base.pathSegments.where((segment) => segment.isNotEmpty),
+            bootstrap.bootstrapToken.trim(),
+          ],
+        )
+        .toString();
+  }
+
+  CoreRuntimeStartResult _startResult(Map<String, Object?> status) {
+    final version = status['core_version']?.toString() ?? '';
+    return CoreRuntimeStartResult(
+      phase: CoreRunPhase.running,
+      message: 'iOS 连接引擎运行中',
+      machineId: status['machine_id']?.toString(),
+      details: version.isEmpty ? null : 'EasyTier $version',
+      coreVersion: version.isEmpty ? null : version,
+    );
+  }
+
+  @override
+  Future<String?> readInstalledVersion() async {
+    final status = await _methodChannel.invokeMapMethod<String, Object?>(
+      'readStatus',
+    );
+    return status?['core_version']?.toString();
+  }
+
+  @override
+  Future<void> stop() => _methodChannel.invokeMethod<void>('stopRuntime');
+
+  Future<Map<String, Object?>> _snapshot() async {
+    final json = await _methodChannel.invokeMethod<String>(
+      'collectNetworkInfos',
+    );
+    return CoreJsonValue.readMap(json) ?? const {};
+  }
+
+  Map<String, Object?>? _instance(
+    Map<String, Object?> snapshot,
+    String runtimeNetworkName,
+  ) {
+    if (runtimeNetworkName.trim().isEmpty ||
+        snapshot['network_name'] != runtimeNetworkName.trim()) {
+      return null;
+    }
+    final instances = CoreJsonValue.readMap(snapshot['instances']);
+    return CoreJsonValue.readMap(instances?[snapshot['instance_name']]);
+  }
+
+  @override
+  Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
+    return _instance(await _snapshot(), runtimeNetworkName)?['running'] == true;
+  }
+
+  @override
+  Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
+    String runtimeNetworkName,
+  ) async {
+    final instance = _instance(await _snapshot(), runtimeNetworkName);
+    if (instance == null || instance['running'] != true) {
+      throw StateError('no instance matches $runtimeNetworkName');
+    }
+    final peers = parseCorePeerStatusesFromJson(
+      jsonEncode(instance['peer_route_pairs'] ?? const []),
+    );
+    final local = parseCoreLocalPeerStatusFromNodeInfoJson(
+      jsonEncode(instance['my_node_info'] ?? const {}),
+    );
+    if (local != null) peers[local.ipv4] = local;
+    return peers;
+  }
+
+  @override
+  Future<Map<String, CoreNetworkTrafficTotals>>
+  readNetworkTrafficTotals() async {
+    final snapshot = await _snapshot();
+    final name = snapshot['network_name']?.toString() ?? '';
+    if (name.isEmpty || _instance(snapshot, name)?['running'] != true) {
+      return const {};
+    }
+    final json = await _methodChannel.invokeMethod<String>('callJsonRpc', {
+      'serviceName': 'api.instance.StatsRpcService',
+      'methodName': 'get_stats',
+      'payloadJson': jsonEncode({
+        'instance': {
+          'instance_selector': {'name': snapshot['instance_name']},
+        },
+      }),
+    });
+    final stats = CoreJsonValue.readMap(json) ?? const {};
+    var download = 0;
+    var upload = 0;
+    for (final value in CoreJsonValue.readList(stats['metrics'])) {
+      final metric = CoreJsonValue.readMap(value);
+      final bytes = CoreJsonValue.readInt(metric?['value']) ?? 0;
+      switch (metric?['name']) {
+        case 'traffic_bytes_self_rx':
+          download += bytes;
+        case 'traffic_bytes_self_tx':
+          upload += bytes;
+      }
+    }
+    return {
+      name: CoreNetworkTrafficTotals(
+        runtimeNetworkName: name,
+        downloadBytes: download,
+        uploadBytes: upload,
+        sampledAt: DateTime.now(),
+      ),
+    };
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _nativeEvents.cancel();
+    await _events.close();
+  }
+}

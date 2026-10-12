@@ -305,6 +305,9 @@ HomeAppUpdateFeedback homeAppUpdateCheckFeedback(AppUpdateCheckStatus status) {
 }
 
 String homeCoreEngineActionLabel(CoreEngineVersionStatus status) {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    return '重新连接';
+  }
   if (status.updateAvailable) {
     final consoleVersion = status.consoleVersion;
     if (consoleVersion != null && consoleVersion.isNotEmpty) {
@@ -379,7 +382,9 @@ HomeCoreEngineActionSpec? homeCoreEngineActionSpec({
       label: settingsLabel
           ? _homeCoreEngineSettingsActionLabel(engineVersionStatus)
           : homeCoreEngineActionLabel(engineVersionStatus),
-      icon: engineVersionStatus.updateAvailable
+      icon:
+          engineVersionStatus.updateAvailable &&
+              defaultTargetPlatform != TargetPlatform.iOS
           ? Icons.system_update_alt
           : Icons.refresh,
       enabled: !homeCoreEngineBusy(status),
@@ -705,7 +710,7 @@ class HomeDiagnosticsSettingsSection extends StatelessWidget {
   }
 
   Future<bool> _shareDiagnosticsFile(File file) async {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       return false;
     }
     await _androidDiagnosticsChannel.invokeMethod<bool>('shareFile', {
@@ -1498,10 +1503,16 @@ class _HomeSettingsControlBoundary extends StatelessWidget {
 }
 
 String _homeCoreEngineSettingsActionLabel(CoreEngineVersionStatus status) {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    return '重新连接';
+  }
   return status.updateAvailable ? '更新连接引擎' : '重装连接引擎';
 }
 
 String? _homeCoreEngineVersionHint(CoreEngineVersionStatus status) {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    return '连接引擎随 iOS 应用更新。';
+  }
   final installedVersion = status.installedVersion;
   final consoleVersion = status.consoleVersion;
   return switch (status.relation) {

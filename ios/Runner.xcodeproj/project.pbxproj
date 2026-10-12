@@ -16,6 +16,48 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		E71000000000000000000011 /* Swift source */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000005;
+
+		};
+		E71000000000000000000012 /* Swift source */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000006;
+
+		};
+		E71000000000000000000013 /* Swift source */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000007;
+
+		};
+		E71000000000000000000014 /* Swift source */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000003;
+
+		};
+		E71000000000000000000016 /* EasyTierCore.xcframework in Frameworks */ = {
+			isa = PBXBuildFile;
+			fileRef = E7100000000000000000000E;
+
+		};
+		E71000000000000000000020 /* PacketTunnel.appex in Embed App Extensions */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000010;
+			settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); };
+		};
+		E71000000000000000000022 /* EasyTierFlutterBridge.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000001;
+
+		};
+		E71000000000000000000023 /* EasyTierShared.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = E71000000000000000000003;
+
+		};
+		E71200000000000000000001 /* EasyTierVpnConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71200000000000000000003; };
+		E71200000000000000000002 /* EasyTierVpnConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71000000000000000000007; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,6 +67,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		E7100000000000000000001E /* PacketTunnel proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D;
+			proxyType = 1;
+			remoteGlobalIDString = E7100000000000000000001D;
+			remoteInfo = PacketTunnel;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -37,6 +86,17 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71000000000000000000021 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E71000000000000000000020,
+			);
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -59,6 +119,87 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E71000000000000000000001 /* EasyTierFlutterBridge.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "EasyTierFlutterBridge.swift";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000002 /* Runner.entitlements */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.entitlements;
+			path = "Runner.entitlements";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000003 /* EasyTierShared.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "EasyTierShared.swift";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000005 /* PacketTunnelProvider.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "PacketTunnelProvider.swift";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000006 /* EasyTierPacketBridge.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "EasyTierPacketBridge.swift";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000007 /* EasyTierVpnConfig.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "EasyTierVpnConfig.swift";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000008 /* EasyTierCore.h */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			path = "EasyTierCore.h";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000009 /* PacketTunnel-Bridging-Header.h */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			path = "PacketTunnel-Bridging-Header.h";
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000A /* Info.plist */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "Info.plist";
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000B /* PacketTunnel.entitlements */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.entitlements;
+			path = "PacketTunnel.entitlements";
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000C /* PacketTunnel.xcconfig */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.xcconfig;
+			path = "PacketTunnel.xcconfig";
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000E /* EasyTierCore.xcframework */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.xcframework;
+			path = "EasyTierCore.xcframework";
+			sourceTree = "<group>";
+		};
+		E71000000000000000000010 /* PacketTunnel.appex */ = {
+			isa = PBXFileReference;
+			explicitFileType = "wrapper.app-extension";
+			includeInIndex = 0;
+			path = PacketTunnel.appex;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		E71200000000000000000003 /* EasyTierVpnConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierVpnConfigTests.swift; sourceTree = "<group>"; };
+		E71200000000000000000004 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Signing.xcconfig; path = Flutter/Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +211,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E71000000000000000000017 /* PBXFrameworksBuildPhase */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E71000000000000000000016,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -77,6 +226,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				E71200000000000000000003 /* EasyTierVpnConfigTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -88,6 +238,7 @@
 				3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */,
 				9740EEB21CF90195004384FC /* Debug.xcconfig */,
 				7AFA3C8E1D35360C0083082E /* Release.xcconfig */,
+				E71200000000000000000004 /* Signing.xcconfig */,
 				9740EEB31CF90195004384FC /* Generated.xcconfig */,
 			);
 			name = Flutter;
@@ -100,6 +251,9 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				E71000000000000000000004,
+				E7100000000000000000000D,
+				E7100000000000000000000F,
 			);
 			sourceTree = "<group>";
 		};
@@ -108,6 +262,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				E71000000000000000000010,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -124,8 +279,41 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				E71000000000000000000001,
+				E71000000000000000000002,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		E71000000000000000000004 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				E71000000000000000000003,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000D /* PacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				E71000000000000000000005,
+				E71000000000000000000006,
+				E71000000000000000000007,
+				E71000000000000000000008,
+				E71000000000000000000009,
+				E7100000000000000000000A,
+				E7100000000000000000000B,
+				E7100000000000000000000C,
+			);
+			path = PacketTunnel;
+			sourceTree = "<group>";
+		};
+		E7100000000000000000000F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E7100000000000000000000E,
+			);
+			path = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -152,6 +340,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
+				E71000000000000000000021 /* Embed App Extensions */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
@@ -162,6 +351,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				E7100000000000000000001F,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -170,6 +360,21 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		E7100000000000000000001D /* PacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E7100000000000000000001C;
+			buildPhases = (
+				E71000000000000000000015,
+				E71000000000000000000017,
+				E71000000000000000000018,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = PacketTunnel;
+			productName = PacketTunnel;
+			productReference = E71000000000000000000010;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -209,6 +414,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				E7100000000000000000001D,
 			);
 		};
 /* End PBXProject section */
@@ -229,6 +435,14 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71000000000000000000018 /* PBXResourcesBuildPhase */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -274,6 +488,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				E71200000000000000000001 /* EasyTierVpnConfigTests.swift in Sources */,
+				E71200000000000000000002 /* EasyTierVpnConfig.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,8 +498,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				E71000000000000000000022,
+				E71000000000000000000023,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71000000000000000000015 /* PBXSourcesBuildPhase */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E71000000000000000000011,
+				E71000000000000000000012,
+				E71000000000000000000013,
+				E71000000000000000000014,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,6 +523,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		E7100000000000000000001F /* PacketTunnel dependency */ = {
+			isa = PBXTargetDependency;
+			target = E7100000000000000000001D;
+			targetProxy = E7100000000000000000001E;
 		};
 /* End PBXTargetDependency section */
 
@@ -360,7 +594,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -382,7 +616,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID)";
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -392,13 +627,14 @@
 		};
 		331C8088294A63A400263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E71200000000000000000004 /* Signing.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID).RunnerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -409,13 +645,14 @@
 		};
 		331C8089294A63A400263BE5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E71200000000000000000004 /* Signing.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID).RunnerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -424,13 +661,14 @@
 		};
 		331C808A294A63A400263BE5 /* Profile */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E71200000000000000000004 /* Signing.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID).RunnerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -486,7 +724,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -537,7 +775,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -561,7 +799,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID)";
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -583,13 +822,43 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.easytierProApp;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(EASYTIER_BUNDLE_ID)";
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		E71000000000000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7100000000000000000000C;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		E7100000000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7100000000000000000000C;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E7100000000000000000001B /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7100000000000000000000C;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
 		};
 /* End XCBuildConfiguration section */
 
@@ -620,6 +889,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E7100000000000000000001C /* PacketTunnel configurations */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E71000000000000000000019,
+				E7100000000000000000001A,
+				E7100000000000000000001B,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

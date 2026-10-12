@@ -1,0 +1,7 @@
+// Override these build settings for a different Apple developer team or app ID.
+EASYTIER_BUNDLE_ID = net.easytier.pro
+EASYTIER_APP_GROUP = group.$(EASYTIER_BUNDLE_ID)
+DEVELOPMENT_TEAM = M2G6355ZK7
+CODE_SIGN_STYLE = Automatic
+// The bundled simulator core is built for Apple Silicon.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

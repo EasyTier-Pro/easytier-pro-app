@@ -344,7 +344,13 @@ class _MyAppState extends State<MyApp> {
   }
 
   Route<void>? _onGenerateRoute(RouteSettings settings) {
-    if (settings.name != _deviceAuthReturnPath) {
+    final uri = Uri.tryParse(settings.name ?? '');
+    final isDeviceAuthReturn =
+        settings.name == _deviceAuthReturnPath ||
+        (uri?.scheme == 'easytierpro' &&
+            uri?.host == 'auth' &&
+            uri?.path == _deviceAuthReturnPath);
+    if (!isDeviceAuthReturn) {
       return null;
     }
     AppLogger.instance.info(
