@@ -62,16 +62,18 @@ final class EasyTierPacketBridgeTests: XCTestCase {
   }
 
   func testStopWhileSystemPacketsAreWaitingForTheCore() async throws {
-    let flow = PacketFlowStub(packets: (0..<64).map { Data(repeating: UInt8($0), count: 1280) })
-    let bridge = try EasyTierPacketBridge(flow: flow) { XCTFail("Packet bridge failed: \($0)") }
-    bridge.start()
-    await fulfillment(of: [flow.readStarted], timeout: 1)
-    bridge.stop()
-    let result = fcntl(bridge.coreFD, F_GETFD)
-    let code = errno
-    XCTAssertEqual(result, -1)
-    XCTAssertEqual(code, EBADF)
-    bridge.stop()
+    for _ in 0..<32 {
+      let flow = PacketFlowStub(packets: (0..<64).map { Data(repeating: UInt8($0), count: 1280) })
+      let bridge = try EasyTierPacketBridge(flow: flow) { XCTFail("Packet bridge failed: \($0)") }
+      bridge.start()
+      await fulfillment(of: [flow.readStarted], timeout: 1)
+      bridge.stop()
+      let result = fcntl(bridge.coreFD, F_GETFD)
+      let code = errno
+      XCTAssertEqual(result, -1)
+      XCTAssertEqual(code, EBADF)
+      bridge.stop()
+    }
   }
 }
 

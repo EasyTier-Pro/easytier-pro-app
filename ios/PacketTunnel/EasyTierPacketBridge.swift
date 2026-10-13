@@ -45,10 +45,16 @@ final class EasyTierPacketBridge {
       let source = DispatchSource.makeReadSource(fileDescriptor: self.flowFD, queue: self.queue)
       source.setEventHandler { [weak self] in self?.readCorePackets() }
       let fd = self.flowFD
-      source.setCancelHandler { close(fd) }
+      let cancelled = DispatchGroup()
+      cancelled.enter()
+      cancelled.enter()
+      source.setCancelHandler { cancelled.leave() }
       self.source = source
       let writeSource = DispatchSource.makeWriteSource(fileDescriptor: self.flowFD, queue: self.queue)
       writeSource.setEventHandler { [weak self] in self?.writeSystemPackets() }
+      writeSource.setCancelHandler { cancelled.leave() }
+      // Both sources must release their kernel references before fd reuse.
+      cancelled.notify(queue: self.queue) { close(fd) }
       self.writeSource = writeSource
       source.resume()
       self.readSystemPackets()
