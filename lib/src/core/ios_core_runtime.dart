@@ -118,6 +118,20 @@ class IosCoreRuntime extends CorePlatformRuntime {
   @override
   Future<void> stop() => _methodChannel.invokeMethod<void>('stopRuntime');
 
+  @override
+  Future<void> beginNetworkConnection() =>
+      _methodChannel.invokeMethod<void>('beginNetworkConnection');
+
+  @override
+  Future<String?> waitForNetworkConnection(String runtimeNetworkName) =>
+      _methodChannel.invokeMethod<String>('waitForNetworkConnection', {
+        'networkName': runtimeNetworkName.trim(),
+      });
+
+  @override
+  Future<void> endNetworkConnection() =>
+      _methodChannel.invokeMethod<void>('endNetworkConnection');
+
   Future<Map<String, Object?>> _snapshot() async {
     final json = await _methodChannel.invokeMethod<String>(
       'collectNetworkInfos',
@@ -139,15 +153,20 @@ class IosCoreRuntime extends CorePlatformRuntime {
 
   @override
   Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
-    return _instance(await _snapshot(), runtimeNetworkName)?['running'] == true;
+    final snapshot = await _snapshot();
+    return snapshot['vpn_ready'] == true &&
+        _instance(snapshot, runtimeNetworkName)?['running'] == true;
   }
 
   @override
   Future<Map<String, CorePeerStatus>> readNetworkPeerStatuses(
     String runtimeNetworkName,
   ) async {
-    final instance = _instance(await _snapshot(), runtimeNetworkName);
-    if (instance == null || instance['running'] != true) {
+    final snapshot = await _snapshot();
+    final instance = _instance(snapshot, runtimeNetworkName);
+    if (snapshot['vpn_ready'] != true ||
+        instance == null ||
+        instance['running'] != true) {
       throw StateError('no instance matches $runtimeNetworkName');
     }
     final peers = parseCorePeerStatusesFromJson(
@@ -165,7 +184,9 @@ class IosCoreRuntime extends CorePlatformRuntime {
   readNetworkTrafficTotals() async {
     final snapshot = await _snapshot();
     final name = snapshot['network_name']?.toString() ?? '';
-    if (name.isEmpty || _instance(snapshot, name)?['running'] != true) {
+    if (snapshot['vpn_ready'] != true ||
+        name.isEmpty ||
+        _instance(snapshot, name)?['running'] != true) {
       return const {};
     }
     final json = await _methodChannel.invokeMethod<String>('callJsonRpc', {

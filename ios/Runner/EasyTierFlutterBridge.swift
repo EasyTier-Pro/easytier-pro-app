@@ -7,12 +7,18 @@ import UIKit
 final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @preconcurrency FlutterStreamHandler {
   private var registrar: FlutterPluginRegistrar?
   private var eventSink: FlutterEventSink?
-  private var timer: Timer?
+  private var statusNotification: EasyTierStatusNotification?
+  private var reconcilePending = false
+  private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+  private var networkConnections = 0
+  private var activatingVPN = false
+  private var stateWaiters: [UUID: (() throws -> Bool, CheckedContinuation<Void, Error>, DispatchWorkItem)] = [:]
   private var statusObserver: NSObjectProtocol?
   private var foregroundObserver: NSObjectProtocol?
   private var backgroundObserver: NSObjectProtocol?
   private var manager: NETunnelProviderManager?
-  private var polling = false
+  private var managerLoaded = false
+  private var reconciling = false
   private var lastEventID = 0
   private var lastSessionID = ""
   private var wasRunning = false
@@ -28,23 +34,32 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     registrar.addMethodCallDelegate(bridge, channel: channel)
     FlutterEventChannel(name: "net.easytier.pro/core_runtime_events", binaryMessenger: registrar.messenger())
       .setStreamHandler(bridge)
-    bridge.statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak bridge] _ in
-      Task { @MainActor in await bridge?.poll() }
+  }
+
+  override init() {
+    super.init()
+    // These wakeups also complete waits directly. Enqueueing the completion
+    // behind activateVPN would make that operation wait on itself.
+    statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in self?.runtimeChanged() }
     }
-    bridge.foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak bridge] _ in
-      Task { @MainActor in bridge?.startPolling() }
+    statusNotification = EasyTierStatusNotification { [weak self] in
+      Task { @MainActor in self?.runtimeChanged() }
     }
-    bridge.backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak bridge] _ in
-      Task { @MainActor in
-        guard let bridge else { return }
-        bridge.timer?.invalidate()
-        bridge.timer = nil
-        bridge.enqueue {
-          guard !bridge.isForeground else { return }
-          do { try await bridge.control.stop() }
-          catch { bridge.report(error) }
-        }
-      }
+    control.networksChanged = { [weak self] in
+      Task { @MainActor in self?.runtimeChanged() }
+    }
+    foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in self?.runtimeChanged() }
+    }
+    backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in self?.stopIdleControlInBackground() }
+    }
+  }
+
+  deinit {
+    for observer in [statusObserver, foregroundObserver, backgroundObserver].compactMap({ $0 }) {
+      NotificationCenter.default.removeObserver(observer)
     }
   }
 
@@ -70,6 +85,29 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   private func handleAsync(_ method: String, args: [String: Any], result: @escaping FlutterResult) async {
     do {
       switch method {
+      case "beginNetworkConnection":
+        try beginBackgroundTask()
+        networkConnections += 1
+        vpnNeedsRetry = false
+        runtimeChanged()
+        result(nil)
+      case "endNetworkConnection":
+        networkConnections = max(0, networkConnections - 1)
+        if networkConnections == 0 && !activatingVPN { endBackgroundTask() }
+        stopIdleControlInBackground()
+        result(nil)
+      case "waitForNetworkConnection":
+        let network = try requiredString(args, "networkName")
+        try await waitForState("等待网络连接超时。") {
+          guard self.isRunning else {
+            if self.vpnNeedsRetry { throw self.runtimeError("VPN 启动失败，请重试连接。") }
+            return false
+          }
+          let status = try EasyTierShared.readStatus()
+          return status["vpn_ready"] as? Bool == true && status["network_name"] as? String == network
+        }
+        let status = try EasyTierShared.readStatus()
+        result(status["virtual_ipv4"])
       case "getMachineId": result(try EasyTierShared.machineID())
       case "getHostname": result("iPhone-\(try EasyTierShared.machineID().prefix(8))")
       case "readStatus":
@@ -116,7 +154,8 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     return status == .connected || status == .reasserting
   }
 
-  private func loadManager() async throws -> NETunnelProviderManager? {
+  private func loadManager(refresh: Bool = false) async throws -> NETunnelProviderManager? {
+    if managerLoaded && !refresh { return manager }
     #if targetEnvironment(simulator)
     // iOS Simulator has no system Network Extension VPN service.
     manager = nil
@@ -129,6 +168,7 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
       }
     }
     let bundle = Bundle.main.bundleIdentifier! + ".PacketTunnel"
+    managerLoaded = true
     manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == bundle }
     return manager
     #endif
@@ -155,7 +195,7 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     let hostname = try requiredString(args, "hostname")
     let bootstrap = try jsonString(["url": url, "token": token, "hostname": hostname])
     let oldBootstrap = try EasyTierShared.readSecret("runtime_bootstrap")
-    _ = try await loadManager()
+    _ = try await loadManager(refresh: true)
     shouldRun = true
     vpnNeedsRetry = false
     if oldBootstrap == bootstrap, args["forceReinstall"] as? Bool != true {
@@ -176,8 +216,14 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     #if targetEnvironment(simulator)
     throw runtimeError("iOS 模拟器不支持系统 VPN，请使用真机连接网络。")
     #else
+    try beginBackgroundTask()
+    activatingVPN = true
+    defer {
+      activatingVPN = false
+      if networkConnections == 0 { endBackgroundTask() }
+    }
     let bootstrap = try savedBootstrap()
-    let manager = try await loadManager() ?? NETunnelProviderManager()
+    let manager = try await loadManager(refresh: true) ?? NETunnelProviderManager()
     self.manager = manager
     if isRunning || !shouldRun { return }
     let config = NETunnelProviderProtocol()
@@ -200,13 +246,16 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   private func stopRuntime() async throws {
     shouldRun = false
     vpnNeedsRetry = false
+    failStateWaiters(runtimeError("连接已停止。"))
+    networkConnections = 0
+    endBackgroundTask()
     try await disconnectVPN()
     try await control.stop()
     try EasyTierShared.deleteSecret("runtime_bootstrap")
   }
 
   private func disconnectVPN() async throws {
-    guard let manager = try await loadManager() else { return }
+    guard let manager = try await loadManager(refresh: true) else { return }
     if manager.connection.status != .disconnected && manager.connection.status != .invalid {
       manager.connection.stopVPNTunnel()
       try await waitFor(manager, running: false)
@@ -242,25 +291,79 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   }
 
   private func waitFor(_ manager: NETunnelProviderManager, running: Bool) async throws {
-    let deadline = Date().addingTimeInterval(40)
     var sawConnecting = false
-    while true {
+    try await waitForState(running ? "等待 VPN 启动超时。" : "等待 VPN 断开超时。") {
       let status = manager.connection.status
       if status == .connecting { sawConnecting = true }
-      if running && (status == .connected || status == .reasserting) { return }
-      if !running && (status == .disconnected || status == .invalid) { return }
-      if Date() >= deadline {
-        throw runtimeError(running ? "等待 VPN 启动超时。" : "等待 VPN 断开超时。")
-      }
+      if running && (status == .connected || status == .reasserting) { return true }
+      if !running && (status == .disconnected || status == .invalid) { return true }
       if running && sawConnecting && status == .disconnected {
         let state = try EasyTierShared.readStatus()
         let message = state["last_error"] as? String ?? ""
-        throw runtimeError(message.isEmpty ? "VPN 启动失败，请检查系统 VPN 权限。" : message)
+        throw self.runtimeError(message.isEmpty ? "VPN 启动失败，请检查系统 VPN 权限。" : message)
       }
-      try await Task.sleep(nanoseconds: 200_000_000)
+      return false
     }
   }
 
+  private func waitForState(_ timeoutMessage: String, check: @escaping () throws -> Bool) async throws {
+    let id = UUID()
+    try await withCheckedThrowingContinuation { continuation in
+      let timeout = DispatchWorkItem { [weak self] in
+        guard let self else { return }
+        self.completeStateWaiter(id, error: self.runtimeError(timeoutMessage))
+      }
+      stateWaiters[id] = (check, continuation, timeout)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: timeout)
+      checkStateWaiters()
+    }
+  }
+
+  private func checkStateWaiters() {
+    for (id, waiter) in stateWaiters {
+      do { if try waiter.0() { completeStateWaiter(id) } }
+      catch { completeStateWaiter(id, error: error) }
+    }
+  }
+
+  private func completeStateWaiter(_ id: UUID, error: Error? = nil) {
+    guard let waiter = stateWaiters.removeValue(forKey: id) else { return }
+    waiter.2.cancel()
+    if let error { waiter.1.resume(throwing: error) }
+    else { waiter.1.resume() }
+  }
+
+  private func failStateWaiters(_ error: Error) {
+    for id in stateWaiters.keys { completeStateWaiter(id, error: error) }
+  }
+
+  private func beginBackgroundTask() throws {
+    guard backgroundTask == .invalid else { return }
+    backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "EasyTier network connection") { [weak self] in
+      Task { @MainActor in
+        guard let self else { return }
+        self.endBackgroundTask()
+        self.failStateWaiters(self.runtimeError("网络连接的后台执行时间已结束，请返回应用重试。"))
+        self.stopIdleControlInBackground()
+      }
+    }
+    guard backgroundTask != .invalid else { throw runtimeError("无法申请网络连接的后台执行时间。") }
+  }
+
+  private func endBackgroundTask() {
+    guard backgroundTask != .invalid else { return }
+    let task = backgroundTask
+    backgroundTask = .invalid
+    UIApplication.shared.endBackgroundTask(task)
+  }
+
+  private func stopIdleControlInBackground() {
+    enqueue {
+      guard !self.isForeground, self.backgroundTask == .invalid else { return }
+      do { try await self.control.stop() }
+      catch { self.report(error) }
+    }
+  }
   private func readStatus() async throws -> [String: Any] {
     _ = try await loadManager()
     if let manager, manager.connection.status != .disconnected && manager.connection.status != .invalid {
@@ -304,34 +407,31 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
-    startPolling()
+    runtimeChanged()
     return nil
   }
 
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
-    timer?.invalidate()
-    timer = nil
     eventSink = nil
     return nil
   }
 
-  private func startPolling() {
-    guard eventSink != nil, timer == nil else { return }
-    timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-      Task { @MainActor in await self?.poll() }
+  private func runtimeChanged() {
+    checkStateWaiters()
+    reconcilePending = true
+    guard !reconciling else { return }
+    reconciling = true
+    enqueue {
+      while self.reconcilePending {
+        self.reconcilePending = false
+        await self.reconcileRuntime()
+      }
+      self.reconciling = false
     }
-    Task { await poll() }
   }
 
-  private func poll() async {
-    guard !polling, eventSink != nil else { return }
-    polling = true
-    enqueue { await self.pollRuntime() }
-  }
-
-  private func pollRuntime() async {
-    defer { polling = false }
-    guard isForeground else { return }
+  private func reconcileRuntime() async {
+    guard isForeground || backgroundTask != .invalid else { return }
     do {
       let status = try await readStatus()
       let sessionID = status["session_id"] as? String ?? ""
@@ -372,6 +472,7 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
         try await activateVPN()
       } catch {
         vpnNeedsRetry = true
+        checkStateWaiters()
         // Never overlap the two cores, including after a failed VPN start.
         try await disconnectVPN()
         if shouldRun && isForeground { _ = try await resumeControl() }

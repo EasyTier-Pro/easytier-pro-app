@@ -58,6 +58,7 @@ enum EasyTierShared {
   static func writeStatus(_ status: [String: Any]) throws {
     let data = try JSONSerialization.data(withJSONObject: status, options: [.sortedKeys])
     try data.write(to: container().appendingPathComponent("runtime-status.json"), options: .atomic)
+    EasyTierStatusNotification.post()
   }
 
   static func redacted(_ text: String, token: String, url: String) -> String {
@@ -78,5 +79,33 @@ enum EasyTierShared {
     NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
       NSLocalizedDescriptionKey: SecCopyErrorMessageString(status, nil) as String? ?? "Keychain error \(status)",
     ])
+  }
+}
+
+// Darwin notifications are wakeups only. Readers obtain the authoritative
+// snapshot from the App Group, including after returning from suspension.
+final class EasyTierStatusNotification {
+  private let handler: () -> Void
+  private static var name: CFNotificationName {
+    CFNotificationName((EasyTierShared.appGroup + ".runtime-status") as CFString)
+  }
+
+  init(_ handler: @escaping () -> Void) {
+    self.handler = handler
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
+                                    Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
+      guard let observer else { return }
+      let notification = Unmanaged<EasyTierStatusNotification>.fromOpaque(observer).takeUnretainedValue()
+      notification.handler()
+    }, Self.name.rawValue, nil, .deliverImmediately)
+  }
+
+  deinit {
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(),
+                                       Unmanaged.passUnretained(self).toOpaque(), Self.name, nil)
+  }
+
+  static func post() {
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), name, nil, nil, true)
   }
 }

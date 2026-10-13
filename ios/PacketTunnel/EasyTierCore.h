@@ -18,6 +18,7 @@ void free_string(const char *value);
 char *easytier_ios_collect_network_infos(int max_length);
 char *easytier_ios_call_json_rpc(const char *service_name, const char *method_name,
                                 const char *payload_json);
+char *easytier_ios_tun_state(const char *instance_name);
 char *easytier_ios_last_error(void);
 void easytier_ios_free_string(char *value);
 int easytier_ios_configure_diagnostic_logging(const char *directory, int enabled);

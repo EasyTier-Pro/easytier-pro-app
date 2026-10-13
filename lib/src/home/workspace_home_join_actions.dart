@@ -28,21 +28,28 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       _showNetworkActionToast(message, destructive: true);
       return;
     }
-    final existingLocalDevice = _localDeviceInNetwork(
-      network.id,
-      readyMachineId,
-    );
-    if (existingLocalDevice != null) {
-      _setJoinState(
-        network.id,
-        _JoinNetworkState.joinedWithIp(existingLocalDevice.ipv4),
-      );
-      unawaited(_refreshNetworkInstanceState(network));
-      return;
-    }
-
     _setJoinState(network.id, _JoinNetworkState.joining);
     try {
+      await widget.coreLifecycleService.beginNetworkConnection();
+      final existingLocalDevice = _localDeviceInNetwork(
+        network.id,
+        readyMachineId,
+      );
+      if (existingLocalDevice != null) {
+        final runtimeIpv4 = await widget.coreLifecycleService
+            .waitForNetworkConnection(network.runtimeNetworkName);
+        if (mounted && runtimeIpv4 != null) {
+          _networkInstanceReady = {..._networkInstanceReady, network.id: true};
+        }
+        _setJoinState(
+          network.id,
+          _JoinNetworkState.joinedWithIp(
+            runtimeIpv4 ?? existingLocalDevice.ipv4,
+          ),
+        );
+        unawaited(_refreshNetworkInstanceState(network));
+        return;
+      }
       final device = await _waitForLocalManagedDevice(readyMachineId);
       if (device == null) {
         throw const AuthException('核心已启动，正在等待设备注册到控制台。');
@@ -60,9 +67,16 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         readyMachineId,
       );
       if (refreshedLocalDevice != null) {
+        final runtimeIpv4 = await widget.coreLifecycleService
+            .waitForNetworkConnection(network.runtimeNetworkName);
+        if (mounted && runtimeIpv4 != null) {
+          _networkInstanceReady = {..._networkInstanceReady, network.id: true};
+        }
         _setJoinState(
           network.id,
-          _JoinNetworkState.joinedWithIp(refreshedLocalDevice.ipv4),
+          _JoinNetworkState.joinedWithIp(
+            runtimeIpv4 ?? refreshedLocalDevice.ipv4,
+          ),
         );
         unawaited(_refreshNetworkInstanceState(network));
         return;
@@ -74,14 +88,19 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         networkId: network.id,
         deviceId: device.id,
       );
+      final runtimeIpv4 = await widget.coreLifecycleService
+          .waitForNetworkConnection(network.runtimeNetworkName);
       final joinedLocalDevice = await _loadLocalNetworkDevice(
         network.id,
         readyMachineId,
-        waitForIpv4: true,
+        waitForIpv4: runtimeIpv4 == null,
       );
+      if (mounted && runtimeIpv4 != null) {
+        _networkInstanceReady = {..._networkInstanceReady, network.id: true};
+      }
       _setJoinState(
         network.id,
-        _JoinNetworkState.joinedWithIp(joinedLocalDevice?.ipv4),
+        _JoinNetworkState.joinedWithIp(runtimeIpv4 ?? joinedLocalDevice?.ipv4),
       );
       unawaited(_refreshNetworkInstanceState(network));
       _showNetworkActionToast('「${network.name}」已连接');
@@ -92,6 +111,8 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         '加入「${network.name}」失败：$message',
         destructive: true,
       );
+    } finally {
+      await widget.coreLifecycleService.endNetworkConnection();
     }
   }
 
@@ -116,9 +137,7 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       ),
       CoreRunPhase.checking => _JoinNetworkState.error('连接引擎正在检查，请稍后再试。'),
       CoreRunPhase.repairing => _JoinNetworkState.error('连接引擎正在修复，请稍后再试。'),
-      CoreRunPhase.signedOut => _JoinNetworkState.error(
-        '登录状态已断开，请重新登录后再加入网络。',
-      ),
+      CoreRunPhase.signedOut => _JoinNetworkState.error('登录状态已断开，请重新登录后再加入网络。'),
       CoreRunPhase.running when machineId == null || machineId.isEmpty =>
         _JoinNetworkState.error('本机设备正在注册，请稍后再试。'),
       CoreRunPhase.running => null,

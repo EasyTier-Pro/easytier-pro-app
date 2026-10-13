@@ -1075,6 +1075,13 @@ exit 3
     return _runtime.readNetworkTrafficTotals();
   }
 
+  Future<void> beginNetworkConnection() => _runtime.beginNetworkConnection();
+
+  Future<String?> waitForNetworkConnection(String runtimeNetworkName) =>
+      _runtime.waitForNetworkConnection(runtimeNetworkName);
+
+  Future<void> endNetworkConnection() => _runtime.endNetworkConnection();
+
   Future<bool> isNetworkInstanceRunning(String runtimeNetworkName) async {
     return _runtime.isNetworkInstanceRunning(runtimeNetworkName);
   }

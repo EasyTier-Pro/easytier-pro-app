@@ -16,6 +16,23 @@ class RunnerTests: XCTestCase {
                    "<redacted> <redacted> <redacted>")
   }
 
+  func testStatusNotificationPublishesTheCommittedSnapshot() async throws {
+    let before = try EasyTierShared.readStatus()
+    defer { try? EasyTierShared.writeStatus(before) }
+    let marker = UUID().uuidString
+    let published = expectation(description: "App Group status notification")
+    published.assertForOverFulfill = false
+    let observer = EasyTierStatusNotification {
+      if (try? EasyTierShared.readStatus()["session_id"] as? String) == marker {
+        published.fulfill()
+      }
+    }
+    try EasyTierShared.writeStatus(["session_id": marker, "vpn_ready": false])
+    await fulfillment(of: [published], timeout: 2)
+    withExtendedLifetime(observer) {}
+    XCTAssertEqual(try EasyTierShared.readStatus()["session_id"] as? String, marker)
+  }
+
   @MainActor
   func testKeychainThroughFlutterBridge() async throws {
     let bridge = EasyTierFlutterBridge()

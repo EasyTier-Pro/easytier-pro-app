@@ -38,6 +38,13 @@ abstract class CorePlatformRuntime {
 
   Future<void> stop();
 
+  Future<void> beginNetworkConnection() async {}
+
+  Future<String?> waitForNetworkConnection(String runtimeNetworkName) async =>
+      null;
+
+  Future<void> endNetworkConnection() async {}
+
   Future<Map<String, CoreNetworkTrafficTotals>> readNetworkTrafficTotals();
 
   Future<bool> isNetworkInstanceRunning(String runtimeNetworkName);

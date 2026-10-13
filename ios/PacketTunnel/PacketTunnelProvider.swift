@@ -4,7 +4,11 @@ import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
   private let queue = DispatchQueue(label: "net.easytier.pro.runtime")
-  private var timer: DispatchSourceTimer?
+  private var tunGeneration = 0
+  private var tunReady = false
+  private var tunAttachmentPending = false
+  private var selection = UUID()
+  private var announcedConfig: EasyTierVpnConfig?
   private var pathMonitor: NWPathMonitor?
   private var bridge: EasyTierPacketBridge?
   private var started = false
@@ -105,11 +109,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   }
 
   private func startMonitoring() {
-    let timer = DispatchSource.makeTimerSource(queue: queue)
-    timer.schedule(deadline: .now(), repeating: .seconds(3))
-    timer.setEventHandler { [weak self] in self?.refresh() }
-    self.timer = timer
-    timer.resume()
     let monitor = NWPathMonitor()
     monitor.pathUpdateHandler = { [weak self] path in
       guard let self, self.started else { return }
@@ -135,6 +134,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // own fd, even when its virtual address and routes are unchanged.
         bridge?.stop()
         bridge = nil
+        tunGeneration = 0
+        tunReady = false
+        tunAttachmentPending = false
+        announcedConfig = nil
+        selection = UUID()
         selectedName = name
         selectedID = id
         runtimeName = event["network_name"] as? String ?? name
@@ -150,7 +154,39 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       cancelTunnelWithError(nil)
       return
     }
+    if event["event"] as? String == "network_instance_event", id == selectedID,
+       let runtime = event["runtime"] as? [String: Any],
+       let tun = runtime["tun"] as? [Any], tun.count == 2 {
+      let generation = tun[0] as? Int ?? 0
+      // A delayed event from an earlier fd cannot finish this attachment.
+      if generation == tunGeneration {
+        let ready = tun[1] as? Bool == true
+        if !ready && !tunAttachmentPending {
+          bridge?.stop()
+          bridge = nil
+          announcedConfig = nil
+        }
+        tunReady = ready
+        if ready { tunAttachmentPending = false }
+        let nativeEvent = runtime["event"] as? [String: Any] ?? [:]
+        if let message = nativeEvent["TunDeviceError"] as? String {
+          let error = error(message)
+          recordError(error)
+          stopCore(reason: "start_failed", error: error)
+          cancelTunnelWithError(error)
+          return
+        }
+        if nativeEvent["DhcpIpv4Changed"] != nil || nativeEvent["DhcpIpv4Conflicted"] != nil {
+          bridge?.stop()
+          bridge = nil
+          tunReady = false
+          tunAttachmentPending = false
+          announcedConfig = nil
+        }
+      }
+    }
     refresh()
+    finishIfReady()
   }
 
   private func refresh() {
@@ -190,6 +226,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   private func apply(_ config: EasyTierVpnConfig?) {
     settingsUpdating = true
     let generation = self.generation
+    let selection = self.selection
     let name = selectedName
     let id = selectedID
     let addressChanged = bridge == nil || appliedConfig?.address != config?.address
@@ -204,13 +241,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           self.appliedName = config == nil ? "" : name
           self.appliedID = config == nil ? "" : id
         }
-        guard self.selectedName == name, self.selectedID == id else {
+        guard self.selection == selection, self.selectedName == name, self.selectedID == id else {
           self.refresh()
           return
         }
         do {
           if let error { throw error }
-          if let config {
+          if config != nil {
             let needsAttachment = self.bridge == nil || addressChanged
             if self.bridge == nil {
               self.bridge = try EasyTierPacketBridge(flow: self.packetFlow)
@@ -219,18 +256,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             if needsAttachment, let bridge = self.bridge {
               // Core DHCP replaces its NIC when the virtual address changes.
               // Reuse the owned socketpair; route-only changes need no fd swap.
+              self.tunReady = false
+              self.tunAttachmentPending = true
+              self.announcedConfig = nil
               try self.check(set_tun_fd(name, bridge.coreFD))
+              guard let value = easytier_ios_tun_state(name) else { throw self.coreError() }
+              defer { easytier_ios_free_string(value) }
+              let state = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8)) as? [Any] ?? []
+              self.tunGeneration = state.first as? Int ?? 0
+              self.tunReady = state.count == 2 && state[1] as? Bool == true
+              if self.tunReady { self.tunAttachmentPending = false }
             }
             self.lastError = ""
-            self.emit("vpn_started", ["instance_name": name, "network_name": self.runtimeName,
-                                       "addresses": [config.address], "routes": config.routes,
-                                       "dns": config.dns])
-            self.finishStart(nil)
           } else {
             self.emit("vpn_stopped", ["reason": name.isEmpty ? "network_removed" : "address_unassigned"])
           }
           self.persistStatus()
           self.refresh()
+          self.finishIfReady()
         } catch {
           self.recordError(error)
           self.cancelTunnelWithError(error)
@@ -239,12 +282,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
   }
 
+  private func finishIfReady() {
+    guard started, !settingsUpdating, tunReady, bridge != nil,
+          let config = appliedConfig, appliedName == selectedName, appliedID == selectedID else { return }
+    if announcedConfig != config {
+      announcedConfig = config
+      emit("vpn_started", ["instance_name": selectedName, "network_name": runtimeName,
+                           "addresses": [config.address], "routes": config.routes, "dns": config.dns])
+    }
+    finishStart(nil)
+  }
+
   private func stopCore(reason: String, error: Error? = nil) {
     guard started || startCompletion != nil else { return }
     started = false
     generation += 1
-    timer?.cancel()
-    timer = nil
+    tunReady = false
+    tunGeneration = 0
+    tunAttachmentPending = false
+    announcedConfig = nil
     pathMonitor?.cancel()
     pathMonitor = nil
     let rc = stop_config_server_client()
@@ -292,7 +348,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     defer { easytier_ios_free_string(value) }
     let data = Data(String(cString: value).utf8)
     let infos = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-    return ["instances": infos, "instance_name": selectedName, "network_name": runtimeName]
+    return ["instances": infos, "instance_name": selectedName, "network_name": runtimeName,
+            "vpn_ready": tunReady && !settingsUpdating && appliedConfig != nil && bridge != nil]
   }
 
   private func rpc(_ service: String, _ method: String, payload: [String: Any]) throws -> [String: Any] {
@@ -304,7 +361,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   }
 
   private func status() -> [String: Any] {
-    ["session_id": sessionID, "running": started, "connected": started && is_config_server_client_connected() != 0,
+    ["session_id": sessionID, "running": started,
+     "vpn_ready": tunReady && !settingsUpdating && appliedConfig != nil && bridge != nil, "connected": started && is_config_server_client_connected() != 0,
+     "virtual_ipv4": appliedConfig?.address ?? "",
      "machine_id": machineID, "instance_name": selectedName, "network_name": runtimeName,
      "core_version": Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String ?? "",
      "last_error": lastError, "events": events]
@@ -312,7 +371,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
   private func emit(_ type: String, _ payload: [String: Any]) {
     eventSequence += 1
-    events.append(["id": eventSequence, "type": type, "payload": payload])
+    events.append(["id": eventSequence, "type": type, "payload": payload,
+                   "timestamp": Date().timeIntervalSince1970])
     if events.count > 64 { events.removeFirst(events.count - 64) }
     log("\(type): \(payload)")
     persistStatus()

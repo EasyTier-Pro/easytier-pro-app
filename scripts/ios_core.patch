@@ -1,0 +1,908 @@
+diff --git a/easytier-contrib/easytier-ffi/src/config_server.rs b/easytier-contrib/easytier-ffi/src/config_server.rs
+index ece1e388..de8b6422 100644
+--- a/easytier-contrib/easytier-ffi/src/config_server.rs
++++ b/easytier-contrib/easytier-ffi/src/config_server.rs
+@@ -1,6 +1,6 @@
+ use std::{
+     cell::Cell,
+-    collections::HashSet,
++    collections::{HashMap, HashSet},
+     ffi::{CString, c_char, c_int, c_void},
+     sync::{
+         Arc, Mutex,
+@@ -12,7 +12,9 @@ use easytier::{
+     common::{
+         MachineIdOptions,
+         config::{ConfigLoader as _, TomlConfigLoader},
++        global_ctx::GlobalCtxEvent,
+     },
++    instance::factory::{native_instance_tun_state, subscribe_native_instance_event},
+     web_client::{WebClient, WebClientHooks, parse_config_server_endpoint, run_web_client},
+ };
+ use uuid::Uuid;
+@@ -82,22 +84,48 @@ struct ManagedConfigServerClient {
+     hooks: Arc<ManagedConfigServerClientHooks>,
+ }
+ 
+-pub(crate) struct ManagedConfigServerClientHooks {
+-    pub(crate) instance_ids: Mutex<HashSet<Uuid>>,
++struct ConfigServerEventDelivery {
+     callback_delivery: Mutex<()>,
+     stopping: AtomicBool,
+     callback: ConfigServerEventCallback,
+     user_data: usize,
+ }
+ 
++struct InstanceEventSubscription {
++    active: Arc<AtomicBool>,
++    task: tokio::task::JoinHandle<()>,
++}
++
++impl Drop for InstanceEventSubscription {
++    fn drop(&mut self) {
++        self.active.store(false, Ordering::Release);
++        self.task.abort();
++    }
++}
++
++pub(crate) struct ManagedConfigServerClientHooks {
++    pub(crate) instance_ids: Mutex<HashSet<Uuid>>,
++    delivery: Arc<ConfigServerEventDelivery>,
++    instance_events: Mutex<HashMap<Uuid, InstanceEventSubscription>>,
++}
++
++impl Drop for ManagedConfigServerClientHooks {
++    fn drop(&mut self) {
++        self.start_stopping();
++    }
++}
++
+ impl ManagedConfigServerClientHooks {
+     pub(crate) fn new(callback: ConfigServerEventCallback, user_data: *mut c_void) -> Self {
+         Self {
+             instance_ids: Mutex::new(HashSet::new()),
+-            callback_delivery: Mutex::new(()),
+-            stopping: AtomicBool::new(false),
+-            callback,
+-            user_data: user_data as usize,
++            delivery: Arc::new(ConfigServerEventDelivery {
++                callback_delivery: Mutex::new(()),
++                stopping: AtomicBool::new(false),
++                callback,
++                user_data: user_data as usize,
++            }),
++            instance_events: Mutex::new(HashMap::new()),
+         }
+     }
+ 
+@@ -110,10 +138,26 @@ impl ManagedConfigServerClientHooks {
+     }
+ 
+     fn remove_tracked_instance_ids(&self, ids: &[Uuid]) -> Result<Vec<Uuid>, String> {
++        let _delivery = self
++            .delivery
++            .callback_delivery
++            .lock()
++            .map_err(|err| err.to_string())?;
++        self.remove_tracked_instance_ids_with_delivery_locked(ids)
++    }
++
++    fn remove_tracked_instance_ids_with_delivery_locked(
++        &self,
++        ids: &[Uuid],
++    ) -> Result<Vec<Uuid>, String> {
+         let mut guard = self.instance_ids.lock().map_err(|err| err.to_string())?;
++        let mut subscriptions = self.instance_events.lock().map_err(|err| err.to_string())?;
+         Ok(ids
+             .iter()
+-            .filter_map(|id| guard.remove(id).then_some(*id))
++            .filter_map(|id| {
++                subscriptions.remove(id);
++                guard.remove(id).then_some(*id)
++            })
+             .collect())
+     }
+ 
+@@ -132,13 +176,14 @@ impl ManagedConfigServerClientHooks {
+         let _delivery_guard = if in_config_server_callback() {
+             None
+         } else {
+-            self.callback_delivery.lock().ok()
++            self.delivery.callback_delivery.lock().ok()
+         };
+         let mut guard = match self.instance_ids.lock() {
+             Ok(guard) => guard,
+             Err(_) => return Vec::new(),
+         };
+-        self.stopping.store(true, Ordering::Release);
++        self.delivery.stopping.store(true, Ordering::Release);
++        self.instance_events.lock().unwrap().clear();
+         guard.drain().collect()
+     }
+ 
+@@ -154,42 +199,77 @@ impl ManagedConfigServerClientHooks {
+         event: &str,
+         instance_id: Uuid,
+     ) -> Result<(), String> {
+-        if self.stopping.load(Ordering::Acquire) {
+-            return Ok(());
+-        }
++        self.delivery
++            .emit_event_with_delivery_locked(event, instance_id, None)
++    }
+ 
+-        let Some(callback) = self.callback else {
+-            return Ok(());
+-        };
+-        let instance_name = ffi_context()
+-            .manager
+-            .instance(instance_id)
+-            .map(|instance| instance.instance_name().to_owned())
+-            .unwrap_or_default();
+-        let network_name = ffi_context()
++    fn subscribe_instance_events(&self, id: Uuid) -> Result<(), String> {
++        let instance = ffi_context()
+             .manager
+-            .config(instance_id)
+-            .map(|config| config.get_network_identity().network_name)
+-            .unwrap_or_default();
+-        let event_json = serde_json::json!({
+-            "event": event,
+-            "success": true,
+-            "instance_id": instance_id.to_string(),
+-            "instance_name": instance_name,
+-            "network_name": network_name,
+-            "error": null,
+-        })
+-        .to_string();
+-        let event_json = CString::new(event_json).map_err(|err| err.to_string())?;
+-        let _callback_scope = ConfigServerCallbackScope::enter();
+-        unsafe {
+-            callback(event_json.as_ptr(), self.user_data as *mut c_void);
+-        }
++            .instance(id)
++            .ok_or_else(|| format!("instance {id} not found after start"))?;
++        let mut native = subscribe_native_instance_event(&instance)
++            .ok_or_else(|| format!("instance {id} has no native event source"))?;
++        let mut routes = instance
++            .peer_manager()
++            .get_route()
++            .subscribe_route_changes();
++        let instance = Arc::downgrade(&instance);
++        let delivery = self.delivery.clone();
++        let active = Arc::new(AtomicBool::new(true));
++        let task_active = active.clone();
++        let task = ffi_context().runtime.spawn(async move {
++            loop {
++                let event = tokio::select! {
++                    event = native.recv() => match event {
++                        Ok(event) => {
++                            if !matches!(event, GlobalCtxEvent::TunDeviceReady(_) | GlobalCtxEvent::TunDeviceError(_)
++                                | GlobalCtxEvent::DhcpIpv4Changed(..) | GlobalCtxEvent::DhcpIpv4Conflicted(_)
++                                | GlobalCtxEvent::ProxyCidrsUpdated(..) | GlobalCtxEvent::ConfigPatched(_)) {
++                                continue;
++                            }
++                            Some(serde_json::to_value(event).unwrap())
++                        },
++                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => None,
++                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
++                    },
++                    result = routes.changed() => {
++                        if result.is_err() { break; }
++                        None
++                    },
++                };
++                let Ok(_guard) = delivery.callback_delivery.lock() else {
++                    break;
++                };
++                if !task_active.load(Ordering::Acquire) || delivery.stopping.load(Ordering::Acquire)
++                {
++                    break;
++                }
++                let Some(instance) = instance.upgrade() else {
++                    break;
++                };
++                let state = native_instance_tun_state(&instance);
++                if let Err(error) = delivery.emit_event_with_delivery_locked(
++                    "network_instance_event",
++                    id,
++                    Some(serde_json::json!({
++                        "event": event, "tun": state,
++                    })),
++                ) {
++                    log::warn!("network instance event delivery failed: {error}");
++                }
++            }
++        });
++        self.instance_events
++            .lock()
++            .map_err(|err| err.to_string())?
++            .insert(id, InstanceEventSubscription { active, task });
+         Ok(())
+     }
+ 
+     fn emit_event(&self, event: &str, instance_id: Uuid) -> Result<(), String> {
+         let _delivery_guard = self
++            .delivery
+             .callback_delivery
+             .lock()
+             .map_err(|err| err.to_string())?;
+@@ -201,7 +281,7 @@ impl ManagedConfigServerClientHooks {
+             return;
+         }
+ 
+-        if let Ok(guard) = self.callback_delivery.lock() {
++        if let Ok(guard) = self.delivery.callback_delivery.lock() {
+             drop(guard);
+         }
+     }
+@@ -214,7 +294,7 @@ impl WebClientHooks for ManagedConfigServerClientHooks {
+     }
+ 
+     async fn pre_run_network_instance(&self, cfg: &TomlConfigLoader) -> Result<(), String> {
+-        if self.stopping.load(Ordering::Acquire) {
++        if self.delivery.stopping.load(Ordering::Acquire) {
+             return Err("config server client is stopping".to_string());
+         }
+ 
+@@ -226,10 +306,11 @@ impl WebClientHooks for ManagedConfigServerClientHooks {
+ 
+     async fn post_run_network_instance(&self, id: &Uuid) -> Result<(), String> {
+         let _delivery_guard = self
++            .delivery
+             .callback_delivery
+             .lock()
+             .map_err(|err| err.to_string())?;
+-        if self.stopping.load(Ordering::Acquire) {
++        if self.delivery.stopping.load(Ordering::Acquire) {
+             return Err("config server client is stopping".to_string());
+         }
+         let Some(inst_name) = ffi_context()
+@@ -245,11 +326,14 @@ impl WebClientHooks for ManagedConfigServerClientHooks {
+             .map_err(|err| err.to_string())?
+             .insert(*id);
+         if let Err(error) = self.validate_instance_name(&inst_name, *id) {
+-            self.remove_tracked_instance_ids(&[*id])?;
++            self.remove_tracked_instance_ids_with_delivery_locked(&[*id])?;
+             return Err(error);
+         }
+ 
+         remove_data_plane_sessions_by_instance_ids(&[*id]);
++        if self.delivery.callback.is_some() {
++            self.subscribe_instance_events(*id)?;
++        }
+ 
+         if let Err(err) = self.emit_event_with_delivery_locked("run_network_instance", *id) {
+             self.note_callback_error(err);
+@@ -480,3 +564,46 @@ pub(crate) fn is_config_server_client_connected() -> c_int {
+         .map(i32::from)
+         .unwrap_or(0)
+ }
++
++impl ConfigServerEventDelivery {
++    fn emit_event_with_delivery_locked(
++        &self,
++        event: &str,
++        instance_id: Uuid,
++        runtime: Option<serde_json::Value>,
++    ) -> Result<(), String> {
++        if self.stopping.load(Ordering::Acquire) {
++            return Ok(());
++        }
++
++        let Some(callback) = self.callback else {
++            return Ok(());
++        };
++        let instance_name = ffi_context()
++            .manager
++            .instance(instance_id)
++            .map(|instance| instance.instance_name().to_owned())
++            .unwrap_or_default();
++        let network_name = ffi_context()
++            .manager
++            .config(instance_id)
++            .map(|config| config.get_network_identity().network_name)
++            .unwrap_or_default();
++        let event_json = serde_json::json!({
++            "event": event,
++            "success": true,
++            "instance_id": instance_id.to_string(),
++            "instance_name": instance_name,
++            "network_name": network_name,
++            "error": null,
++            "runtime": runtime,
++        })
++        .to_string();
++        let event_json = CString::new(event_json).map_err(|err| err.to_string())?;
++        let _callback_scope = ConfigServerCallbackScope::enter();
++        unsafe {
++            callback(event_json.as_ptr(), self.user_data as *mut c_void);
++        }
++        Ok(())
++    }
++}
+diff --git a/easytier-contrib/easytier-ffi/src/lib.rs b/easytier-contrib/easytier-ffi/src/lib.rs
+index 6c332c89..f22ce0b3 100644
+--- a/easytier-contrib/easytier-ffi/src/lib.rs
++++ b/easytier-contrib/easytier-ffi/src/lib.rs
+@@ -40,6 +40,19 @@ mod state;
+ mod strings;
+ mod types;
+ 
++/// Snapshot of the named native instance's current TUN attachment.
++pub fn network_instance_tun_state(name: &str) -> Result<(u64, bool), String> {
++    let id = state::resolve_instance_id_by_name(name)?
++        .ok_or_else(|| format!("instance {name} not found"))?;
++    let instance = state::ffi_context()
++        .manager
++        .instance(id)
++        .ok_or_else(|| format!("instance {name} not found"))?;
++    Ok(easytier::instance::factory::native_instance_tun_state(
++        &instance,
++    ))
++}
++
+ #[cfg(test)]
+ mod tests;
+ 
+diff --git a/easytier-contrib/easytier-ffi/src/tests.rs b/easytier-contrib/easytier-ffi/src/tests.rs
+index c008a66f..9abb4bae 100644
+--- a/easytier-contrib/easytier-ffi/src/tests.rs
++++ b/easytier-contrib/easytier-ffi/src/tests.rs
+@@ -744,3 +744,65 @@ fn data_plane_invalid_handle_errors_are_stable() {
+         closed
+     );
+ }
++
++#[tokio::test]
++async fn config_server_runtime_notifies_and_stop_drains_delivery() {
++    let events: Mutex<Vec<String>> = Mutex::new(Vec::new());
++    let hooks = ManagedConfigServerClientHooks::new(
++        Some(record_config_server_event),
++        &events as *const _ as *mut c_void,
++    );
++    let cfg = TomlConfigLoader::default();
++    let id = Uuid::new_v4();
++    cfg.set_id(id);
++    cfg.set_inst_name(format!("event-{id}"));
++    cfg.set_listeners(Vec::new());
++    ffi_context()
++        .manager
++        .run_network_instance(cfg, ConfigFileControl::STATIC_CONFIG)
++        .unwrap();
++    hooks.post_run_network_instance(&id).await.unwrap();
++    let instance = ffi_context().manager.instance(id).unwrap();
++    easytier_core::management::apply_config_patch(
++        &instance,
++        easytier::proto::api::config::InstanceConfigPatch {
++            hostname: Some("event-before-stop".to_owned()),
++            ..Default::default()
++        },
++        None,
++    )
++    .await
++    .unwrap();
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            if events.lock().unwrap().iter().any(|raw| {
++                let event: Value = serde_json::from_str(raw).unwrap();
++                event["event"] == "network_instance_event" && event["runtime"]["tun"].is_array()
++            }) {
++                break;
++            }
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++    hooks.start_stopping();
++    let delivered = events.lock().unwrap().len();
++    easytier_core::management::apply_config_patch(
++        &instance,
++        easytier::proto::api::config::InstanceConfigPatch {
++            hostname: Some("event-after-stop".to_owned()),
++            ..Default::default()
++        },
++        None,
++    )
++    .await
++    .unwrap();
++    tokio::task::yield_now().await;
++    assert_eq!(events.lock().unwrap().len(), delivered);
++    ffi_context()
++        .process_management
++        .delete_owned_network_instances(vec![id])
++        .await
++        .unwrap();
++}
+diff --git a/easytier-contrib/easytier-ios/easytier-ios.h b/easytier-contrib/easytier-ios/easytier-ios.h
+index e1295569..7b816cc1 100644
+--- a/easytier-contrib/easytier-ios/easytier-ios.h
++++ b/easytier-contrib/easytier-ios/easytier-ios.h
+@@ -138,6 +138,8 @@ char *easytier_ios_call_json_rpc(const char *service_name,
+  * @ownership The caller owns the returned string and must release it with
+  *            easytier_ios_free_string().
+  */
++char *easytier_ios_tun_state(const char *instance_name);
++
+ char *easytier_ios_last_error(void);
+ 
+ /**
+diff --git a/easytier-contrib/easytier-ios/src/lib.rs b/easytier-contrib/easytier-ios/src/lib.rs
+index de2a8959..3151a07c 100644
+--- a/easytier-contrib/easytier-ios/src/lib.rs
++++ b/easytier-contrib/easytier-ios/src/lib.rs
+@@ -459,6 +459,36 @@ pub unsafe extern "C" fn easytier_ios_free_string(s: *mut c_char) {
+     }));
+ }
+ 
++/// Snapshot of the current attachment, for pairing callbacks with set_tun_fd.
++///
++/// # Safety
++/// `instance_name` must be a valid NUL-terminated UTF-8 string.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn easytier_ios_tun_state(instance_name: *const c_char) -> *mut c_char {
++    unsafe {
++        guarded(ptr::null_mut(), || {
++            error::clear_error();
++            let result = cstr_arg(instance_name, "instance_name")
++                .and_then(easytier_ffi::network_instance_tun_state);
++            match result {
++                Ok(state) => {
++                    match cstring_for(&serde_json::to_string(&state).unwrap(), "TUN state") {
++                        Ok(value) => value.into_raw(),
++                        Err(err) => {
++                            error::set_error(&err.to_string());
++                            ptr::null_mut()
++                        }
++                    }
++                }
++                Err(message) => {
++                    error::set_error(&message);
++                    ptr::null_mut()
++                }
++            }
++        })
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     //! Host-target smoke tests for the C ABI surface. They exercise the
+diff --git a/easytier-core/src/gateway/proxy/cidr_monitor.rs b/easytier-core/src/gateway/proxy/cidr_monitor.rs
+index ef3d58d9..b2eb4889 100644
+--- a/easytier-core/src/gateway/proxy/cidr_monitor.rs
++++ b/easytier-core/src/gateway/proxy/cidr_monitor.rs
+@@ -1,4 +1,4 @@
+-use std::{collections::BTreeSet, sync::Arc, time::Duration};
++use std::{collections::BTreeSet, sync::Arc};
+ 
+ use cidr::Ipv4Cidr;
+ #[cfg(feature = "proxy-cidr-monitor")]
+@@ -151,31 +151,22 @@ impl ProxyCidrMonitor {
+     }
+ 
+     pub(crate) fn start(self) -> AbortOnDropHandle<()> {
++        let Some(peer_manager) = self.peer_manager.upgrade() else {
++            return AbortOnDropHandle::new(tokio::spawn(async {}));
++        };
++        // Subscribe before the first snapshot; watch retains changes while a
++        // snapshot is being collected, including when notifications coalesce.
++        let mut routes = peer_manager.get_route().subscribe_route_changes();
++        let mut services = self.runtime_config.subscribe_service_runtime_changes();
++        drop(peer_manager);
+         AbortOnDropHandle::new(tokio::spawn(async move {
+             let mut current = BTreeSet::new();
+-            let mut last_update = None;
+-            let mut last_runtime_config: Option<Arc<CoreInstanceRuntimeConfig>> = None;
+ 
+             loop {
+-                crate::foundation::time::sleep(Duration::from_secs(1)).await;
+                 let Some(peer_manager) = self.peer_manager.upgrade() else {
+                     break;
+                 };
+-                let update = peer_manager
+-                    .get_route()
+-                    .get_peer_info_last_update_time()
+-                    .await;
+                 let runtime_config = self.runtime_config.snapshot();
+-                let runtime_config_changed = last_runtime_config
+-                    .as_ref()
+-                    .map(|previous| !Arc::ptr_eq(previous, &runtime_config))
+-                    .unwrap_or(true);
+-                if last_update == Some(update) && !runtime_config_changed {
+-                    continue;
+-                }
+-                last_update = Some(update);
+-                last_runtime_config = Some(runtime_config.clone());
+-
+                 let diff = collect_proxy_cidr_diff_from_snapshot(
+                     peer_manager.as_ref(),
+                     runtime_config.as_ref(),
+@@ -189,6 +180,11 @@ impl ProxyCidrMonitor {
+                         removed: diff.removed,
+                     });
+                 }
++                drop(peer_manager);
++                tokio::select! {
++                    result = routes.changed() => if result.is_err() { break; },
++                    result = services.changed() => if result.is_err() { break; },
++                }
+             }
+         }))
+     }
+diff --git a/easytier-core/src/peers/acl/filter.rs b/easytier-core/src/peers/acl/filter.rs
+index 53c996d3..0849266f 100644
+--- a/easytier-core/src/peers/acl/filter.rs
++++ b/easytier-core/src/peers/acl/filter.rs
+@@ -843,6 +843,10 @@ mod tests {
+ 
+     #[async_trait::async_trait]
+     impl crate::peers::route::Route for TestRoute {
++        fn subscribe_route_changes(&self) -> tokio::sync::watch::Receiver<u64> {
++            panic!("mock route")
++        }
++
+         async fn open(&self, _: crate::peers::route::RouteInterfaceBox) -> Result<u8, ()> {
+             unreachable!()
+         }
+diff --git a/easytier-core/src/peers/route/mod.rs b/easytier-core/src/peers/route/mod.rs
+index e182195b..fe99d196 100644
+--- a/easytier-core/src/peers/route/mod.rs
++++ b/easytier-core/src/peers/route/mod.rs
+@@ -100,6 +100,8 @@ pub trait Route {
+ 
+     async fn list_routes(&self) -> Vec<CoreRoute>;
+ 
++    fn subscribe_route_changes(&self) -> tokio::sync::watch::Receiver<u64>;
++
+     // TODO: rewrite route management, remove this
+     async fn list_proxy_cidrs(&self) -> BTreeSet<Ipv4Cidr>;
+ 
+@@ -190,6 +192,10 @@ pub(crate) struct DisabledRoute;
+ 
+ #[async_trait::async_trait]
+ impl Route for DisabledRoute {
++    fn subscribe_route_changes(&self) -> tokio::sync::watch::Receiver<u64> {
++        panic!("mock route")
++    }
++
+     async fn open(&self, _interface: RouteInterfaceBox) -> Result<u8, ()> {
+         panic!("mock route")
+     }
+diff --git a/easytier-core/src/peers/route/peer_ospf_route.rs b/easytier-core/src/peers/route/peer_ospf_route.rs
+index b375c261..bd971c18 100644
+--- a/easytier-core/src/peers/route/peer_ospf_route.rs
++++ b/easytier-core/src/peers/route/peer_ospf_route.rs
+@@ -350,7 +350,13 @@ impl OspfRouteTable {
+         (graph, start_node_idx.unwrap())
+     }
+ 
+-    pub fn clean_expired_route_info(&self) {
++    pub fn clean_expired_route_info(&self) -> bool {
++        let previous = (
++            self.peer_infos.len(),
++            self.next_hop_map.len(),
++            self.ipv4_peer_id_map.len(),
++            self.ipv6_peer_id_map.len(),
++        );
+         let cur_version = self.next_hop_map_version.get();
+         self.next_hop_map.retain(|_, v| {
+             // remove next hop map for peers we cannot reach.
+@@ -374,6 +380,13 @@ impl OspfRouteTable {
+         shrink_dashmap(&self.suppressed_peer_ids, None);
+         shrink_dashmap(&self.ipv4_peer_id_map, None);
+         shrink_dashmap(&self.ipv6_peer_id_map, None);
++        previous
++            != (
++                self.peer_infos.len(),
++                self.next_hop_map.len(),
++                self.ipv4_peer_id_map.len(),
++                self.ipv6_peer_id_map.len(),
++            )
+     }
+ 
+     fn gen_next_hop_map_with_least_hop(
+@@ -2380,6 +2393,7 @@ struct PeerRouteServiceImpl {
+     last_update_my_foreign_network: AtomicCell<Option<Instant>>,
+ 
+     peer_info_last_update: AtomicCell<Instant>,
++    route_changes: tokio::sync::watch::Sender<u64>,
+ }
+ 
+ impl Debug for PeerRouteServiceImpl {
+@@ -2454,6 +2468,7 @@ impl PeerRouteServiceImpl {
+             last_update_my_foreign_network: AtomicCell::new(None),
+ 
+             peer_info_last_update: AtomicCell::new(Instant::now()),
++            route_changes: tokio::sync::watch::channel(0).0,
+         }
+     }
+ 
+@@ -2847,6 +2862,8 @@ impl PeerRouteServiceImpl {
+             .as_mut()
+             .unwrap()
+             .end_update();
++        // Publish only after both forwarding tables contain the new snapshot.
++        self.route_changes.send_modify(|version| *version += 1);
+     }
+ 
+     fn update_foreign_network_owner_map(&self) {
+@@ -3437,8 +3454,11 @@ impl PeerRouteServiceImpl {
+         }
+ 
+         self.refresh_credential_trusts_and_disconnect().await;
+-        self.route_table.clean_expired_route_info();
+-        self.route_table_with_cost.clean_expired_route_info();
++        let changed = self.route_table.clean_expired_route_info();
++        let changed_with_cost = self.route_table_with_cost.clean_expired_route_info();
++        if changed || changed_with_cost {
++            self.route_changes.send_modify(|version| *version += 1);
++        }
+     }
+ 
+     fn build_sync_route_raw_req(
+@@ -4607,6 +4627,10 @@ impl Drop for PeerRoute {
+ 
+ #[async_trait::async_trait]
+ impl Route for PeerRoute {
++    fn subscribe_route_changes(&self) -> tokio::sync::watch::Receiver<u64> {
++        self.service_impl.route_changes.subscribe()
++    }
++
+     async fn open(&self, interface: RouteInterfaceBox) -> Result<u8, ()> {
+         *self.service_impl.interface.lock().await = Some(interface);
+         self.start().await;
+@@ -5040,6 +5064,20 @@ mod tests {
+         }
+     }
+ 
++    #[tokio::test]
++    async fn route_change_watch_retains_updates_before_the_reader_waits() {
++        let service = test_peer_relay_service_impl(1);
++        let mut changes = service.route_changes.subscribe();
++        service.update_route_table();
++        service.update_route_table();
++        tokio::time::timeout(Duration::from_millis(100), changes.changed())
++            .await
++            .unwrap()
++            .unwrap();
++        assert_eq!(*changes.borrow_and_update(), 2);
++        assert!(!changes.has_changed().unwrap());
++    }
++
+     fn install_peer_info(
+         service_impl: &PeerRouteServiceImpl,
+         peer_id: PeerId,
+diff --git a/easytier/src/common/global_ctx.rs b/easytier/src/common/global_ctx.rs
+index f3000d08..58baaadf 100644
+--- a/easytier/src/common/global_ctx.rs
++++ b/easytier/src/common/global_ctx.rs
+@@ -243,7 +243,7 @@ impl GlobalCtx {
+     }
+ 
+     #[cfg(any(feature = "tun", test))]
+-    fn set_tun_device_name(&self, name: Option<String>) {
++    pub(crate) fn set_tun_device_name(&self, name: Option<String>) {
+         *self.tun_device_name.lock().unwrap() = name;
+     }
+ 
+diff --git a/easytier/src/instance/factory.rs b/easytier/src/instance/factory.rs
+index 71c341ce..56cd456a 100644
+--- a/easytier/src/instance/factory.rs
++++ b/easytier/src/instance/factory.rs
+@@ -42,6 +42,14 @@ pub fn create_native_instance(config: TomlConfig) -> anyhow::Result<Arc<NativeCo
+     NativeInstanceFactory::new(CoreProcessRuntime::new()).create(config, ())
+ }
+ 
++/// Returns the current mobile attachment generation and its installation state.
++pub fn native_instance_tun_state(instance: &NativeCoreInstance) -> (u64, bool) {
++    instance
++        .runtime_host::<NativeInstanceRuntimeHost>()
++        .map(NativeInstanceRuntimeHost::tun_state)
++        .unwrap_or_default()
++}
++
+ /// Subscribes to native presentation events owned by this instance's runtime.
+ pub fn subscribe_native_instance_event(
+     instance: &NativeCoreInstance,
+diff --git a/easytier/src/instance/runtime_host.rs b/easytier/src/instance/runtime_host.rs
+index aa22a702..bf05ff17 100644
+--- a/easytier/src/instance/runtime_host.rs
++++ b/easytier/src/instance/runtime_host.rs
+@@ -68,6 +68,11 @@ impl NativeInstanceRuntimeHost {
+         packet_plane: Arc<CorePacketPlane>,
+     ) -> anyhow::Result<Option<Arc<dyn DhcpIpv4Host>>> {
+         self.event_journal.start(self.cancel.clone()).await;
++        #[cfg(all(feature = "tun", mobile))]
++        self.tun
++            .prepare(packet_plane.clone(), self.operation.clone())
++            .await?;
++        #[cfg(not(all(feature = "tun", mobile)))]
+         self.tun.prepare(packet_plane.clone()).await?;
+         Ok(Some(
+             self.tun.dhcp_host(self.operation.clone(), packet_plane),
+@@ -124,6 +129,17 @@ impl NativeInstanceRuntimeHost {
+         }
+     }
+ 
++    pub(crate) fn tun_state(&self) -> (u64, bool) {
++        #[cfg(all(feature = "tun", mobile))]
++        {
++            self.tun.state()
++        }
++        #[cfg(not(all(feature = "tun", mobile)))]
++        {
++            (0, self.global_ctx.get_tun_device_name().is_some())
++        }
++    }
++
+     pub(crate) fn subscribe_event(&self) -> crate::common::global_ctx::EventBusSubscriber {
+         self.global_ctx.subscribe()
+     }
+diff --git a/easytier/src/instance/runtime_host/tun_mobile.rs b/easytier/src/instance/runtime_host/tun_mobile.rs
+index 4f459326..99953698 100644
+--- a/easytier/src/instance/runtime_host/tun_mobile.rs
++++ b/easytier/src/instance/runtime_host/tun_mobile.rs
+@@ -1,4 +1,7 @@
+-use std::sync::Arc;
++use std::sync::{
++    Arc,
++    atomic::{AtomicU64, Ordering},
++};
+ 
+ use anyhow::Context as _;
+ use cidr::Ipv4Inet;
+@@ -21,8 +24,10 @@ pub(super) struct NativeTunRuntime {
+     global_ctx: ArcGlobalCtx,
+     cancel: CancellationToken,
+     nic: TunNicState,
+-    tun_fd: mpsc::Sender<i32>,
+-    tun_fd_receiver: Mutex<Option<mpsc::Receiver<i32>>>,
++    requested: Arc<AtomicU64>,
++    installed: Arc<AtomicU64>,
++    tun_fd: mpsc::Sender<(i32, u64)>,
++    tun_fd_receiver: Mutex<Option<mpsc::Receiver<(i32, u64)>>>,
+     task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+ }
+ 
+@@ -33,6 +38,8 @@ impl NativeTunRuntime {
+             global_ctx,
+             cancel,
+             nic: TunNicState::empty(),
++            requested: Arc::new(AtomicU64::new(0)),
++            installed: Arc::new(AtomicU64::new(0)),
+             tun_fd,
+             tun_fd_receiver: Mutex::new(Some(tun_fd_receiver)),
+             task: Mutex::new(None),
+@@ -51,10 +58,11 @@ impl NativeTunRuntime {
+         global_ctx: ArcGlobalCtx,
+         packet_plane: Arc<CorePacketPlane>,
+         fd: i32,
+-    ) -> anyhow::Result<()> {
++    ) -> anyhow::Result<String> {
++        global_ctx.set_tun_device_name(None);
+         nic_state.drain().await;
+         if fd <= 0 {
+-            return Ok(());
++            return Ok(String::new());
+         }
+         let closed = Arc::new(Notify::new());
+         let mut nic = NicCtx::new(
+@@ -64,15 +72,20 @@ impl NativeTunRuntime {
+             closed,
+         );
+         nic.run_for_mobile(fd).await.context("add ip failed")?;
++        let name = nic.ifname().await.unwrap_or_default();
+         let magic_dns = global_ctx
+             .get_ipv4()
+             .map(|ip| MagicDnsRuntime::start(global_ctx, packet_plane, None, ip))
+             .unwrap_or_default();
+         nic_state.install(nic, magic_dns).await;
+-        Ok(())
++        Ok(name)
+     }
+ 
+-    pub(super) async fn prepare(&self, packet_plane: Arc<CorePacketPlane>) -> anyhow::Result<()> {
++    pub(super) async fn prepare(
++        &self,
++        packet_plane: Arc<CorePacketPlane>,
++        operation: Arc<Mutex<()>>,
++    ) -> anyhow::Result<()> {
+         self.nic.drain().await;
+         let Some(mut tun_fds) = self.tun_fd_receiver.lock().await.take() else {
+             return Ok(());
+@@ -80,13 +93,22 @@ impl NativeTunRuntime {
+         let nic_state = self.nic.clone();
+         let global_ctx = self.global_ctx.clone();
+         let cancel = self.cancel.clone();
++        let installed = self.installed.clone();
++        let requested = self.requested.clone();
+         self.task.lock().await.replace(tokio::spawn(async move {
+             loop {
+-                let fd = tokio::select! {
++                let (fd, generation) = tokio::select! {
+                     _ = cancel.cancelled() => return,
+                     fd = tun_fds.recv() => match fd { Some(fd) => fd, None => return },
+                 };
+-                if let Err(error) = Self::install_mobile_tun(
++                let _operation = tokio::select! {
++                    _ = cancel.cancelled() => return,
++                    guard = operation.lock() => guard,
++                };
++                if requested.load(Ordering::Acquire) != generation {
++                    continue;
++                }
++                match Self::install_mobile_tun(
+                     nic_state.clone(),
+                     global_ctx.clone(),
+                     packet_plane.clone(),
+@@ -94,7 +116,13 @@ impl NativeTunRuntime {
+                 )
+                 .await
+                 {
+-                    tracing::error!(?error, "failed to attach mobile TUN fd");
++                    Ok(name) => {
++                        installed.store(generation, Ordering::Release);
++                        if !name.is_empty() {
++                            global_ctx.set_tun_device_ready(name);
++                        }
++                    }
++                    Err(error) => global_ctx.set_tun_device_error(error.to_string()),
+                 }
+             }
+         }));
+@@ -105,15 +133,27 @@ impl NativeTunRuntime {
+         if let Some(task) = self.task.lock().await.take() {
+             let _ = task.await;
+         }
++        self.global_ctx.set_tun_device_name(None);
+         self.nic.stop().await;
+     }
+ 
+     pub(super) fn attach_fd(&self, fd: i32) -> anyhow::Result<()> {
++        let generation = self.requested.fetch_add(1, Ordering::AcqRel) + 1;
+         self.tun_fd
+-            .try_send(fd)
++            .try_send((fd, generation))
+             .map_err(|error| anyhow::anyhow!("failed to send TUN fd: {error}"))
+     }
+ 
++    pub(super) fn state(&self) -> (u64, bool) {
++        let generation = self.requested.load(Ordering::Acquire);
++        (
++            generation,
++            generation != 0
++                && self.installed.load(Ordering::Acquire) == generation
++                && self.global_ctx.get_tun_device_name().is_some(),
++        )
++    }
++
+     pub(super) fn dhcp_host(
+         &self,
+         operation: Arc<Mutex<()>>,
+@@ -147,6 +187,7 @@ impl NativeDhcpIpv4Host {
+ 
+     async fn apply(&self, next: Option<Ipv4Inet>) -> anyhow::Result<Option<Ipv4Inet>> {
+         self.ensure_open()?;
++        self.global_ctx.set_tun_device_name(None);
+         tokio::select! {
+             _ = self.cancel.cancelled() => anyhow::bail!("instance is closing; DHCP update cancelled"),
+             _ = self.nic.drain() => {}
+diff --git a/easytier/src/instance/virtual_nic.rs b/easytier/src/instance/virtual_nic.rs
+index 43c97aa6..eed8f16a 100644
+--- a/easytier/src/instance/virtual_nic.rs
++++ b/easytier/src/instance/virtual_nic.rs
+@@ -1302,11 +1302,7 @@ impl NicCtx {
+         let tunnel = {
+             let mut nic = self.nic.lock().await;
+             match nic.create_dev_for_mobile(tun_fd).await {
+-                Ok(ret) => {
+-                    self.global_ctx
+-                        .set_tun_device_ready(nic.ifname().to_string());
+-                    ret
+-                }
++                Ok(ret) => ret,
+                 Err(err) => {
+                     self.global_ctx.set_tun_device_error(err.to_string());
+                     return Err(err);

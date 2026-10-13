@@ -31,6 +31,7 @@ void main() {
       'core_version': '2.7.0',
     };
     snapshot = {
+      'vpn_ready': true,
       'network_name': 'authorized-network',
       'instance_name': 'actual-instance',
       'instances': {
@@ -64,6 +65,11 @@ void main() {
                   {'name': 'traffic_bytes_forward_rx', 'value': 999},
                 ],
               });
+            case 'beginNetworkConnection':
+              return null;
+            case 'waitForNetworkConnection':
+              return '10.1.0.2';
+            case 'endNetworkConnection':
             case 'stopRuntime':
               return null;
           }
@@ -177,6 +183,41 @@ void main() {
       expect(event.data['platform'], 'iOS');
       await runtime.dispose();
       expect(calls.where((call) => call.method == 'stopRuntime'), isEmpty);
+    },
+  );
+
+  test(
+    'a running core instance is not ready until its system VPN data path is ready',
+    () async {
+      snapshot['vpn_ready'] = false;
+      expect(
+        await runtime.isNetworkInstanceRunning('authorized-network'),
+        isFalse,
+      );
+      expect(await runtime.readNetworkTrafficTotals(), isEmpty);
+      await expectLater(
+        runtime.readNetworkPeerStatuses('authorized-network'),
+        throwsStateError,
+      );
+      expect(calls.where((call) => call.method == 'callJsonRpc'), isEmpty);
+    },
+  );
+
+  test(
+    'network activation holds native background time and waits for the requested network',
+    () async {
+      await runtime.beginNetworkConnection();
+      expect(
+        await runtime.waitForNetworkConnection(' authorized-network '),
+        '10.1.0.2',
+      );
+      await runtime.endNetworkConnection();
+      expect(calls.map((call) => call.method), [
+        'beginNetworkConnection',
+        'waitForNetworkConnection',
+        'endNetworkConnection',
+      ]);
+      expect(calls[1].arguments, {'networkName': 'authorized-network'});
     },
   );
 

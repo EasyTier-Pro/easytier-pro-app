@@ -4,6 +4,8 @@ import Foundation
 // not install a TUN interface until set_tun_fd, which is exclusive to the VPN.
 final class EasyTierControlClient {
   private let queue = DispatchQueue(label: "net.easytier.pro.control")
+  var networksChanged: (() -> Void)?
+  private var networkIDs = Set<String>()
   private var running = false
   private var sessionID = ""
   private var machineID = ""
@@ -17,8 +19,14 @@ final class EasyTierControlClient {
         let directory = try EasyTierShared.container().appendingPathComponent("control-logs")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try self.check(easytier_ios_configure_diagnostic_logging(directory.path, 1))
+        let context = Unmanaged.passUnretained(self).toOpaque()
         try self.check(start_config_server_client(bootstrap["url"]!, bootstrap["hostname"]!,
-                                                 self.machineID, true, nil, nil))
+                                                 self.machineID, true, { event, context in
+          guard let event, let context else { return }
+          let copied = String(cString: event)
+          let control = Unmanaged<EasyTierControlClient>.fromOpaque(context).takeUnretainedValue()
+          control.queue.async { control.handleConfigEvent(copied) }
+        }, context))
         self.running = true
         self.sessionID = UUID().uuidString
       }
@@ -31,6 +39,7 @@ final class EasyTierControlClient {
       guard self.running else { return }
       try self.check(stop_config_server_client())
       self.running = false
+      self.networkIDs.removeAll()
       _ = easytier_ios_flush_diagnostic_logging()
     }
   }
@@ -44,18 +53,24 @@ final class EasyTierControlClient {
   }
 
   private func snapshot() throws -> [String: Any] {
-    var hasNetworks = false
-    if running {
-      guard let value = easytier_ios_collect_network_infos(64) else { throw coreError() }
-      defer { easytier_ios_free_string(value) }
-      let infos = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8)) as? [String: Any] ?? [:]
-      hasNetworks = !infos.isEmpty
-    }
     return ["session_id": sessionID, "running": running,
             "connected": running && is_config_server_client_connected() != 0,
-            "has_networks": hasNetworks, "machine_id": machineID,
+            "has_networks": !networkIDs.isEmpty, "machine_id": machineID,
             "core_version": Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String ?? "",
             "events": []]
+  }
+
+  private func handleConfigEvent(_ raw: String) {
+    guard running, let data = raw.data(using: .utf8),
+          let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let id = event["instance_id"] as? String else { return }
+    switch event["event"] as? String {
+    case "run_network_instance" where event["success"] as? Bool == true:
+      networkIDs.insert(id)
+    case "delete_network_instance": networkIDs.remove(id)
+    default: return
+    }
+    networksChanged?()
   }
 
   private func perform<T>(_ action: @escaping () throws -> T) async throws -> T {
