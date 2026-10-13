@@ -136,9 +136,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         try retain(name)
         // A successful run callback also follows replacements with the same
         // name and ID. The old runtime has stopped and the new one needs its
-        // own fd, even when its virtual address and routes are unchanged.
-        bridge?.stop()
-        bridge = nil
+        // fd attached, even when its virtual address and routes are unchanged.
+        // Keep the VPN's system reader; discard the old instance's packets.
+        bridge?.detachCore()
         tunGeneration = 0
         tunReady = false
         tunAttachmentPending = false
@@ -169,8 +169,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard let state = try readTunState(name) else { return }
         if state.generation == tunGeneration {
           if state.released && !tunAttachmentPending {
-            bridge?.stop()
-            bridge = nil
+            bridge?.detachCore()
+            tunGeneration = 0
             announcedConfig = nil
           }
           tunReady = state.ready
@@ -211,7 +211,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       let config = try EasyTierVpnConfig(node: node,
                                         routes: routeResult["routes"] as? [[String: Any]] ?? [],
                                         network: networkResult["config"] as? [String: Any] ?? [:])
-      guard config != appliedConfig || bridge == nil else { return }
+      guard config != appliedConfig || bridge == nil || tunGeneration == 0 else { return }
       apply(config)
     } catch {
       // DHCP can remove an existing NIC as well as delay the initial address.
@@ -249,7 +249,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
           if let error { throw error }
           if config != nil {
-            let needsAttachment = self.bridge == nil || addressChanged
+            let needsAttachment = self.bridge == nil || addressChanged || self.tunGeneration == 0
             if self.bridge == nil {
               self.bridge = try EasyTierPacketBridge(flow: self.packetFlow, log: { [weak self] message in
                 guard let self else { return }
@@ -257,7 +257,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
               }) { [weak self] error in
                 guard let self else { return }
                 self.queue.async {
-                  guard self.started, self.selection == selection else { return }
+                  guard self.started else { return }
                   self.recordError(error)
                   self.stopCore(reason: "packet_flow_failed", error: error)
                   self.cancelTunnelWithError(error)
@@ -272,6 +272,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
               self.tunAttachmentPending = true
               self.announcedConfig = nil
               try self.check(set_tun_fd(name, bridge.coreFD))
+              bridge.attachCore()
               guard let state = try self.readTunState(name) else { return }
               self.tunGeneration = state.generation
               self.tunReady = state.ready

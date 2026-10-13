@@ -23,6 +23,8 @@ final class EasyTierPacketBridge {
   private var waitingForWrite = false
   private var pendingPackets: [Data] = []
   private var pendingIndex = 0
+  private var coreAttached = true
+  private var readPending = false
   private var failed = false
   private var stopped = false
   private var readLogged = false
@@ -69,6 +71,36 @@ final class EasyTierPacketBridge {
     }
   }
 
+  // Call after the old core has stopped borrowing coreFD. Keep the VPN's
+  // outstanding system read; NEPacketTunnelFlow provides no cancellation.
+  func detachCore() {
+    queue.sync {
+      guard !stopped else { return }
+      coreAttached = false
+      if waitingForWrite {
+        writeSource?.suspend()
+        waitingForWrite = false
+      }
+      pendingPackets = []
+      pendingIndex = 0
+      var buffer = [UInt8](repeating: 0, count: 65539)
+      // Neither direction may carry an old instance's queued packets across
+      // reattachment. The core is stopped, so both ends are ours to drain.
+      for fd in [coreFD, flowFD] {
+        while recv(fd, &buffer, buffer.count, 0) >= 0 {}
+      }
+    }
+  }
+
+  func attachCore() {
+    queue.sync {
+      guard !stopped, !failed else { return }
+      coreAttached = true
+      readCorePackets()
+      readSystemPackets()
+    }
+  }
+
   // Call after the core has stopped using coreFD. The core borrows this fd.
   func stop() {
     queue.sync {
@@ -89,11 +121,14 @@ final class EasyTierPacketBridge {
   }
 
   private func readSystemPackets() {
-    guard !stopped, !failed else { return }
+    guard !stopped, !failed, coreAttached, !readPending, pendingPackets.isEmpty else { return }
+    readPending = true
     flow.readPackets { [weak self] packets, protocols in
       guard let self else { return }
       self.queue.async {
+        self.readPending = false
         guard !self.stopped, !self.failed else { return }
+        guard self.coreAttached else { return }
         if !self.readLogged {
           self.readLogged = true
           self.log("Packet bridge first system batch core_fd=\(self.coreFD) packets=\(packets.count) protocols=\(protocols.count)")
@@ -111,7 +146,7 @@ final class EasyTierPacketBridge {
   }
 
   private func writeSystemPackets() {
-    guard !stopped, !failed else { return }
+    guard !stopped, !failed, coreAttached else { return }
     while pendingIndex < pendingPackets.count {
       let packet = pendingPackets[pendingIndex]
       let length = packet.withUnsafeBytes { send(flowFD, $0.baseAddress, $0.count, 0) }
@@ -153,7 +188,7 @@ final class EasyTierPacketBridge {
   }
 
   private func readCorePackets() {
-    guard !stopped else { return }
+    guard !stopped, coreAttached else { return }
     var buffer = [UInt8](repeating: 0, count: 65539)
     var packets: [Data] = []
     var protocols: [NSNumber] = []
