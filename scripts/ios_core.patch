@@ -742,7 +742,7 @@ index aa22a702..77eb9f13 100644
          self.global_ctx.subscribe()
      }
 diff --git a/easytier/src/instance/runtime_host/tun_common.rs b/easytier/src/instance/runtime_host/tun_common.rs
-index a86aead9..df346563 100644
+index a86aead9..0ea600a3 100644
 --- a/easytier/src/instance/runtime_host/tun_common.rs
 +++ b/easytier/src/instance/runtime_host/tun_common.rs
 @@ -1,7 +1,4 @@
@@ -784,8 +784,14 @@ index a86aead9..df346563 100644
              magic_dns: MagicDnsRuntime::default(),
          }
      }
-@@ -61,6 +63,13 @@ impl TunNicState {
-         let mut old = self.nic_ctx.lock().await.take();
+@@ -58,11 +60,20 @@ impl TunNicState {
+     }
+ 
+     pub(super) async fn stop(&self) {
+-        let mut old = self.nic_ctx.lock().await.take();
++        // Keep ownership until shutdown finishes so a cancelled stop can be
++        // resumed by the final runtime cleanup without losing borrowed fds.
++        let mut old = self.nic_ctx.lock().await;
          if let Some(nic) = old.as_mut() {
              nic.magic_dns.stop().await;
 +            match &mut nic.nic_ctx {
@@ -796,9 +802,12 @@ index a86aead9..df346563 100644
 +                }
 +            }
          }
-         drop(old);
+-        drop(old);
++        old.take();
      }
-@@ -89,3 +98,36 @@ impl TunNicState {
+ 
+     pub(super) async fn drain(&self) {
+@@ -89,3 +100,67 @@ impl TunNicState {
              .replace(NicCtxContainer::new(nic, magic_dns));
      }
  }
@@ -830,6 +839,37 @@ index a86aead9..df346563 100644
 +            .replace(NicCtxContainer::packet_drain(tasks));
 +        task_started.await.unwrap();
 +
++        state.stop().await;
++
++        assert!(receiver.try_lock().is_ok());
++    }
++
++    #[tokio::test]
++    async fn cancelled_stop_preserves_tasks_for_final_shutdown() {
++        let state = TunNicState::empty();
++        let (_sender, receiver) = tokio::sync::mpsc::channel(1);
++        state
++            .install_receiver(HostPacketReceiver::new(receiver))
++            .unwrap();
++        let receiver = state.receiver();
++        let (started, task_started) = tokio::sync::oneshot::channel();
++        let mut tasks = JoinSet::new();
++        let task_receiver = receiver.clone();
++        tasks.spawn(async move {
++            let _receiver = task_receiver.lock().await;
++            started.send(()).unwrap();
++            std::future::pending::<()>().await;
++        });
++        state
++            .nic_ctx
++            .lock()
++            .await
++            .replace(NicCtxContainer::packet_drain(tasks));
++        task_started.await.unwrap();
++
++        let mut stop = Box::pin(state.stop());
++        assert!(futures::poll!(stop.as_mut()).is_pending());
++        drop(stop);
 +        state.stop().await;
 +
 +        assert!(receiver.try_lock().is_ok());
