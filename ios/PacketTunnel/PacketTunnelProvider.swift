@@ -164,7 +164,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       do {
         // Notifications can wait in this queue while a newer fd is installed.
         // Read current state before acknowledging or releasing its bridge.
-        let state = try readTunState(name)
+        // The instance may disappear after a valid callback was queued. Its
+        // delete callback follows shutdown and releases the owned bridge.
+        guard let state = try readTunState(name) else { return }
         if state.generation == tunGeneration {
           if state.released && !tunAttachmentPending {
             bridge?.stop()
@@ -259,7 +261,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
               self.tunAttachmentPending = true
               self.announcedConfig = nil
               try self.check(set_tun_fd(name, bridge.coreFD))
-              let state = try self.readTunState(name)
+              guard let state = try self.readTunState(name) else { return }
               self.tunGeneration = state.generation
               self.tunReady = state.ready
               if self.tunReady { self.tunAttachmentPending = false }
@@ -279,10 +281,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
   }
 
-  private func readTunState(_ name: String) throws -> (generation: Int, ready: Bool, released: Bool) {
+  private func readTunState(_ name: String) throws -> (generation: Int, ready: Bool, released: Bool)? {
     guard let value = easytier_ios_tun_state(name) else { throw coreError() }
     defer { easytier_ios_free_string(value) }
-    guard let state = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8)) as? [Any],
+    let decoded = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8), options: [.fragmentsAllowed])
+    if decoded is NSNull { return nil }
+    guard let state = decoded as? [Any],
           state.count == 3, let generation = state[0] as? Int,
           let ready = state[1] as? Bool, let released = state[2] as? Bool else {
       throw error("无法读取核心接口状态。")

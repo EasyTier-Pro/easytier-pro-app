@@ -322,23 +322,24 @@ index ece1e388..de8b6422 100644
 +    }
 +}
 diff --git a/easytier-contrib/easytier-ffi/src/lib.rs b/easytier-contrib/easytier-ffi/src/lib.rs
-index 6c332c89..f43829b2 100644
+index 6c332c89..1cfcc5fa 100644
 --- a/easytier-contrib/easytier-ffi/src/lib.rs
 +++ b/easytier-contrib/easytier-ffi/src/lib.rs
-@@ -40,6 +40,19 @@ mod state;
+@@ -40,6 +40,20 @@ mod state;
  mod strings;
  mod types;
  
 +/// Snapshot of the named native instance's current TUN attachment.
-+pub fn network_instance_tun_state(name: &str) -> Result<(u64, bool, bool), String> {
-+    let id = state::resolve_instance_id_by_name(name)?
-+        .ok_or_else(|| format!("instance {name} not found"))?;
-+    let instance = state::ffi_context()
-+        .manager
-+        .instance(id)
-+        .ok_or_else(|| format!("instance {name} not found"))?;
-+    Ok(easytier::instance::factory::native_instance_tun_state(
-+        &instance,
++/// Absence is normal when removal overtakes a queued runtime notification.
++pub fn network_instance_tun_state(name: &str) -> Result<Option<(u64, bool, bool)>, String> {
++    let Some(id) = state::resolve_instance_id_by_name(name)? else {
++        return Ok(None);
++    };
++    let Some(instance) = state::ffi_context().manager.instance(id) else {
++        return Ok(None);
++    };
++    Ok(Some(
++        easytier::instance::factory::native_instance_tun_state(&instance),
 +    ))
 +}
 +
@@ -416,27 +417,35 @@ index c008a66f..9abb4bae 100644
 +        .unwrap();
 +}
 diff --git a/easytier-contrib/easytier-ios/easytier-ios.h b/easytier-contrib/easytier-ios/easytier-ios.h
-index e1295569..7b816cc1 100644
+index e1295569..e68512c6 100644
 --- a/easytier-contrib/easytier-ios/easytier-ios.h
 +++ b/easytier-contrib/easytier-ios/easytier-ios.h
-@@ -138,6 +138,8 @@ char *easytier_ios_call_json_rpc(const char *service_name,
-  * @ownership The caller owns the returned string and must release it with
-  *            easytier_ios_free_string().
-  */
+@@ -126,6 +126,15 @@ char *easytier_ios_call_json_rpc(const char *service_name,
+                                  const char *method_name,
+                                  const char *payload_json);
+ 
++/**
++ * @brief Return the current TUN attachment as [generation, ready, released].
++ *
++ * A removed instance returns the JSON value null. NULL indicates a query
++ * failure; retrieve its details with easytier_ios_last_error().
++ * The caller must release the returned string with easytier_ios_free_string().
++ */
 +char *easytier_ios_tun_state(const char *instance_name);
 +
- char *easytier_ios_last_error(void);
- 
  /**
+  * @brief Return the last error message on this thread.
+  *
 diff --git a/easytier-contrib/easytier-ios/src/lib.rs b/easytier-contrib/easytier-ios/src/lib.rs
-index de2a8959..3151a07c 100644
+index de2a8959..bd76073b 100644
 --- a/easytier-contrib/easytier-ios/src/lib.rs
 +++ b/easytier-contrib/easytier-ios/src/lib.rs
-@@ -459,6 +459,36 @@ pub unsafe extern "C" fn easytier_ios_free_string(s: *mut c_char) {
+@@ -459,6 +459,37 @@ pub unsafe extern "C" fn easytier_ios_free_string(s: *mut c_char) {
      }));
  }
  
 +/// Snapshot of the current attachment, for pairing callbacks with set_tun_fd.
++/// Returns JSON null when the instance has already been removed.
 +///
 +/// # Safety
 +/// `instance_name` must be a valid NUL-terminated UTF-8 string.
@@ -469,6 +478,45 @@ index de2a8959..3151a07c 100644
  #[cfg(test)]
  mod tests {
      //! Host-target smoke tests for the C ABI surface. They exercise the
+@@ -626,6 +657,38 @@ mod tests {
+         })
+     }
+ 
++    #[test]
++    fn tun_state_after_instance_removal_is_absent() {
++        let _guard = acquire();
++        let instance = unique_instance("tun-state");
++        let running = InstanceGuard::run(&instance);
++        let name = CString::new(instance).unwrap();
++        let read_state = || {
++            // SAFETY: `name` is a valid NUL-terminated string; the returned
++            // allocation is released exactly once after copying it.
++            let state = unsafe { easytier_ios_tun_state(name.as_ptr()) };
++            assert!(
++                !state.is_null(),
++                "TUN state failed: {:?}",
++                take_last_error()
++            );
++            let json = unsafe { CStr::from_ptr(state) }
++                .to_string_lossy()
++                .into_owned();
++            unsafe { easytier_ios_free_string(state) };
++            serde_json::from_str::<serde_json::Value>(&json).unwrap()
++        };
++        assert_eq!(read_state().as_array().unwrap().len(), 3);
++        drop(running);
++        let previous_error = take_last_error();
++        assert_eq!(read_state(), serde_json::Value::Null);
++        assert_eq!(take_last_error(), previous_error);
++
++        // Invalid arguments remain failures rather than an absent instance.
++        assert!(unsafe { easytier_ios_tun_state(ptr::null()) }.is_null());
++        assert!(take_last_error().unwrap().contains("instance_name"));
++    }
++
+     #[test]
+     fn run_collect_retain_roundtrip() {
+         let _guard = acquire();
 diff --git a/easytier-core/src/gateway/proxy/cidr_monitor.rs b/easytier-core/src/gateway/proxy/cidr_monitor.rs
 index ef3d58d9..b2eb4889 100644
 --- a/easytier-core/src/gateway/proxy/cidr_monitor.rs
