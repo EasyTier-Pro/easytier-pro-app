@@ -1050,6 +1050,10 @@ void main() {
 
       networkInfos = {
         'map': {instanceId: runningInfo()},
+        'json_rpc_metrics': [
+          {'name': 'traffic_bytes_rx', 'value': 1024},
+          {'name': 'traffic_bytes_tx', 'value': 2048},
+        ],
       };
       await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
       nativeEvents.add({
@@ -1185,47 +1189,48 @@ void main() {
       expect(relay.cost, 'relay(2)');
     });
 
-    test('derives Android traffic totals from peer connection stats', () async {
-      networkInfos = {
-        'map': {
-          'network-a': {
-            'running': true,
-            'my_node_info': {
-              'virtual_ipv4': {
-                'address': {'addr': 168427522},
-                'network_length': 24,
+    test(
+      'does not substitute connection traffic for missing business stats',
+      () async {
+        networkInfos = {
+          'map': {
+            'network-a': {
+              'running': true,
+              'my_node_info': {
+                'virtual_ipv4': {
+                  'address': {'addr': 168427522},
+                  'network_length': 24,
+                },
+                'peer_id': 123,
               },
-              'peer_id': 123,
-            },
-            'peer_route_pairs': [
-              {
-                'route': {
-                  'peer_id': 456,
-                  'ipv4_addr': {
-                    'address': {'addr': 168427523},
-                    'network_length': 24,
+              'peer_route_pairs': [
+                {
+                  'route': {
+                    'peer_id': 456,
+                    'ipv4_addr': {
+                      'address': {'addr': 168427523},
+                      'network_length': 24,
+                    },
+                  },
+                  'peer': {
+                    'peer_id': 456,
+                    'conns': [
+                      {
+                        'stats': {'rx_bytes': 1024, 'tx_bytes': 2048},
+                      },
+                    ],
                   },
                 },
-                'peer': {
-                  'peer_id': 456,
-                  'conns': [
-                    {
-                      'stats': {'rx_bytes': 1024, 'tx_bytes': 2048},
-                    },
-                  ],
-                },
-              },
-            ],
+              ],
+            },
           },
-        },
-      };
+        };
 
-      final totals = await runtime.readNetworkTrafficTotals();
+        final totals = await runtime.readNetworkTrafficTotals();
 
-      expect(totals.keys, ['network-a']);
-      expect(totals['network-a']!.downloadBytes, 1024);
-      expect(totals['network-a']!.uploadBytes, 2048);
-    });
+        expect(totals, isEmpty);
+      },
+    );
 
     test('derives Android traffic totals from JSON RPC stats', () async {
       networkInfos = {
@@ -1239,14 +1244,29 @@ void main() {
         ],
         'json_rpc_metrics': [
           {
-            'name': 'traffic_bytes_self_rx',
+            'name': 'traffic_bytes_rx',
             'value': '4096',
             'labels': {'network_name': 'network-a'},
           },
           {
-            'name': 'traffic_bytes_self_tx',
+            'name': 'traffic_bytes_tx',
             'value': 8192,
             'labels': {'network_name': 'network-a'},
+          },
+          {
+            'name': 'traffic_bytes_self_rx',
+            'value': 14096,
+            'labels': {'network_name': 'network-a'},
+          },
+          {
+            'name': 'traffic_control_bytes_tx',
+            'value': 10000,
+            'labels': {'network_name': 'network-a'},
+          },
+          {
+            'name': 'traffic_bytes_tx_by_instance',
+            'value': 8192,
+            'labels': {'network_name': 'network-a', 'to_instance_id': 'peer-a'},
           },
         ],
       };

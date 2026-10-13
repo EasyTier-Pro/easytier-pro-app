@@ -13,6 +13,7 @@ import 'core_peer_status.dart';
 
 part 'core_lifecycle_models.dart';
 part 'core_platform_runtime.dart';
+part 'core_traffic_stats.dart';
 part 'desktop_core_runtime.dart';
 part 'android_core_runtime.dart';
 part 'ios_core_runtime.dart';
@@ -1876,60 +1877,10 @@ exit 3
   @visibleForTesting
   static Map<String, CoreNetworkTrafficTotals>
   parseNetworkTrafficTotalsFromJson(String output, {DateTime? sampledAt}) {
-    final decoded = jsonDecode(output);
-    final items = _extractMetricItems(decoded);
-
-    final collected = <String, _MutableNetworkTrafficTotals>{};
-    for (final item in items) {
-      if (item is! Map<String, dynamic>) {
-        continue;
-      }
-      final metricName = item['name']?.toString().trim() ?? '';
-      if (metricName != 'traffic_bytes_self_rx' &&
-          metricName != 'traffic_bytes_self_tx') {
-        continue;
-      }
-
-      final labels = item['labels'];
-      if (labels is! Map<String, dynamic>) {
-        continue;
-      }
-      final runtimeNetworkName =
-          labels['network_name']?.toString().trim() ?? '';
-      if (runtimeNetworkName.isEmpty || runtimeNetworkName == '__access__') {
-        continue;
-      }
-
-      final value = _readInt(item['value']);
-      if (value == null) {
-        continue;
-      }
-
-      final totals = collected.putIfAbsent(
-        runtimeNetworkName,
-        _MutableNetworkTrafficTotals.new,
-      );
-      if (metricName == 'traffic_bytes_self_rx') {
-        totals.downloadBytes = value;
-        totals.hasDownloadBytes = true;
-      } else {
-        totals.uploadBytes = value;
-        totals.hasUploadBytes = true;
-      }
-    }
-
-    final sampleTime = sampledAt ?? DateTime.now();
-    return collected.map((runtimeNetworkName, totals) {
-      return MapEntry(
-        runtimeNetworkName,
-        CoreNetworkTrafficTotals(
-          runtimeNetworkName: runtimeNetworkName,
-          downloadBytes: totals.hasDownloadBytes ? totals.downloadBytes : 0,
-          uploadBytes: totals.hasUploadBytes ? totals.uploadBytes : 0,
-          sampledAt: sampleTime,
-        ),
-      );
-    });
+    return _parseNetworkTrafficTotals(
+      _extractMetricItems(jsonDecode(output)),
+      sampledAt: sampledAt,
+    );
   }
 
   static List<dynamic> _extractMetricItems(Object? decoded) {
@@ -1953,20 +1904,6 @@ exit 3
     String output,
   ) {
     return parseCorePeerStatusesFromJson(output);
-  }
-
-  static int? _readInt(Object? value) {
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) {
-      return null;
-    }
-    return num.tryParse(text)?.toInt();
   }
 
   void _rememberCliPath(String? cliPath) {

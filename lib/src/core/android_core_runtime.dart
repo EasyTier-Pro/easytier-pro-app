@@ -207,8 +207,8 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
         instanceName,
         instances[instanceName],
       );
-      final parsed = _trafficTotalsFromJsonRpcStats(
-        response,
+      final parsed = _parseNetworkTrafficTotals(
+        CoreJsonValue.readList(response['metrics']),
         defaultRuntimeNetworkName: runtimeNetworkName,
         sampledAt: sampledAt,
       );
@@ -217,27 +217,6 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       }
     }
 
-    if (totals.isNotEmpty) {
-      return totals;
-    }
-
-    final snapshot = await _readNetworkInfoSnapshot();
-    for (final instance in snapshot.instances.values) {
-      if (!instance.running) {
-        continue;
-      }
-      final traffic = _trafficTotalsFromPeers(instance.peers);
-      if (traffic == null) {
-        continue;
-      }
-      final runtimeNetworkName = _runtimeNameForInstance(instance);
-      totals[runtimeNetworkName] = CoreNetworkTrafficTotals(
-        runtimeNetworkName: runtimeNetworkName,
-        downloadBytes: traffic.downloadBytes,
-        uploadBytes: traffic.uploadBytes,
-        sampledAt: sampledAt,
-      );
-    }
     return totals;
   }
 
@@ -1359,20 +1338,6 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     return null;
   }
 
-  String _runtimeNameForInstance(AndroidNetworkInstanceInfo instance) {
-    for (final entry in _instanceIdsByRuntimeName.entries) {
-      if (entry.value == instance.id) {
-        return entry.key;
-      }
-    }
-    for (final entry in _instanceNamesByRuntimeName.entries) {
-      if (entry.value == instance.name) {
-        return entry.key;
-      }
-    }
-    return instance.name;
-  }
-
   String _runtimeNameForInstanceName(String instanceName, String? instanceId) {
     final id = instanceId?.trim() ?? '';
     if (id.isNotEmpty) {
@@ -1966,141 +1931,6 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     copyIfMissing('nat_type', ['nat']);
     copyIfMissing('peer_id', ['peerId', 'id']);
     return normalized;
-  }
-
-  static _MutableNetworkTrafficTotals? _trafficTotalsFromPeers(
-    List<Map<String, dynamic>> peers,
-  ) {
-    final byPeer = <String, _MutableNetworkTrafficTotals>{};
-    var fallbackIndex = 0;
-    for (final peer in peers) {
-      final rxBytes = _readTrafficBytes(
-        peer['rx_bytes_raw'] ??
-            peer['rxBytesRaw'] ??
-            peer['rx_bytes'] ??
-            peer['rxBytes'] ??
-            peer['received_bytes'],
-      );
-      final txBytes = _readTrafficBytes(
-        peer['tx_bytes_raw'] ??
-            peer['txBytesRaw'] ??
-            peer['tx_bytes'] ??
-            peer['txBytes'] ??
-            peer['transmitted_bytes'],
-      );
-      if (rxBytes == null && txBytes == null) {
-        continue;
-      }
-      final peerKey = _firstNonEmptyString([
-        peer['peer_id'],
-        peer['peerId'],
-        peer['id'],
-        peer['cidr'],
-        peer['ipv4'],
-      ]);
-      final key = peerKey ?? '#${fallbackIndex++}';
-      final traffic = byPeer.putIfAbsent(key, _MutableNetworkTrafficTotals.new);
-      if (rxBytes != null) {
-        if (!traffic.hasDownloadBytes || rxBytes > traffic.downloadBytes) {
-          traffic.downloadBytes = rxBytes;
-        }
-        traffic.hasDownloadBytes = true;
-      }
-      if (txBytes != null) {
-        if (!traffic.hasUploadBytes || txBytes > traffic.uploadBytes) {
-          traffic.uploadBytes = txBytes;
-        }
-        traffic.hasUploadBytes = true;
-      }
-    }
-
-    final total = _MutableNetworkTrafficTotals();
-    for (final peer in byPeer.values) {
-      if (peer.hasDownloadBytes) {
-        total.downloadBytes += peer.downloadBytes;
-        total.hasDownloadBytes = true;
-      }
-      if (peer.hasUploadBytes) {
-        total.uploadBytes += peer.uploadBytes;
-        total.hasUploadBytes = true;
-      }
-    }
-    return total.hasDownloadBytes || total.hasUploadBytes ? total : null;
-  }
-
-  static Map<String, CoreNetworkTrafficTotals> _trafficTotalsFromJsonRpcStats(
-    Map<String, Object?> response, {
-    required String defaultRuntimeNetworkName,
-    required DateTime sampledAt,
-  }) {
-    final collected = <String, _MutableNetworkTrafficTotals>{};
-    final metrics = _readList(response['metrics'] ?? response['result']);
-    for (final item in metrics) {
-      final metric = _readMap(item);
-      if (metric == null) {
-        continue;
-      }
-      final metricName = _readString(metric['name']);
-      if (metricName != 'traffic_bytes_self_rx' &&
-          metricName != 'traffic_bytes_self_tx') {
-        continue;
-      }
-      final labels = _readMap(metric['labels']);
-      final labelNetworkName = labels == null
-          ? ''
-          : _readString(labels['network_name'] ?? labels['networkName']);
-      final runtimeNetworkName = labelNetworkName.isNotEmpty
-          ? labelNetworkName
-          : defaultRuntimeNetworkName;
-      if (runtimeNetworkName.isEmpty || runtimeNetworkName == '__access__') {
-        continue;
-      }
-      final value = _readIntValue(metric['value']);
-      if (value == null || value < 0) {
-        continue;
-      }
-
-      final totals = collected.putIfAbsent(
-        runtimeNetworkName,
-        _MutableNetworkTrafficTotals.new,
-      );
-      if (metricName == 'traffic_bytes_self_rx') {
-        totals.downloadBytes = value;
-        totals.hasDownloadBytes = true;
-      } else {
-        totals.uploadBytes = value;
-        totals.hasUploadBytes = true;
-      }
-    }
-
-    return collected.map((runtimeNetworkName, totals) {
-      return MapEntry(
-        runtimeNetworkName,
-        CoreNetworkTrafficTotals(
-          runtimeNetworkName: runtimeNetworkName,
-          downloadBytes: totals.hasDownloadBytes ? totals.downloadBytes : 0,
-          uploadBytes: totals.hasUploadBytes ? totals.uploadBytes : 0,
-          sampledAt: sampledAt,
-        ),
-      );
-    });
-  }
-
-  static int? _readTrafficBytes(Object? value) {
-    final parsed = _readIntValue(value);
-    if (parsed != null) {
-      return parsed < 0 ? null : parsed;
-    }
-    final text = _readString(value);
-    if (text.isEmpty || text == '-' || text.toLowerCase() == 'null') {
-      return null;
-    }
-    final normalized = text.replaceAll(',', '');
-    final number = num.tryParse(normalized);
-    if (number == null || number < 0) {
-      return null;
-    }
-    return number.toInt();
   }
 }
 

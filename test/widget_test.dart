@@ -4550,17 +4550,17 @@ void main() {
     expect(machineId, 'machine-1');
   });
 
-  test('parses self traffic stats by runtime network name', () {
+  test('parses business traffic stats by runtime network name', () {
     final sampledAt = DateTime.utc(2026, 1, 1);
     final totals = CoreLifecycleService.parseNetworkTrafficTotalsFromJson(
       jsonEncode([
         {
-          'name': 'traffic_bytes_self_rx',
+          'name': 'traffic_bytes_rx',
           'value': 1024,
           'labels': {'network_name': 'nt-office'},
         },
         {
-          'name': 'traffic_bytes_self_tx',
+          'name': 'traffic_bytes_tx',
           'value': 2048,
           'labels': {'network_name': 'nt-office'},
         },
@@ -4570,12 +4570,27 @@ void main() {
           'labels': {'network_name': 'nt-office'},
         },
         {
-          'name': 'traffic_bytes_rx',
+          'name': 'traffic_bytes_self_rx',
+          'value': 11023,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_control_bytes_tx',
           'value': 9999,
           'labels': {'network_name': 'nt-office'},
         },
         {
-          'name': 'traffic_bytes_self_rx',
+          'name': 'traffic_bytes_rx_by_instance',
+          'value': 1024,
+          'labels': {'network_name': 'nt-office', 'from_instance_id': 'peer-1'},
+        },
+        {
+          'name': 'traffic_bytes_forwarded',
+          'value': 9999,
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_rx',
           'value': 9999,
           'labels': {'network_name': '__access__'},
         },
@@ -4598,12 +4613,12 @@ void main() {
           'instance_name': 'nt-office',
           'result': [
             {
-              'name': 'traffic_bytes_self_rx',
+              'name': 'traffic_bytes_rx',
               'value': 1024,
               'labels': {'network_name': 'nt-office'},
             },
             {
-              'name': 'traffic_bytes_self_tx',
+              'name': 'traffic_bytes_tx',
               'value': 2048,
               'labels': {'network_name': 'nt-office'},
             },
@@ -4614,12 +4629,12 @@ void main() {
           'instance_name': 'nt-lab',
           'result': [
             {
-              'name': 'traffic_bytes_self_rx',
+              'name': 'traffic_bytes_rx',
               'value': 4096,
               'labels': {'network_name': 'nt-lab'},
             },
             {
-              'name': 'traffic_bytes_self_tx',
+              'name': 'traffic_bytes_tx',
               'value': 8192,
               'labels': {'network_name': 'nt-lab'},
             },

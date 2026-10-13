@@ -246,26 +246,11 @@ class IosCoreRuntime extends CorePlatformRuntime {
       }),
     });
     final stats = CoreJsonValue.readMap(json) ?? const {};
-    var download = 0;
-    var upload = 0;
-    for (final value in CoreJsonValue.readList(stats['metrics'])) {
-      final metric = CoreJsonValue.readMap(value);
-      final bytes = CoreJsonValue.readInt(metric?['value']) ?? 0;
-      switch (metric?['name']) {
-        case 'traffic_bytes_self_rx':
-          download += bytes;
-        case 'traffic_bytes_self_tx':
-          upload += bytes;
-      }
-    }
-    return {
-      name: CoreNetworkTrafficTotals(
-        runtimeNetworkName: name,
-        downloadBytes: download,
-        uploadBytes: upload,
-        sampledAt: DateTime.now(),
-      ),
-    };
+    final totals = _parseNetworkTrafficTotals(
+      CoreJsonValue.readList(stats['metrics']),
+      defaultRuntimeNetworkName: name,
+    );
+    return {name: ?totals[name]};
   }
 
   @override

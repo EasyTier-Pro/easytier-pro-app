@@ -19,6 +19,7 @@ void main() {
   late List<MethodCall> calls;
   late Map<String, Object?> status;
   late Map<String, Object?> snapshot;
+  late List<Map<String, Object?>> trafficMetrics;
   Future<Object?> Function(MethodCall)? waitForConnection;
   Future<Object?> Function()? readStatus;
   String? failure;
@@ -50,6 +51,20 @@ void main() {
         },
       },
     };
+    trafficMetrics = [
+      {'name': 'traffic_bytes_rx', 'value': 42},
+      {'name': 'traffic_bytes_tx', 'value': 21},
+      {'name': 'traffic_bytes_self_rx', 'value': 10042},
+      {'name': 'traffic_bytes_self_tx', 'value': 10021},
+      {'name': 'traffic_control_bytes_rx', 'value': 10000},
+      {'name': 'traffic_control_bytes_tx', 'value': 10000},
+      {'name': 'traffic_bytes_forwarded', 'value': 999},
+      {
+        'name': 'traffic_bytes_rx',
+        'value': 999,
+        'labels': {'network_name': 'other-network'},
+      },
+    ];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call);
@@ -67,13 +82,7 @@ void main() {
             case 'collectNetworkInfos':
               return jsonEncode(snapshot);
             case 'callJsonRpc':
-              return jsonEncode({
-                'metrics': [
-                  {'name': 'traffic_bytes_self_rx', 'value': 42},
-                  {'name': 'traffic_bytes_self_tx', 'value': 21},
-                  {'name': 'traffic_bytes_forward_rx', 'value': 999},
-                ],
-              });
+              return jsonEncode({'metrics': trafficMetrics});
             case 'beginNetworkConnection':
               return null;
             case 'waitForNetworkConnection':
@@ -163,6 +172,7 @@ void main() {
       );
       expect(await runtime.isNetworkInstanceRunning('other-network'), isFalse);
       final totals = await runtime.readNetworkTrafficTotals();
+      expect(totals.keys, ['authorized-network']);
       expect(totals['authorized-network']?.downloadBytes, 42);
       expect(totals['authorized-network']?.uploadBytes, 21);
       final args =
@@ -175,6 +185,30 @@ void main() {
       });
     },
   );
+
+  test('control traffic growth leaves idle business traffic at zero', () async {
+    for (final controlBytes in [1000, 2000]) {
+      trafficMetrics = [
+        {'name': 'traffic_bytes_rx', 'value': 0},
+        {'name': 'traffic_bytes_tx', 'value': 0},
+        {'name': 'traffic_bytes_self_rx', 'value': controlBytes},
+        {'name': 'traffic_bytes_self_tx', 'value': controlBytes},
+        {'name': 'traffic_control_bytes_rx', 'value': controlBytes},
+        {'name': 'traffic_control_bytes_tx', 'value': controlBytes},
+      ];
+      final totals = await runtime.readNetworkTrafficTotals();
+      expect(totals['authorized-network']?.downloadBytes, 0);
+      expect(totals['authorized-network']?.uploadBytes, 0);
+    }
+  });
+
+  test('missing business counters do not produce a zero sample', () async {
+    trafficMetrics = [
+      {'name': 'traffic_bytes_self_rx', 'value': 1000},
+      {'name': 'traffic_control_bytes_rx', 'value': 1000},
+    ];
+    expect(await runtime.readNetworkTrafficTotals(), isEmpty);
+  });
 
   test(
     'cleared network returns empty traffic without making a stale RPC',
