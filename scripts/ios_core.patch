@@ -619,10 +619,10 @@ index e182195b..fe99d196 100644
          panic!("mock route")
      }
 diff --git a/easytier-core/src/peers/route/peer_ospf_route.rs b/easytier-core/src/peers/route/peer_ospf_route.rs
-index b375c261..bd971c18 100644
+index d0547390..27b7eda2 100644
 --- a/easytier-core/src/peers/route/peer_ospf_route.rs
 +++ b/easytier-core/src/peers/route/peer_ospf_route.rs
-@@ -350,7 +350,13 @@ impl OspfRouteTable {
+@@ -349,7 +349,13 @@ impl OspfRouteTable {
          (graph, start_node_idx.unwrap())
      }
  
@@ -637,7 +637,7 @@ index b375c261..bd971c18 100644
          let cur_version = self.next_hop_map_version.get();
          self.next_hop_map.retain(|_, v| {
              // remove next hop map for peers we cannot reach.
-@@ -374,6 +380,13 @@ impl OspfRouteTable {
+@@ -373,6 +379,13 @@ impl OspfRouteTable {
          shrink_dashmap(&self.suppressed_peer_ids, None);
          shrink_dashmap(&self.ipv4_peer_id_map, None);
          shrink_dashmap(&self.ipv6_peer_id_map, None);
@@ -651,7 +651,7 @@ index b375c261..bd971c18 100644
      }
  
      fn gen_next_hop_map_with_least_hop(
-@@ -2380,6 +2393,7 @@ struct PeerRouteServiceImpl {
+@@ -2379,6 +2392,7 @@ struct PeerRouteServiceImpl {
      last_update_my_foreign_network: AtomicCell<Option<Instant>>,
  
      peer_info_last_update: AtomicCell<Instant>,
@@ -659,7 +659,7 @@ index b375c261..bd971c18 100644
  }
  
  impl Debug for PeerRouteServiceImpl {
-@@ -2454,6 +2468,7 @@ impl PeerRouteServiceImpl {
+@@ -2455,6 +2469,7 @@ impl PeerRouteServiceImpl {
              last_update_my_foreign_network: AtomicCell::new(None),
  
              peer_info_last_update: AtomicCell::new(Instant::now()),
@@ -667,7 +667,7 @@ index b375c261..bd971c18 100644
          }
      }
  
-@@ -2847,6 +2862,8 @@ impl PeerRouteServiceImpl {
+@@ -2848,6 +2863,8 @@ impl PeerRouteServiceImpl {
              .as_mut()
              .unwrap()
              .end_update();
@@ -676,7 +676,7 @@ index b375c261..bd971c18 100644
      }
  
      fn update_foreign_network_owner_map(&self) {
-@@ -3437,8 +3454,11 @@ impl PeerRouteServiceImpl {
+@@ -3438,8 +3455,11 @@ impl PeerRouteServiceImpl {
          }
  
          self.refresh_credential_trusts_and_disconnect().await;
@@ -690,7 +690,7 @@ index b375c261..bd971c18 100644
      }
  
      fn build_sync_route_raw_req(
-@@ -4607,6 +4627,10 @@ impl Drop for PeerRoute {
+@@ -4608,6 +4628,10 @@ impl Drop for PeerRoute {
  
  #[async_trait::async_trait]
  impl Route for PeerRoute {
@@ -701,7 +701,7 @@ index b375c261..bd971c18 100644
      async fn open(&self, interface: RouteInterfaceBox) -> Result<u8, ()> {
          *self.service_impl.interface.lock().await = Some(interface);
          self.start().await;
-@@ -5040,6 +5064,20 @@ mod tests {
+@@ -5041,6 +5065,20 @@ mod tests {
          }
      }
  
@@ -736,10 +736,10 @@ index f3000d08..58baaadf 100644
      }
  
 diff --git a/easytier/src/instance/factory.rs b/easytier/src/instance/factory.rs
-index 71c341ce..39c880fa 100644
+index 059f1ea9..43c6d797 100644
 --- a/easytier/src/instance/factory.rs
 +++ b/easytier/src/instance/factory.rs
-@@ -42,6 +42,14 @@ pub fn create_native_instance(config: TomlConfig) -> anyhow::Result<Arc<NativeCo
+@@ -53,6 +53,14 @@ pub fn create_native_instance(config: TomlConfig) -> anyhow::Result<Arc<NativeCo
      NativeInstanceFactory::new(CoreProcessRuntime::new()).create(config, ())
  }
  
@@ -755,10 +755,10 @@ index 71c341ce..39c880fa 100644
  pub fn subscribe_native_instance_event(
      instance: &NativeCoreInstance,
 diff --git a/easytier/src/instance/runtime_host.rs b/easytier/src/instance/runtime_host.rs
-index aa22a702..77eb9f13 100644
+index 6cd93e1a..5686e2d7 100644
 --- a/easytier/src/instance/runtime_host.rs
 +++ b/easytier/src/instance/runtime_host.rs
-@@ -68,6 +68,11 @@ impl NativeInstanceRuntimeHost {
+@@ -85,6 +85,11 @@ impl NativeInstanceRuntimeHost {
          packet_plane: Arc<CorePacketPlane>,
      ) -> anyhow::Result<Option<Arc<dyn DhcpIpv4Host>>> {
          self.event_journal.start(self.cancel.clone()).await;
@@ -770,7 +770,7 @@ index aa22a702..77eb9f13 100644
          self.tun.prepare(packet_plane.clone()).await?;
          Ok(Some(
              self.tun.dhcp_host(self.operation.clone(), packet_plane),
-@@ -124,6 +129,18 @@ impl NativeInstanceRuntimeHost {
+@@ -141,6 +146,18 @@ impl NativeInstanceRuntimeHost {
          }
      }
  
@@ -790,7 +790,7 @@ index aa22a702..77eb9f13 100644
          self.global_ctx.subscribe()
      }
 diff --git a/easytier/src/instance/runtime_host/tun_common.rs b/easytier/src/instance/runtime_host/tun_common.rs
-index a86aead9..0ea600a3 100644
+index 053a14db..3e3e25e7 100644
 --- a/easytier/src/instance/runtime_host/tun_common.rs
 +++ b/easytier/src/instance/runtime_host/tun_common.rs
 @@ -1,7 +1,4 @@
@@ -800,10 +800,10 @@ index a86aead9..0ea600a3 100644
 -};
 +use std::sync::{Arc, OnceLock};
  
- use easytier_core::host::packet::HostPacketReceiver;
+ use easytier_core::{host::packet::HostPacketReceiver, instance::CorePacketPlane};
  use tokio::{sync::Mutex, task::JoinSet};
-@@ -10,21 +7,26 @@ use super::MagicDnsRuntime;
- use crate::instance::virtual_nic::NicCtx;
+@@ -42,21 +39,26 @@ pub(super) async fn create_nic_ctx(
+ }
  
  struct NicCtxContainer {
 -    _nic_ctx: Option<Box<dyn Any + Send>>,
@@ -832,7 +832,7 @@ index a86aead9..0ea600a3 100644
              magic_dns: MagicDnsRuntime::default(),
          }
      }
-@@ -58,11 +60,20 @@ impl TunNicState {
+@@ -90,11 +92,20 @@ impl TunNicState {
      }
  
      pub(super) async fn stop(&self) {
@@ -854,8 +854,21 @@ index a86aead9..0ea600a3 100644
 +        old.take();
      }
  
+     #[cfg(mobile)]
+@@ -102,8 +113,10 @@ impl TunNicState {
+         &self,
+     ) -> Option<crate::instance::shared_virtual_nic::SharedIfConfigClaims> {
+         let nic = self.nic_ctx.lock().await;
+-        let nic = nic.as_ref()?._nic_ctx.as_ref()?.downcast_ref::<NicCtx>()?;
+-        nic.current_mobile_tun_claims().await
++        match &nic.as_ref()?.nic_ctx {
++            NicCtxKind::Interface(nic) => nic.current_mobile_tun_claims().await,
++            NicCtxKind::PacketDrain(_) => None,
++        }
+     }
+ 
      pub(super) async fn drain(&self) {
-@@ -89,3 +100,67 @@ impl TunNicState {
+@@ -130,3 +143,67 @@ impl TunNicState {
              .replace(NicCtxContainer::new(nic, magic_dns));
      }
  }
@@ -924,7 +937,7 @@ index a86aead9..0ea600a3 100644
 +    }
 +}
 diff --git a/easytier/src/instance/runtime_host/tun_mobile.rs b/easytier/src/instance/runtime_host/tun_mobile.rs
-index 4f459326..b48dcbf0 100644
+index 1200f2ae..89e1157b 100644
 --- a/easytier/src/instance/runtime_host/tun_mobile.rs
 +++ b/easytier/src/instance/runtime_host/tun_mobile.rs
 @@ -1,4 +1,7 @@
@@ -936,20 +949,24 @@ index 4f459326..b48dcbf0 100644
  
  use anyhow::Context as _;
  use cidr::Ipv4Inet;
-@@ -21,8 +24,10 @@ pub(super) struct NativeTunRuntime {
+@@ -22,6 +25,7 @@ use crate::{
+ 
+ struct MobileTunAttachment {
+     fd: i32,
++    generation: u64,
+     replace_tun_fd: bool,
+     completion: Option<oneshot::Sender<anyhow::Result<()>>>,
+     claims: Option<crate::instance::shared_virtual_nic::SharedIfConfigClaims>,
+@@ -31,6 +35,8 @@ pub(super) struct NativeTunRuntime {
      global_ctx: ArcGlobalCtx,
      cancel: CancellationToken,
      nic: TunNicState,
--    tun_fd: mpsc::Sender<i32>,
--    tun_fd_receiver: Mutex<Option<mpsc::Receiver<i32>>>,
 +    requested: Arc<AtomicU64>,
 +    installed: Arc<AtomicU64>,
-+    tun_fd: mpsc::Sender<(i32, u64)>,
-+    tun_fd_receiver: Mutex<Option<mpsc::Receiver<(i32, u64)>>>,
+     tun_fd: mpsc::Sender<MobileTunAttachment>,
+     tun_fd_receiver: Mutex<Option<mpsc::Receiver<MobileTunAttachment>>>,
      task: Mutex<Option<tokio::task::JoinHandle<()>>>,
- }
- 
-@@ -33,6 +38,8 @@ impl NativeTunRuntime {
+@@ -48,6 +54,8 @@ impl NativeTunRuntime {
              global_ctx,
              cancel,
              nic: TunNicState::empty(),
@@ -958,37 +975,56 @@ index 4f459326..b48dcbf0 100644
              tun_fd,
              tun_fd_receiver: Mutex::new(Some(tun_fd_receiver)),
              task: Mutex::new(None),
-@@ -50,11 +57,14 @@ impl NativeTunRuntime {
+@@ -66,14 +74,15 @@ impl NativeTunRuntime {
          nic_state: TunNicState,
          global_ctx: ArcGlobalCtx,
          packet_plane: Arc<CorePacketPlane>,
-+        installed: Arc<AtomicU64>,
-         fd: i32,
+-        fd: i32,
+-        replace_tun_fd: bool,
+         shared_virtual_nic_registry: ArcSharedVirtualNicRegistry,
+-        claims: Option<crate::instance::shared_virtual_nic::SharedIfConfigClaims>,
 -    ) -> anyhow::Result<()> {
++        installed: Arc<AtomicU64>,
++        attachment: &mut MobileTunAttachment,
 +    ) -> anyhow::Result<String> {
 +        global_ctx.set_tun_device_name(None);
          nic_state.drain().await;
-+        installed.store(0, Ordering::Release);
-         if fd <= 0 {
+-        if fd <= 0 {
 -            return Ok(());
++        installed.store(0, Ordering::Release);
++        if attachment.fd <= 0 {
 +            return Ok(String::new());
          }
          let closed = Arc::new(Notify::new());
-         let mut nic = NicCtx::new(
-@@ -63,16 +73,24 @@ impl NativeTunRuntime {
-             nic_state.receiver(),
-             closed,
-         );
--        nic.run_for_mobile(fd).await.context("add ip failed")?;
-+        if let Err(error) = nic.run_for_mobile(fd).await {
+         let mut nic = create_nic_ctx(
+@@ -84,16 +93,21 @@ impl NativeTunRuntime {
+             shared_virtual_nic_registry,
+         )
+         .await?;
+-        let claims = match claims {
++        let claims = match attachment.claims.take() {
+             Some(claims) => claims,
+             None => {
+                 crate::instance::virtual_nic::NicCtx::mobile_tun_claims(&global_ctx, &packet_plane)
+                     .await
+             }
+         };
+-        nic.run_for_mobile(fd, replace_tun_fd, claims)
++        if let Err(error) = nic
++            .run_for_mobile(attachment.fd, attachment.replace_tun_fd, claims)
+             .await
+-            .context("attach mobile TUN failed")?;
++        {
 +            nic.shutdown().await;
-+            return Err(error).context("add ip failed");
++            return Err(error).context("attach mobile TUN failed");
 +        }
 +        let name = nic.ifname().await.unwrap_or_default();
-         let magic_dns = global_ctx
-             .get_ipv4()
-             .map(|ip| MagicDnsRuntime::start(global_ctx, packet_plane, None, ip))
-             .unwrap_or_default();
+         let magic_dns = if let Some(ip) = global_ctx.get_ipv4() {
+             let shared_route_backend = nic.shared_route_backend_for_dns();
+             MagicDnsRuntime::start(global_ctx, packet_plane, None, ip, shared_route_backend)
+@@ -101,10 +115,14 @@ impl NativeTunRuntime {
+             MagicDnsRuntime::default()
+         };
          nic_state.install(nic, magic_dns).await;
 -        Ok(())
 +        Ok(name)
@@ -1003,48 +1039,73 @@ index 4f459326..b48dcbf0 100644
          self.nic.drain().await;
          let Some(mut tun_fds) = self.tun_fd_receiver.lock().await.take() else {
              return Ok(());
-@@ -80,21 +98,37 @@ impl NativeTunRuntime {
-         let nic_state = self.nic.clone();
+@@ -113,35 +131,47 @@ impl NativeTunRuntime {
          let global_ctx = self.global_ctx.clone();
          let cancel = self.cancel.clone();
+         let shared_virtual_nic_registry = self.shared_virtual_nic_registry.clone();
 +        let installed = self.installed.clone();
 +        let requested = self.requested.clone();
          self.task.lock().await.replace(tokio::spawn(async move {
              loop {
--                let fd = tokio::select! {
-+                let (fd, generation) = tokio::select! {
+-                let attachment = tokio::select! {
++                let mut attachment = tokio::select! {
                      _ = cancel.cancelled() => return,
-                     fd = tun_fds.recv() => match fd { Some(fd) => fd, None => return },
+                     attachment = tun_fds.recv() => match attachment {
+                         Some(attachment) => attachment,
+                         None => return,
+                     },
                  };
--                if let Err(error) = Self::install_mobile_tun(
+-                let result = if attachment.fd <= 0 {
+-                    nic_state.drain().await;
+-                    Ok(())
+-                } else {
+-                    Self::install_mobile_tun(
+-                        nic_state.clone(),
+-                        global_ctx.clone(),
+-                        packet_plane.clone(),
+-                        attachment.fd,
+-                        attachment.replace_tun_fd,
+-                        shared_virtual_nic_registry.clone(),
+-                        attachment.claims,
+-                    )
+-                    .await
 +                let _operation = tokio::select! {
 +                    _ = cancel.cancelled() => return,
 +                    guard = operation.lock() => guard,
-+                };
-+                if requested.load(Ordering::Acquire) != generation {
+                 };
+-                if let Err(error) = &result {
+-                    tracing::error!(?error, "failed to attach mobile TUN fd");
++                if requested.load(Ordering::Acquire) != attachment.generation {
++                    if let Some(completion) = attachment.completion {
++                        let _ = completion.send(Err(anyhow::anyhow!("TUN attachment superseded")));
++                    }
 +                    continue;
 +                }
-+                match Self::install_mobile_tun(
-                     nic_state.clone(),
-                     global_ctx.clone(),
-                     packet_plane.clone(),
++                let result = Self::install_mobile_tun(
++                    nic_state.clone(),
++                    global_ctx.clone(),
++                    packet_plane.clone(),
++                    shared_virtual_nic_registry.clone(),
 +                    installed.clone(),
-                     fd,
-                 )
-                 .await
-                 {
--                    tracing::error!(?error, "failed to attach mobile TUN fd");
++                    &mut attachment,
++                )
++                .await;
++                match &result {
 +                    Ok(name) => {
 +                        if !name.is_empty() {
-+                            installed.store(generation, Ordering::Release);
-+                            global_ctx.set_tun_device_ready(name);
++                            installed.store(attachment.generation, Ordering::Release);
++                            global_ctx.set_tun_device_ready(name.clone());
 +                        }
 +                    }
 +                    Err(error) => global_ctx.set_tun_device_error(error.to_string()),
                  }
+                 if let Some(completion) = attachment.completion {
+-                    let _ = completion.send(result);
++                    let _ = completion.send(result.map(|_| ()));
+                 }
              }
          }));
-@@ -105,15 +139,30 @@ impl NativeTunRuntime {
+@@ -153,13 +183,17 @@ impl NativeTunRuntime {
          if let Some(task) = self.task.lock().await.take() {
              let _ = task.await;
          }
@@ -1056,9 +1117,28 @@ index 4f459326..b48dcbf0 100644
      pub(super) fn attach_fd(&self, fd: i32) -> anyhow::Result<()> {
 +        let generation = self.requested.fetch_add(1, Ordering::AcqRel) + 1;
          self.tun_fd
--            .try_send(fd)
-+            .try_send((fd, generation))
-             .map_err(|error| anyhow::anyhow!("failed to send TUN fd: {error}"))
+             .try_send(MobileTunAttachment {
+                 fd,
++                generation,
+                 replace_tun_fd: true,
+                 completion: None,
+                 claims: None,
+@@ -177,11 +211,13 @@ impl NativeTunRuntime {
+             anyhow::bail!("mobile TUN runtime is not running");
+         }
+ 
++        let generation = self.requested.fetch_add(1, Ordering::AcqRel) + 1;
+         let (completion, result) = oneshot::channel();
+         tokio::select! {
+             _ = self.cancel.cancelled() => anyhow::bail!("instance is closing; TUN attachment cancelled"),
+             send_result = self.tun_fd.send(MobileTunAttachment {
+                 fd,
++                generation,
+                 replace_tun_fd,
+                 completion: Some(completion),
+                 claims,
+@@ -195,6 +231,18 @@ impl NativeTunRuntime {
+         }
      }
  
 +    pub(super) fn state(&self) -> (u64, bool, bool) {
@@ -1076,7 +1156,7 @@ index 4f459326..b48dcbf0 100644
      pub(super) fn dhcp_host(
          &self,
          operation: Arc<Mutex<()>>,
-@@ -124,6 +173,7 @@ impl NativeTunRuntime {
+@@ -205,6 +253,7 @@ impl NativeTunRuntime {
              operation,
              cancel: self.cancel.clone(),
              nic: self.nic.clone(),
@@ -1084,7 +1164,7 @@ index 4f459326..b48dcbf0 100644
              closed: Arc::new(Notify::new()),
          })
      }
-@@ -134,6 +184,7 @@ struct NativeDhcpIpv4Host {
+@@ -221,6 +270,7 @@ struct NativeDhcpIpv4Host {
      operation: Arc<Mutex<()>>,
      cancel: CancellationToken,
      nic: TunNicState,
@@ -1092,7 +1172,7 @@ index 4f459326..b48dcbf0 100644
      closed: Arc<Notify>,
  }
  
-@@ -147,10 +198,11 @@ impl NativeDhcpIpv4Host {
+@@ -234,10 +284,11 @@ impl NativeDhcpIpv4Host {
  
      async fn apply(&self, next: Option<Ipv4Inet>) -> anyhow::Result<Option<Ipv4Inet>> {
          self.ensure_open()?;
@@ -1108,11 +1188,125 @@ index 4f459326..b48dcbf0 100644
          self.ensure_open()?;
  
          let Some(ip) = next else {
+diff --git a/easytier/src/instance/shared_virtual_nic.rs b/easytier/src/instance/shared_virtual_nic.rs
+index 7e6b750b..addb8c04 100644
+--- a/easytier/src/instance/shared_virtual_nic.rs
++++ b/easytier/src/instance/shared_virtual_nic.rs
+@@ -860,19 +860,29 @@ impl Drop for SharedVirtualNicMemberRegistration {
+         let member_id = self.member_id;
+         let registration_id = self.registration_id;
+ 
+-        SHARED_VIRTUAL_NIC_RUNTIME.spawn(async move {
+-            let mut shared_nic = shared_nic.lock().await;
+-            if let Err(err) = shared_nic
+-                .remove_member_registration_claims(member_id, registration_id)
+-                .await
+-            {
+-                tracing::warn!(
+-                    ?member_id,
+-                    ?err,
+-                    "failed to clean shared virtual nic member claims"
+-                );
+-            }
+-        });
++        SHARED_VIRTUAL_NIC_RUNTIME.spawn(cleanup_member_registration(
++            shared_nic,
++            member_id,
++            registration_id,
++        ));
++    }
++}
++
++async fn cleanup_member_registration(
++    shared_nic: Arc<Mutex<SharedVirtualNic>>,
++    member_id: SharedVirtualNicMemberId,
++    registration_id: SharedVirtualNicMemberRegistrationId,
++) {
++    let mut shared_nic = shared_nic.lock().await;
++    if let Err(err) = shared_nic
++        .remove_member_registration_claims(member_id, registration_id)
++        .await
++    {
++        tracing::warn!(
++            ?member_id,
++            ?err,
++            "failed to clean shared virtual nic member claims"
++        );
+     }
+ }
+ 
+@@ -908,6 +918,20 @@ impl SharedVirtualNicMember {
+         }
+     }
+ 
++    pub(crate) async fn shutdown(&self) {
++        self.registration
++            .member_tunnel_table
++            .unregister(self.member_id, self.registration.registration_id);
++        SHARED_VIRTUAL_NIC_RUNTIME
++            .spawn(cleanup_member_registration(
++                self.shared_nic.clone(),
++                self.member_id,
++                self.registration.registration_id,
++            ))
++            .await
++            .expect("shared virtual NIC cleanup task failed");
++    }
++
+     pub fn member_id(&self) -> SharedVirtualNicMemberId {
+         self.member_id
+     }
+@@ -1367,6 +1391,45 @@ mod tests {
+         VirtualNicConfig::new(String::new(), 1500, NetNS::new(Some(net_ns.to_owned())))
+     }
+ 
++    #[tokio::test]
++    async fn member_shutdown_waits_for_cleanup_and_keeps_other_members() {
++        let shared_nic = Arc::new(Mutex::new(SharedVirtualNic::new(virtual_nic_config())));
++        let tunnel_table = shared_nic.lock().await.member_tunnel_table();
++        let members = [1, 2].map(|id| {
++            SharedVirtualNicMember::new(
++                member_id(id),
++                1500,
++                shared_nic.clone(),
++                Arc::new(Notify::new()),
++                tunnel_table.clone(),
++            )
++        });
++        let mut guard = shared_nic.lock().await;
++        for member in &members {
++            guard
++                .member_registrations
++                .insert(member.member_id, member.registration.registration_id);
++        }
++
++        let mut shutdown = Box::pin(members[0].shutdown());
++        assert!(futures::poll!(shutdown.as_mut()).is_pending());
++        assert!(guard.member_registrations.contains_key(&member_id(1)));
++        drop(guard);
++        tokio::time::timeout(std::time::Duration::from_secs(5), shutdown)
++            .await
++            .unwrap();
++
++        let guard = shared_nic.lock().await;
++        assert!(!guard.member_registrations.contains_key(&member_id(1)));
++        assert_eq!(
++            guard.member_registrations.get(&member_id(2)),
++            Some(&members[1].registration.registration_id)
++        );
++        drop(guard);
++        members[1].shutdown().await;
++        assert!(shared_nic.lock().await.member_registrations.is_empty());
++    }
++
+     #[test]
+     fn duplicate_routes_keep_owner_sets_and_single_os_delta() {
+         let route = SharedIpv4Route::new(Ipv4Addr::new(100, 100, 100, 101), 32, None);
 diff --git a/easytier/src/instance/virtual_nic.rs b/easytier/src/instance/virtual_nic.rs
-index 43c97aa6..c99769cc 100644
+index 0a0a9c2f..55cc9f9d 100644
 --- a/easytier/src/instance/virtual_nic.rs
 +++ b/easytier/src/instance/virtual_nic.rs
-@@ -37,9 +37,19 @@ use tokio::{
+@@ -38,9 +38,19 @@ use tokio::{
  use tokio_util::bytes::Bytes;
  #[cfg(target_os = "windows")]
  use tokio_util::task::AbortOnDropHandle;
@@ -1133,38 +1327,52 @@ index 43c97aa6..c99769cc 100644
  #[cfg(target_os = "windows")]
  use crate::common::ifcfg::RegistryManager;
  
-@@ -830,6 +840,11 @@ impl NicCtx {
-         nic.ifname.as_ref().map(|s| s.to_owned())
+@@ -1213,6 +1223,14 @@ impl NicCtx {
+             .ok_or_else(|| anyhow::anyhow!("tun device has no interface name").into())
      }
  
 +    pub(crate) async fn shutdown(&mut self) {
 +        self.tasks.abort_all();
 +        while self.tasks.join_next().await.is_some() {}
++        if let NicBackend::Shared(member) = &self.backend {
++            member.shutdown().await;
++        }
 +    }
 +
      pub async fn assign_ipv4_to_tun_device(&self, ipv4_addr: cidr::Ipv4Inet) -> Result<(), Error> {
-         let nic = self.nic.lock().await;
-         nic.link_up().await?;
-@@ -1302,11 +1317,7 @@ impl NicCtx {
-         let tunnel = {
-             let mut nic = self.nic.lock().await;
-             match nic.create_dev_for_mobile(tun_fd).await {
--                Ok(ret) => {
--                    self.global_ctx
--                        .set_tun_device_ready(nic.ifname().to_string());
--                    ret
--                }
-+                Ok(ret) => ret,
-                 Err(err) => {
-                     self.global_ctx.set_tun_device_error(err.to_string());
-                     return Err(err);
-@@ -1327,7 +1338,34 @@ impl NicCtx {
- mod tests {
-     use crate::common::{error::Error, global_ctx::tests::get_mock_global_ctx};
+         self.backend.link_up().await?;
+         self.backend.remove_ip(None).await?;
+@@ -1733,15 +1751,12 @@ impl NicCtx {
+     ) -> Result<(), Error> {
+         // Reject the entire member configuration before touching the shared fd.
+         self.apply_mobile_tun_claims(claims).await?;
+-        let (tunnel, ifname) = match self
++        let tunnel = match self
+             .backend
+             .create_dev_for_mobile(tun_fd, replace_tun_fd)
+             .await
+         {
+-            Ok(ret) => {
+-                let ifname = self.tun_ifname().await?;
+-                (ret, ifname)
+-            }
++            Ok(ret) => ret,
+             Err(err) => {
+                 self.global_ctx.set_tun_device_error(err.to_string());
+                 return Err(err);
+@@ -1752,8 +1767,6 @@ impl NicCtx {
+         self.run_public_ipv6_route_updater().await?;
+         self.run_public_ipv6_addr_updater().await?;
  
--    use super::VirtualNic;
-+    use super::{NicCtx, VirtualNic};
-+
+-        self.global_ctx.set_tun_device_ready(ifname);
+-
+         self.start_tunnel_forwarding(tunnel)?;
+ 
+         Ok(())
+@@ -1918,6 +1931,33 @@ mod tests {
+         }
+     }
+ 
 +    #[tokio::test]
 +    async fn shutdown_waits_for_forwarding_tasks_to_release_receiver() {
 +        let core = crate::instance::factory::create_native_instance(Default::default()).unwrap();
@@ -1191,9 +1399,10 @@ index 43c97aa6..c99769cc 100644
 +
 +        assert!(receiver.try_lock().is_ok());
 +    }
- 
++
      async fn run_test_helper() -> Result<VirtualNic, Error> {
-         let mut dev = VirtualNic::new(get_mock_global_ctx());
+         let global_ctx = get_mock_global_ctx();
+         let mut dev = VirtualNic::new(NicCtx::virtual_nic_config(&global_ctx));
 diff --git a/easytier/src/instance/virtual_nic/darwin.rs b/easytier/src/instance/virtual_nic/darwin.rs
 new file mode 100644
 index 00000000..c929e5c4

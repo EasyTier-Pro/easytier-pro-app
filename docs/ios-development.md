@@ -264,6 +264,33 @@ VPN 服务，启用网络时应用会提示使用真机，不会报告虚假的 
 - 用户保持 Home 网络启用并访问 `http://10.147.223.1`，确认空闲流量回落到
   零，访问时能显示实际流量。
 
+2026-10-13 核心 rebase 到最新 upstream：
+
+- 固定基线更新为 `32dc7f1f406e5fe43ba095a918a7a1c4b28f2335`
+  （`feat: add shared virtual nic (#2352)`）。核心分支为
+  `fix/ios-runtime-notifications`，位于
+  `/data/project/EasyTier-worktree/ios-runtime-notifications`；rebase 后的
+  5 个原有修复和新增回归测试提交的最终 HEAD 为 `5da01cc4`。
+  原分支保存在 `backup/ios-runtime-notifications-20261013-794306f3`。
+- 保留上游共享虚拟网卡、成员配置与异步 TUN 挂接接口，将就绪通知、挂接
+  代次和取消安全的关闭逻辑迁移到这些接口。关闭时复用并等待共享成员清理，
+  最后一个成员的 dispatcher 退出后才确认描述符释放；其他成员保持注册。
+- `scripts/ios_core.patch` 精确对应新基线到上述 HEAD 的完整核心 diff，
+  `scripts/ios_core_revision` 同步更新。未改变控制台接口或 Flutter 统计逻辑。
+- Linux 上 33 项 FFI、13 项 iOS 适配层、3 项 TUN 关闭、23 项共享网卡及
+  3 项 CIDR 通知回归通过。核心格式检查及 FFI、iOS 适配层全目标 Clippy
+  `-D warnings` 通过。
+- 真机与 ARM64 模拟器核心框架构建通过，框架补丁 SHA-256 与源码一致。
+  Mac 上 2 项 Darwin 数据桥回归和共享成员关闭回归通过；使用新框架的
+  16 项原生 XCTest 通过。公司签名 Release 主应用与 VPN 扩展构建、严格
+  签名及 App Group 校验通过。
+- 完整核心 diff、原提交 range-diff 及 App 补丁与构建契约的最终只读审查
+  已完成，未发现高置信度 bug 或回退。
+- Mac 上额外的 `easytier/macos-ne` 严格 Clippy 未通过：干净新基线也存在
+  6 项未使用代码与可折叠条件告警；携带补丁另有 1 项 Darwin `AsyncDevice`
+  类型可见性告警，相关声明在 rebase 前的 `794306f3` 中已存在。本轮记录
+  这些既有告警，不混入无关清理。基线对照后已精确恢复应用补丁。
+
 公司账号签名后的真机需要验证以下实际行为，并保存分享诊断与探测结果：
 
 1. 控制台登录、浏览器回跳、VPN 授权，未加入网络时设备能完成注册。
