@@ -34,6 +34,32 @@ class RunnerTests: XCTestCase {
   }
 
   @MainActor
+  func testRejectedReadinessWaitsForAnotherNativeNotification() {
+    var status: [String: Any] = ["vpn_ready": true, "network_name": "Home", "instance_id": "old-instance",
+                                 "session_id": "vpn-session", "events": [["id": 7]], "virtual_ipv4": "10.1.0.2"]
+    let candidate = EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home")
+    XCTAssertEqual(candidate?["instance_id"] as? String, "old-instance")
+    XCTAssertNil(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home", after: candidate))
+    status["events"] = [["id": 8]]
+    XCTAssertNotNil(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home", after: candidate))
+  }
+
+  @MainActor
+  func testNewVPNSessionCanWakeAWaitDespiteItsLowerEventSequence() {
+    let after: [String: Any] = ["session_id": "old-session", "event_id": 70]
+    var status: [String: Any] = ["vpn_ready": true, "network_name": "Home", "instance_id": "new-instance",
+                                 "session_id": "new-session", "events": [["id": 2]]]
+    XCTAssertEqual(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home", after: after)?["instance_id"] as? String,
+                   "new-instance")
+    status["vpn_ready"] = false
+    XCTAssertNil(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home", after: after))
+    status["vpn_ready"] = true
+    XCTAssertNil(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Other", after: after))
+    status["instance_id"] = ""
+    XCTAssertNil(EasyTierFlutterBridge.networkConnectionStatus(status, network: "Home", after: after))
+  }
+
+  @MainActor
   func testKeychainThroughFlutterBridge() async throws {
     let bridge = EasyTierFlutterBridge()
     let key = "ios_native_test_\(UUID().uuidString)"

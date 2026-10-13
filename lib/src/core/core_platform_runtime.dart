@@ -40,8 +40,10 @@ abstract class CorePlatformRuntime {
 
   Future<void> beginNetworkConnection() async {}
 
-  Future<String?> waitForNetworkConnection(String runtimeNetworkName) async =>
-      null;
+  Future<String?> waitForNetworkConnection(
+    String runtimeNetworkName, {
+    required Future<String?> Function() readInstanceId,
+  }) async => null;
 
   Future<void> endNetworkConnection() async {}
 

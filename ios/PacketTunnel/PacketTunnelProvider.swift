@@ -311,7 +311,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           let config = appliedConfig, appliedName == selectedName, appliedID == selectedID else { return }
     if announcedConfig != config {
       announcedConfig = config
-      emit("vpn_started", ["instance_name": selectedName, "network_name": runtimeName,
+      emit("vpn_started", ["instance_name": selectedName, "instance_id": selectedID, "network_name": runtimeName,
                            "addresses": [config.address], "routes": config.routes, "dns": config.dns])
     }
     finishStart(nil)
@@ -372,7 +372,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     defer { easytier_ios_free_string(value) }
     let data = Data(String(cString: value).utf8)
     let infos = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-    return ["instances": infos, "instance_name": selectedName, "network_name": runtimeName,
+    return ["instances": infos, "instance_name": selectedName, "instance_id": selectedID, "network_name": runtimeName,
             "vpn_ready": tunReady && !settingsUpdating && appliedConfig != nil && bridge != nil]
   }
 
@@ -388,7 +388,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ["session_id": sessionID, "running": started,
      "vpn_ready": tunReady && !settingsUpdating && appliedConfig != nil && bridge != nil, "connected": started && is_config_server_client_connected() != 0,
      "virtual_ipv4": appliedConfig?.address ?? "",
-     "machine_id": machineID, "instance_name": selectedName, "network_name": runtimeName,
+     "machine_id": machineID, "instance_name": selectedName, "instance_id": selectedID, "network_name": runtimeName,
      "core_version": Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String ?? "",
      "last_error": lastError, "events": events]
   }

@@ -123,10 +123,50 @@ class IosCoreRuntime extends CorePlatformRuntime {
       _methodChannel.invokeMethod<void>('beginNetworkConnection');
 
   @override
-  Future<String?> waitForNetworkConnection(String runtimeNetworkName) =>
-      _methodChannel.invokeMethod<String>('waitForNetworkConnection', {
-        'networkName': runtimeNetworkName.trim(),
-      });
+  Future<String?> waitForNetworkConnection(
+    String runtimeNetworkName, {
+    required Future<String?> Function() readInstanceId,
+  }) async {
+    final networkName = runtimeNetworkName.trim();
+    final deadline = DateTime.now().add(const Duration(seconds: 40));
+    Map<String, Object?>? after;
+    while (true) {
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        throw StateError('等待网络连接超时。');
+      }
+      final candidate = await _methodChannel
+          .invokeMapMethod<String, Object?>('waitForNetworkConnection', {
+            'networkName': networkName,
+            'timeoutSeconds': remaining.inMilliseconds / 1000,
+            'after': ?after,
+          });
+      if (candidate == null) throw StateError('iOS 未返回网络连接状态。');
+
+      // The join response identifies a console node before its runtime is
+      // allocated. Resolve that node only after a native readiness wakeup.
+      final instanceId = (await readInstanceId())?.trim();
+      if (instanceId != null && instanceId.isNotEmpty) {
+        // The extension may have changed while the console request was in
+        // flight. Finish only if its current data path belongs to this node.
+        final current = await _methodChannel.invokeMapMethod<String, Object?>(
+          'readStatus',
+        );
+        if (current?['running'] == true &&
+            current?['vpn_ready'] == true &&
+            current?['network_name'] == networkName &&
+            current?['instance_id'] == instanceId) {
+          return current?['virtual_ipv4']?.toString();
+        }
+      }
+      // Reuse the native session/event cursor so a rejected old instance
+      // waits for a notification instead of immediately satisfying the wait.
+      after = {
+        'session_id': candidate['session_id'],
+        'event_id': candidate['event_id'],
+      };
+    }
+  }
 
   @override
   Future<void> endNetworkConnection() =>

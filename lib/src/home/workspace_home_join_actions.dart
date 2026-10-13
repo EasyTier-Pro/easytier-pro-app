@@ -36,8 +36,10 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         readyMachineId,
       );
       if (existingLocalDevice != null) {
-        final runtimeIpv4 = await widget.coreLifecycleService
-            .waitForNetworkConnection(network.runtimeNetworkName);
+        final runtimeIpv4 = await _waitForNetworkConnection(
+          network,
+          existingLocalDevice.id,
+        );
         if (mounted && runtimeIpv4 != null) {
           _networkInstanceReady = {..._networkInstanceReady, network.id: true};
         }
@@ -67,8 +69,10 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         readyMachineId,
       );
       if (refreshedLocalDevice != null) {
-        final runtimeIpv4 = await widget.coreLifecycleService
-            .waitForNetworkConnection(network.runtimeNetworkName);
+        final runtimeIpv4 = await _waitForNetworkConnection(
+          network,
+          refreshedLocalDevice.id,
+        );
         if (mounted && runtimeIpv4 != null) {
           _networkInstanceReady = {..._networkInstanceReady, network.id: true};
         }
@@ -82,17 +86,20 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         return;
       }
 
-      await widget.authService.attachDeviceToNetwork(
+      final attachment = await widget.authService.attachDeviceToNetwork(
         accessToken: widget.session.tokenSet.accessToken,
         workspaceId: workspace.id,
         networkId: network.id,
         deviceId: device.id,
       );
-      final runtimeIpv4 = await widget.coreLifecycleService
-          .waitForNetworkConnection(network.runtimeNetworkName);
+      final runtimeIpv4 = await _waitForNetworkConnection(
+        network,
+        attachment.nodeId,
+      );
       final joinedLocalDevice = await _loadLocalNetworkDevice(
         network.id,
         readyMachineId,
+        nodeId: attachment.nodeId,
         waitForIpv4: runtimeIpv4 == null,
       );
       if (mounted && runtimeIpv4 != null) {
@@ -114,6 +121,27 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
     } finally {
       await widget.coreLifecycleService.endNetworkConnection();
     }
+  }
+
+  Future<String?> _waitForNetworkConnection(
+    ConsoleNetwork network,
+    String nodeId,
+  ) {
+    final workspaceId = _workspace!.id;
+    return widget.coreLifecycleService.waitForNetworkConnection(
+      network.runtimeNetworkName,
+      readInstanceId: () async {
+        final devices = await widget.authService.fetchNetworkDevices(
+          accessToken: widget.session.tokenSet.accessToken,
+          workspaceId: workspaceId,
+          networkId: network.id,
+        );
+        for (final device in devices) {
+          if (device.id == nodeId && device.attached) return device.instanceId;
+        }
+        return null;
+      },
+    );
   }
 
   _JoinNetworkState? _joinBlockedByCoreStatus(
@@ -245,10 +273,16 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
     return _localDeviceInNetwork(networkId, machineId) != null;
   }
 
-  NetworkDevice? _localDeviceInNetwork(String networkId, String machineId) {
+  NetworkDevice? _localDeviceInNetwork(
+    String networkId,
+    String machineId, {
+    String? nodeId,
+  }) {
     final devices = _networkDevices[networkId] ?? const <NetworkDevice>[];
     for (final device in devices) {
-      if (device.machineId == machineId && device.attached) {
+      if (device.machineId == machineId &&
+          device.attached &&
+          (nodeId == null || device.id == nodeId)) {
         return device;
       }
     }
@@ -258,12 +292,17 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
   Future<NetworkDevice?> _loadLocalNetworkDevice(
     String networkId,
     String machineId, {
+    required String nodeId,
     bool waitForIpv4 = false,
   }) async {
     final attempts = waitForIpv4 ? 5 : 1;
     for (var attempt = 0; attempt < attempts; attempt++) {
       await _loadSingleNetworkDevices(networkId);
-      final localDevice = _localDeviceInNetwork(networkId, machineId);
+      final localDevice = _localDeviceInNetwork(
+        networkId,
+        machineId,
+        nodeId: nodeId,
+      );
       final ipv4 = localDevice?.ipv4?.trim();
       if (localDevice != null &&
           (!waitForIpv4 || (ipv4 != null && ipv4.isNotEmpty))) {
@@ -273,7 +312,7 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
         await Future<void>.delayed(_WorkspaceHomeViewState._devicePollDelay);
       }
     }
-    return _localDeviceInNetwork(networkId, machineId);
+    return _localDeviceInNetwork(networkId, machineId, nodeId: nodeId);
   }
 
   _JoinNetworkState _joinStateFor(ConsoleNetwork network) {

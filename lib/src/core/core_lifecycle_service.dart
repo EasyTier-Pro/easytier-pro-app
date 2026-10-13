@@ -1077,8 +1077,13 @@ exit 3
 
   Future<void> beginNetworkConnection() => _runtime.beginNetworkConnection();
 
-  Future<String?> waitForNetworkConnection(String runtimeNetworkName) =>
-      _runtime.waitForNetworkConnection(runtimeNetworkName);
+  Future<String?> waitForNetworkConnection(
+    String runtimeNetworkName, {
+    required Future<String?> Function() readInstanceId,
+  }) => _runtime.waitForNetworkConnection(
+    runtimeNetworkName,
+    readInstanceId: readInstanceId,
+  );
 
   Future<void> endNetworkConnection() => _runtime.endNetworkConnection();
 

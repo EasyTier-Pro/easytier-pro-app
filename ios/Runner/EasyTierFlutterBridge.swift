@@ -98,16 +98,19 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
         result(nil)
       case "waitForNetworkConnection":
         let network = try requiredString(args, "networkName")
-        try await waitForState("等待网络连接超时。") {
+        let after = args["after"] as? [String: Any]
+        let timeout = args["timeoutSeconds"] as? Double ?? 40
+        var connection: [String: Any]?
+        try await waitForState("等待网络连接超时。", timeout: timeout) {
           guard self.isRunning else {
             if self.vpnNeedsRetry { throw self.runtimeError("VPN 启动失败，请重试连接。") }
             return false
           }
           let status = try EasyTierShared.readStatus()
-          return status["vpn_ready"] as? Bool == true && status["network_name"] as? String == network
+          connection = Self.networkConnectionStatus(status, network: network, after: after)
+          return connection != nil
         }
-        let status = try EasyTierShared.readStatus()
-        result(status["virtual_ipv4"])
+        result(connection)
       case "getMachineId": result(try EasyTierShared.machineID())
       case "getHostname": result("iPhone-\(try EasyTierShared.machineID().prefix(8))")
       case "readStatus":
@@ -306,7 +309,20 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     }
   }
 
-  private func waitForState(_ timeoutMessage: String, check: @escaping () throws -> Bool) async throws {
+  static func networkConnectionStatus(_ status: [String: Any], network: String,
+                                      after: [String: Any]? = nil) -> [String: Any]? {
+    guard status["vpn_ready"] as? Bool == true, status["network_name"] as? String == network,
+          let instanceID = status["instance_id"] as? String, !instanceID.isEmpty else { return nil }
+    let sessionID = status["session_id"] as? String ?? ""
+    let eventID = (status["events"] as? [[String: Any]])?.last?["id"] as? Int ?? 0
+    if let after, after["session_id"] as? String == sessionID,
+       eventID <= (after["event_id"] as? Int ?? 0) { return nil }
+    return ["instance_id": instanceID, "virtual_ipv4": status["virtual_ipv4"] ?? "",
+            "session_id": sessionID, "event_id": eventID]
+  }
+
+  private func waitForState(_ timeoutMessage: String, timeout timeoutInterval: TimeInterval = 40,
+                            check: @escaping () throws -> Bool) async throws {
     let id = UUID()
     try await withCheckedThrowingContinuation { continuation in
       let timeout = DispatchWorkItem { [weak self] in
@@ -314,7 +330,7 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
         self.completeStateWaiter(id, error: self.runtimeError(timeoutMessage))
       }
       stateWaiters[id] = (check, continuation, timeout)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: timeout)
+      DispatchQueue.main.asyncAfter(deadline: .now() + timeoutInterval, execute: timeout)
       checkStateWaiters()
     }
   }

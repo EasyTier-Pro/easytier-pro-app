@@ -148,6 +148,7 @@ class NetworkDevice {
     this.ipv4,
     this.deviceId,
     this.machineId,
+    this.instanceId,
     this.os = '',
     this.osVersion = '',
     this.osDistribution = '',
@@ -163,6 +164,7 @@ class NetworkDevice {
   final String? ipv4;
   final String? deviceId;
   final String? machineId;
+  final String? instanceId;
   final String os;
   final String osVersion;
   final String osDistribution;

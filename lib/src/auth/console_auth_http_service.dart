@@ -532,6 +532,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
             machineId: machineId == null || machineId.isEmpty
                 ? null
                 : machineId,
+            instanceId: _nullableTrimmedString(item['instance_id']),
             os: os,
             osVersion: osVersion,
             osDistribution: osDistribution,

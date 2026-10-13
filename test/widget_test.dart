@@ -1084,6 +1084,63 @@ void main() {
     expect(find.byType(FSwitch), findsNWidgets(2));
   });
 
+  testWidgets(
+    'joining verifies the returned node and holds background time until readiness',
+    (WidgetTester tester) async {
+      _useDesktopViewport(tester);
+      final authService = _FakeAuthService(
+        networks: const [
+          ConsoleNetwork(
+            id: 'net-1',
+            name: 'Home',
+            runtimeNetworkName: 'home-runtime',
+          ),
+        ],
+        managedDevices: const [
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'phone',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+        networkDevices: const {
+          'net-1': [
+            NetworkDevice(
+              id: 'removed-node',
+              name: 'phone',
+              online: false,
+              machineId: 'machine-1',
+              instanceId: 'old-instance',
+              desiredState: 'absent',
+            ),
+          ],
+        },
+      );
+      final core = _NetworkConnectionCoreLifecycleService(
+        authService: authService,
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(core.calls, ['begin', 'wait']);
+      expect(core.instanceId, 'instance-1');
+      core.connection.complete('10.144.0.2');
+      await tester.pumpAndSettle();
+      expect(core.calls, ['begin', 'wait', 'end']);
+      expect(find.textContaining('10.144.0.2'), findsOneWidget);
+    },
+  );
+
   testWidgets('android blocks joining a second active network', (
     WidgetTester tester,
   ) async {
@@ -5062,6 +5119,7 @@ void main() {
               'id': 'node-1',
               'hostname': 'desktop-1',
               'machine_id': 'machine-1',
+              'instance_id': 'runtime-instance-1',
               'connectivity_state': 'online',
               'ipv4_addr': '10.144.0.2',
               'os': 'linux',
@@ -5089,6 +5147,7 @@ void main() {
     expect(nodes.single.osDistribution, 'Ubuntu');
     expect(nodes.single.name, '工作笔记本');
     expect(nodes.single.hostname, 'desktop-1');
+    expect(nodes.single.instanceId, 'runtime-instance-1');
   });
 
   test('console service parses subnet routes and node config views', () async {
@@ -6335,12 +6394,15 @@ class _FakeAuthService implements AuthService {
         ipv4: networkId == 'net-1' ? '10.144.0.2' : '10.145.0.2',
         deviceId: device.id,
         machineId: device.machineId,
+        instanceId: 'instance-${networkId.substring(networkId.length - 1)}',
         os: device.os,
         osVersion: device.osVersion,
         osDistribution: device.osDistribution,
       ),
     ];
-    return AttachNetworkResult(nodeId: 'node-$networkId');
+    return AttachNetworkResult(
+      nodeId: 'node-${networkId.substring(networkId.length - 1)}',
+    );
   }
 
   @override
@@ -6393,6 +6455,31 @@ class _FakeAuthService implements AuthService {
       configServer: 'tcp://et-web.console.easytier.net:22020',
     );
   }
+}
+
+class _NetworkConnectionCoreLifecycleService extends _NoopCoreLifecycleService {
+  _NetworkConnectionCoreLifecycleService({required super.authService})
+    : super(machineId: 'machine-1');
+
+  final connection = Completer<String?>();
+  final calls = <String>[];
+  String? instanceId;
+
+  @override
+  Future<void> beginNetworkConnection() async => calls.add('begin');
+
+  @override
+  Future<String?> waitForNetworkConnection(
+    String runtimeNetworkName, {
+    required Future<String?> Function() readInstanceId,
+  }) async {
+    calls.add('wait');
+    instanceId = await readInstanceId();
+    return connection.future;
+  }
+
+  @override
+  Future<void> endNetworkConnection() async => calls.add('end');
 }
 
 class _NoopCoreLifecycleService extends CoreLifecycleService {

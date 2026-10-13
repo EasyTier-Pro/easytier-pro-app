@@ -19,14 +19,20 @@ void main() {
   late List<MethodCall> calls;
   late Map<String, Object?> status;
   late Map<String, Object?> snapshot;
+  Future<Object?> Function(MethodCall)? waitForConnection;
   String? failure;
 
   setUp(() {
     events = StreamController<Object?>.broadcast();
     calls = [];
     failure = null;
+    waitForConnection = null;
     status = {
       'running': true,
+      'vpn_ready': true,
+      'network_name': 'authorized-network',
+      'instance_id': 'actual-instance-id',
+      'virtual_ipv4': '10.1.0.2',
       'machine_id': 'stable-machine',
       'core_version': '2.7.0',
     };
@@ -68,7 +74,13 @@ void main() {
             case 'beginNetworkConnection':
               return null;
             case 'waitForNetworkConnection':
-              return '10.1.0.2';
+              if (waitForConnection != null) return waitForConnection!(call);
+              return {
+                'instance_id': status['instance_id'],
+                'virtual_ipv4': status['virtual_ipv4'],
+                'session_id': 'vpn-session',
+                'event_id': 1,
+              };
             case 'endNetworkConnection':
             case 'stopRuntime':
               return null;
@@ -208,16 +220,135 @@ void main() {
     () async {
       await runtime.beginNetworkConnection();
       expect(
-        await runtime.waitForNetworkConnection(' authorized-network '),
+        await runtime.waitForNetworkConnection(
+          ' authorized-network ',
+          readInstanceId: () async => 'actual-instance-id',
+        ),
         '10.1.0.2',
       );
       await runtime.endNetworkConnection();
       expect(calls.map((call) => call.method), [
         'beginNetworkConnection',
         'waitForNetworkConnection',
+        'readStatus',
         'endNetworkConnection',
       ]);
-      expect(calls[1].arguments, {'networkName': 'authorized-network'});
+      final args = calls[1].arguments as Map;
+      expect(args['networkName'], 'authorized-network');
+      expect(args['timeoutSeconds'], inExclusiveRange(0, 40.001));
+      expect(args.containsKey('after'), isFalse);
+    },
+  );
+
+  test('same-name old runtime cannot complete a new node connection', () async {
+    status['instance_id'] = 'old-instance';
+    final next = Completer<Object?>();
+    var wakeups = 0;
+    var lookups = 0;
+    waitForConnection = (call) async {
+      if (++wakeups == 1) {
+        return {
+          'instance_id': 'old-instance',
+          'session_id': 'old-session',
+          'event_id': 7,
+        };
+      }
+      return next.future;
+    };
+    var completed = false;
+    final connection = runtime
+        .waitForNetworkConnection(
+          'authorized-network',
+          readInstanceId: () async {
+            lookups += 1;
+            return 'new-instance';
+          },
+        )
+        .then((value) {
+          completed = true;
+          return value;
+        });
+    await pumpEventQueue();
+    expect(completed, isFalse);
+    expect(lookups, 1);
+    final waits = calls.where(
+      (call) => call.method == 'waitForNetworkConnection',
+    );
+    expect(waits.length, 2);
+    expect((waits.last.arguments as Map)['after'], {
+      'session_id': 'old-session',
+      'event_id': 7,
+    });
+    status['instance_id'] = 'new-instance';
+    next.complete({
+      'instance_id': 'new-instance',
+      'session_id': 'new-session',
+      'event_id': 2,
+    });
+    expect(await connection, '10.1.0.2');
+    expect(lookups, 2);
+  });
+
+  test(
+    'late node allocation waits for a native wakeup before querying again',
+    () async {
+      final next = Completer<Object?>();
+      var wakeups = 0;
+      var lookups = 0;
+      waitForConnection = (call) async {
+        if (++wakeups == 1) {
+          return {'session_id': 'vpn-session', 'event_id': 3};
+        }
+        return next.future;
+      };
+      final connection = runtime.waitForNetworkConnection(
+        'authorized-network',
+        readInstanceId: () async =>
+            ++lookups == 1 ? null : 'actual-instance-id',
+      );
+      await pumpEventQueue();
+      expect(lookups, 1);
+      expect(calls.where((call) => call.method == 'readStatus'), isEmpty);
+      await pumpEventQueue();
+      expect(lookups, 1);
+      next.complete({'session_id': 'vpn-session', 'event_id': 4});
+      expect(await connection, '10.1.0.2');
+      expect(lookups, 2);
+    },
+  );
+
+  test(
+    'a replacement during the console lookup invalidates the earlier readiness',
+    () async {
+      final lookup = Completer<String?>();
+      final next = Completer<Object?>();
+      var wakeups = 0;
+      var lookups = 0;
+      waitForConnection = (call) async {
+        if (++wakeups == 1) {
+          return {'session_id': 'vpn-session', 'event_id': 3};
+        }
+        return next.future;
+      };
+      var completed = false;
+      final connection = runtime
+          .waitForNetworkConnection(
+            'authorized-network',
+            readInstanceId: () async =>
+                ++lookups == 1 ? lookup.future : 'replacement',
+          )
+          .then((value) {
+            completed = true;
+            return value;
+          });
+      await pumpEventQueue();
+      status['instance_id'] = 'replacement';
+      lookup.complete('actual-instance-id');
+      await pumpEventQueue();
+      expect(completed, isFalse);
+      expect(lookups, 1);
+      next.complete({'session_id': 'vpn-session', 'event_id': 4});
+      expect(await connection, '10.1.0.2');
     },
   );
 
