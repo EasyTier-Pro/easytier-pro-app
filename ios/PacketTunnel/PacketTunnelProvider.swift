@@ -251,7 +251,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           if config != nil {
             let needsAttachment = self.bridge == nil || addressChanged
             if self.bridge == nil {
-              self.bridge = try EasyTierPacketBridge(flow: self.packetFlow) { [weak self] error in
+              self.bridge = try EasyTierPacketBridge(flow: self.packetFlow, log: { [weak self] message in
+                guard let self else { return }
+                self.queue.async { self.log(message) }
+              }) { [weak self] error in
                 guard let self else { return }
                 self.queue.async {
                   guard self.started, self.selection == selection else { return }

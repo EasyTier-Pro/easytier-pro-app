@@ -15,6 +15,7 @@ final class EasyTierPacketBridge {
   let coreFD: Int32
   private let flow: EasyTierPacketFlow
   private let onError: (Error) -> Void
+  private let log: (String) -> Void
   private let queue = DispatchQueue(label: "net.easytier.pro.packets")
   private let flowFD: Int32
   private var source: DispatchSourceRead?
@@ -24,9 +25,15 @@ final class EasyTierPacketBridge {
   private var pendingIndex = 0
   private var failed = false
   private var stopped = false
+  private var readLogged = false
+  private var sentLogged = false
+  private var receivedLogged = false
+  private var pressureLogged = false
 
-  init(flow: EasyTierPacketFlow, onError: @escaping (Error) -> Void) throws {
+  init(flow: EasyTierPacketFlow, log: @escaping (String) -> Void = { _ in },
+       onError: @escaping (Error) -> Void) throws {
     self.flow = flow
+    self.log = log
     self.onError = onError
     var fds: [Int32] = [-1, -1]
     guard socketpair(AF_UNIX, SOCK_DGRAM, 0, &fds) == 0 else {
@@ -57,6 +64,7 @@ final class EasyTierPacketBridge {
       cancelled.notify(queue: self.queue) { close(fd) }
       self.writeSource = writeSource
       source.resume()
+      self.log("Packet bridge started core_fd=\(self.coreFD) flow_fd=\(self.flowFD)")
       self.readSystemPackets()
     }
   }
@@ -86,6 +94,10 @@ final class EasyTierPacketBridge {
       guard let self else { return }
       self.queue.async {
         guard !self.stopped, !self.failed else { return }
+        if !self.readLogged {
+          self.readLogged = true
+          self.log("Packet bridge first system batch core_fd=\(self.coreFD) packets=\(packets.count) protocols=\(protocols.count)")
+        }
         for (packet, family) in zip(packets, protocols) {
           // EasyTier's Darwin TUN codec expects a big-endian 4-byte family.
           var header = family.uint32Value.bigEndian
@@ -106,6 +118,10 @@ final class EasyTierPacketBridge {
       if length < 0 {
         let code = errno
         if code == EAGAIN || code == ENOBUFS {
+          if !pressureLogged {
+            pressureLogged = true
+            log("Packet bridge waiting for core core_fd=\(coreFD) error=\(code) pending=\(pendingPackets.count - pendingIndex)")
+          }
           if !waitingForWrite {
             waitingForWrite = true
             writeSource?.resume()
@@ -119,6 +135,10 @@ final class EasyTierPacketBridge {
         }
         onError(NSError(domain: NSPOSIXErrorDomain, code: Int(code)))
         return
+      }
+      if !sentLogged {
+        sentLogged = true
+        log("Packet bridge first system send core_fd=\(coreFD) bytes=\(length)")
       }
       pendingIndex += 1
     }
@@ -146,6 +166,12 @@ final class EasyTierPacketBridge {
       packets.append(Data(buffer[4..<length]))
       protocols.append(NSNumber(value: family))
     }
-    if !packets.isEmpty { _ = flow.writePackets(packets, withProtocols: protocols) }
+    if !packets.isEmpty {
+      let written = flow.writePackets(packets, withProtocols: protocols)
+      if !receivedLogged {
+        receivedLogged = true
+        log("Packet bridge first core batch core_fd=\(coreFD) packets=\(packets.count) system_written=\(written)")
+      }
+    }
   }
 }
