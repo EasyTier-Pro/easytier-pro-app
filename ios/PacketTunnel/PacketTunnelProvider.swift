@@ -155,19 +155,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       return
     }
     if event["event"] as? String == "network_instance_event", id == selectedID,
-       let runtime = event["runtime"] as? [String: Any],
-       let tun = runtime["tun"] as? [Any], tun.count == 2 {
-      let generation = tun[0] as? Int ?? 0
-      // A delayed event from an earlier fd cannot finish this attachment.
-      if generation == tunGeneration {
-        let ready = tun[1] as? Bool == true
-        if !ready && !tunAttachmentPending {
-          bridge?.stop()
-          bridge = nil
-          announcedConfig = nil
+       let runtime = event["runtime"] as? [String: Any] {
+      do {
+        // Notifications can wait in this queue while a newer fd is installed.
+        // Read current state before acknowledging or releasing its bridge.
+        let state = try readTunState(name)
+        if state.generation == tunGeneration {
+          if state.released && !tunAttachmentPending {
+            bridge?.stop()
+            bridge = nil
+            announcedConfig = nil
+          }
+          tunReady = state.ready
+          if state.ready { tunAttachmentPending = false }
         }
-        tunReady = ready
-        if ready { tunAttachmentPending = false }
         let nativeEvent = runtime["event"] as? [String: Any] ?? [:]
         if let message = nativeEvent["TunDeviceError"] as? String {
           let error = error(message)
@@ -176,14 +177,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           cancelTunnelWithError(error)
           return
         }
-        if nativeEvent["DhcpIpv4Changed"] != nil || nativeEvent["DhcpIpv4Conflicted"] != nil {
-          bridge?.stop()
-          bridge = nil
-          tunReady = false
-          tunAttachmentPending = false
-          announcedConfig = nil
-        }
-      }
+      } catch { recordError(error) }
     }
     refresh()
     finishIfReady()
@@ -260,11 +254,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
               self.tunAttachmentPending = true
               self.announcedConfig = nil
               try self.check(set_tun_fd(name, bridge.coreFD))
-              guard let value = easytier_ios_tun_state(name) else { throw self.coreError() }
-              defer { easytier_ios_free_string(value) }
-              let state = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8)) as? [Any] ?? []
-              self.tunGeneration = state.first as? Int ?? 0
-              self.tunReady = state.count == 2 && state[1] as? Bool == true
+              let state = try self.readTunState(name)
+              self.tunGeneration = state.generation
+              self.tunReady = state.ready
               if self.tunReady { self.tunAttachmentPending = false }
             }
             self.lastError = ""
@@ -280,6 +272,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
       }
     }
+  }
+
+  private func readTunState(_ name: String) throws -> (generation: Int, ready: Bool, released: Bool) {
+    guard let value = easytier_ios_tun_state(name) else { throw coreError() }
+    defer { easytier_ios_free_string(value) }
+    guard let state = try JSONSerialization.jsonObject(with: Data(String(cString: value).utf8)) as? [Any],
+          state.count == 3, let generation = state[0] as? Int,
+          let ready = state[1] as? Bool, let released = state[2] as? Bool else {
+      throw error("无法读取核心接口状态。")
+    }
+    return (generation, ready, released)
   }
 
   private func finishIfReady() {
