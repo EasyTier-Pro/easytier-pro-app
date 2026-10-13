@@ -126,6 +126,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     emit("config_server", event)
     let name = event["instance_name"] as? String ?? ""
     let id = event["instance_id"] as? String ?? ""
+    if event["event"] as? String == "network_instance_event" {
+      // Removal clears the core registry before its delete callback arrives.
+      // Such callbacks no longer identify a current instance to query.
+      guard !name.isEmpty, name == selectedName, id == selectedID else { return }
+    }
     if event["event"] as? String == "run_network_instance", event["success"] as? Bool == true, !name.isEmpty {
       do {
         try retain(name)

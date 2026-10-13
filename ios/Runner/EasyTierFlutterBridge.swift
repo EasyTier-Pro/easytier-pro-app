@@ -373,7 +373,9 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     }
     var status: [String: Any]
     if isRunning {
-      status = try await providerMessage(["method": "readStatus"]) as? [String: Any] ?? [:]
+      // The extension commits this snapshot before every status notification.
+      // It remains readable while iOS tears down the provider message channel.
+      status = try EasyTierShared.readStatus()
     } else {
       status = try await control.status()
       if status["running"] as? Bool != true {
