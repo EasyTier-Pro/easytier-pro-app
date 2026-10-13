@@ -487,11 +487,14 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
 
   private func shareDiagnostics(_ args: [String: Any]) async throws {
     let path = try requiredString(args, "path")
-    guard path.hasPrefix(NSHomeDirectory() + "/") else { throw runtimeError("诊断文件不在应用目录中。") }
+    // /var and /private/var refer to the same iOS application container.
+    let url = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+    let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.resolvingSymlinksInPath()
+    guard url.path.hasPrefix(home.path + "/") else { throw runtimeError("诊断文件不在应用目录中。") }
     if isRunning { _ = try await providerMessage(["method": "flushDiagnostics"]) }
     await control.flushDiagnostics()
     let container = try EasyTierShared.container()
-    var data = try Data(contentsOf: URL(fileURLWithPath: path))
+    var data = try Data(contentsOf: url)
     let logURLs = [container.appendingPathComponent("vpn.previous.log"), container.appendingPathComponent("vpn.log")]
       + ["core-logs", "control-logs"].flatMap { directory in
         ((try? FileManager.default.contentsOfDirectory(at: container.appendingPathComponent(directory), includingPropertiesForKeys: nil)) ?? [])
@@ -503,9 +506,9 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
         data.append(logs)
       }
     }
-    try Data(redacted(String(decoding: data, as: UTF8.self)).utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+    try Data(redacted(String(decoding: data, as: UTF8.self)).utf8).write(to: url, options: .atomic)
     guard let viewController = registrar?.viewController else { throw runtimeError("无法打开分享面板。") }
-    let sheet = UIActivityViewController(activityItems: [URL(fileURLWithPath: path)], applicationActivities: nil)
+    let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     sheet.popoverPresentationController?.sourceView = viewController.view
     sheet.popoverPresentationController?.sourceRect = CGRect(x: viewController.view.bounds.midX, y: viewController.view.bounds.midY, width: 1, height: 1)
     viewController.present(sheet, animated: true)
