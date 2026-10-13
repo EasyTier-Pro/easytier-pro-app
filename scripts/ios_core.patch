@@ -1109,10 +1109,31 @@ index 4f459326..b48dcbf0 100644
  
          let Some(ip) = next else {
 diff --git a/easytier/src/instance/virtual_nic.rs b/easytier/src/instance/virtual_nic.rs
-index 43c97aa6..e16c7cf4 100644
+index 43c97aa6..c99769cc 100644
 --- a/easytier/src/instance/virtual_nic.rs
 +++ b/easytier/src/instance/virtual_nic.rs
-@@ -830,6 +830,11 @@ impl NicCtx {
+@@ -37,9 +37,19 @@ use tokio::{
+ use tokio_util::bytes::Bytes;
+ #[cfg(target_os = "windows")]
+ use tokio_util::task::AbortOnDropHandle;
+-use tun::{AbstractDevice, AsyncDevice, Configuration, Layer};
++#[cfg(not(any(target_os = "ios", all(target_os = "macos", feature = "macos-ne"))))]
++use tun::AsyncDevice;
++use tun::{AbstractDevice, Configuration, Layer};
+ use zerocopy::{NativeEndian, NetworkEndian};
+ 
++#[cfg(any(
++    target_os = "ios",
++    all(target_os = "macos", any(feature = "macos-ne", test))
++))]
++mod darwin;
++#[cfg(any(target_os = "ios", all(target_os = "macos", feature = "macos-ne")))]
++type AsyncDevice = darwin::AsyncDevice<tun::platform::Device>;
++
+ #[cfg(target_os = "windows")]
+ use crate::common::ifcfg::RegistryManager;
+ 
+@@ -830,6 +840,11 @@ impl NicCtx {
          nic.ifname.as_ref().map(|s| s.to_owned())
      }
  
@@ -1124,7 +1145,7 @@ index 43c97aa6..e16c7cf4 100644
      pub async fn assign_ipv4_to_tun_device(&self, ipv4_addr: cidr::Ipv4Inet) -> Result<(), Error> {
          let nic = self.nic.lock().await;
          nic.link_up().await?;
-@@ -1302,11 +1307,7 @@ impl NicCtx {
+@@ -1302,11 +1317,7 @@ impl NicCtx {
          let tunnel = {
              let mut nic = self.nic.lock().await;
              match nic.create_dev_for_mobile(tun_fd).await {
@@ -1137,7 +1158,7 @@ index 43c97aa6..e16c7cf4 100644
                  Err(err) => {
                      self.global_ctx.set_tun_device_error(err.to_string());
                      return Err(err);
-@@ -1327,7 +1328,34 @@ impl NicCtx {
+@@ -1327,7 +1338,34 @@ impl NicCtx {
  mod tests {
      use crate::common::{error::Error, global_ctx::tests::get_mock_global_ctx};
  
@@ -1173,3 +1194,187 @@ index 43c97aa6..e16c7cf4 100644
  
      async fn run_test_helper() -> Result<VirtualNic, Error> {
          let mut dev = VirtualNic::new(get_mock_global_ctx());
+diff --git a/easytier/src/instance/virtual_nic/darwin.rs b/easytier/src/instance/virtual_nic/darwin.rs
+new file mode 100644
+index 00000000..c929e5c4
+--- /dev/null
++++ b/easytier/src/instance/virtual_nic/darwin.rs
+@@ -0,0 +1,178 @@
++use std::{
++    io,
++    os::fd::AsRawFd,
++    pin::Pin,
++    task::{Context, Poll, ready},
++};
++
++use nix::libc;
++use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
++
++/// Keeps the TUN's fd ownership while adapting Darwin socketpair backpressure.
++pub(super) struct AsyncDevice<D: AsRawFd> {
++    inner: AsyncFd<D>,
++    local_datagram: bool,
++}
++
++impl<D: AsRawFd> AsyncDevice<D> {
++    pub(super) fn new(device: D) -> io::Result<Self> {
++        let fd = device.as_raw_fd();
++        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
++        if flags == -1 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1
++        {
++            return Err(io::Error::last_os_error());
++        }
++        let mut address: libc::sockaddr_storage = unsafe { std::mem::zeroed() };
++        let mut address_len = std::mem::size_of_val(&address) as libc::socklen_t;
++        let mut socket_type = 0;
++        let mut type_len = std::mem::size_of_val(&socket_type) as libc::socklen_t;
++        let local_datagram = unsafe {
++            libc::getsockname(fd, (&raw mut address).cast(), &mut address_len) == 0
++                && address.ss_family as i32 == libc::AF_UNIX
++                && libc::getsockopt(
++                    fd,
++                    libc::SOL_SOCKET,
++                    libc::SO_TYPE,
++                    (&raw mut socket_type).cast(),
++                    &mut type_len,
++                ) == 0
++                && socket_type == libc::SOCK_DGRAM
++        };
++        Ok(Self {
++            inner: AsyncFd::new(device)?,
++            local_datagram,
++        })
++    }
++}
++
++impl<D: AsRawFd + Unpin> AsyncRead for AsyncDevice<D> {
++    fn poll_read(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++        buf: &mut ReadBuf<'_>,
++    ) -> Poll<io::Result<()>> {
++        loop {
++            let mut guard = ready!(self.inner.poll_read_ready_mut(cx))?;
++            let bytes = buf.initialize_unfilled();
++            match guard.try_io(|inner| {
++                let n = unsafe {
++                    libc::read(
++                        inner.get_ref().as_raw_fd(),
++                        bytes.as_mut_ptr().cast(),
++                        bytes.len(),
++                    )
++                };
++                if n < 0 {
++                    Err(io::Error::last_os_error())
++                } else {
++                    Ok(n as usize)
++                }
++            }) {
++                Ok(result) => return Poll::Ready(result.map(|n| buf.advance(n))),
++                Err(_) => continue,
++            }
++        }
++    }
++}
++
++impl<D: AsRawFd + Unpin> AsyncWrite for AsyncDevice<D> {
++    fn poll_write(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++        buf: &[u8],
++    ) -> Poll<io::Result<usize>> {
++        let local_datagram = self.local_datagram;
++        loop {
++            let mut guard = ready!(self.inner.poll_write_ready_mut(cx))?;
++            match guard.try_io(|inner| {
++                let n = unsafe {
++                    libc::write(inner.get_ref().as_raw_fd(), buf.as_ptr().cast(), buf.len())
++                };
++                if n >= 0 {
++                    return Ok(n as usize);
++                }
++                let error = io::Error::last_os_error();
++                // A full Darwin UNIX datagram receive queue reports ENOBUFS,
++                // not EAGAIN. Clear readiness and resume when the peer drains it.
++                if local_datagram && error.raw_os_error() == Some(libc::ENOBUFS) {
++                    Err(io::ErrorKind::WouldBlock.into())
++                } else {
++                    Err(error)
++                }
++            }) {
++                Ok(result) => return Poll::Ready(result),
++                Err(_) => continue,
++            }
++        }
++    }
++
++    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++
++    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use std::{os::unix::net::UnixDatagram, time::Duration};
++
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
++
++    use super::*;
++
++    #[tokio::test]
++    async fn full_datagram_queue_waits_for_the_reader() {
++        let (writer, reader) = UnixDatagram::pair().unwrap();
++        writer.set_nonblocking(true).unwrap();
++        reader.set_nonblocking(true).unwrap();
++        let packet = vec![0x45; 1232];
++        let mut writer = AsyncDevice::new(writer).unwrap();
++        // Cache writable readiness before filling the peer's queue. ENOBUFS
++        // must invalidate that readiness instead of escaping as an I/O error.
++        writer.write_all(&packet).await.unwrap();
++        let mut queued = 1;
++        loop {
++            match writer.inner.get_ref().send(&packet) {
++                Ok(_) => queued += 1,
++                Err(error) if error.raw_os_error() == Some(libc::ENOBUFS) => break,
++                Err(error) => panic!("unexpected send error: {error}"),
++            }
++        }
++        assert!(queued > 0);
++        let sent = packet.clone();
++        let mut task = tokio::spawn(async move { writer.write_all(&sent).await });
++        assert!(
++            tokio::time::timeout(Duration::from_millis(50), &mut task)
++                .await
++                .is_err()
++        );
++        let mut received = vec![0; packet.len()];
++        for _ in 0..queued {
++            assert_eq!(reader.recv(&mut received).unwrap(), packet.len());
++            assert_eq!(received, packet);
++        }
++        tokio::time::timeout(Duration::from_secs(1), task)
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap();
++        assert_eq!(reader.recv(&mut received).unwrap(), packet.len());
++        assert_eq!(received, packet);
++    }
++
++    #[tokio::test]
++    async fn datagram_reads_preserve_packet_boundaries() {
++        let (writer, reader) = UnixDatagram::pair().unwrap();
++        let mut reader = AsyncDevice::new(reader).unwrap();
++        writer.send(&[1, 2, 3]).unwrap();
++        writer.send(&[4, 5]).unwrap();
++        let mut buf = [0; 32];
++        assert_eq!(reader.read(&mut buf).await.unwrap(), 3);
++        assert_eq!(&buf[..3], &[1, 2, 3]);
++        assert_eq!(reader.read(&mut buf).await.unwrap(), 2);
++        assert_eq!(&buf[..2], &[4, 5]);
++    }
++}

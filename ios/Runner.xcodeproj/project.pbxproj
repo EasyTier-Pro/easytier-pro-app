@@ -58,6 +58,8 @@
 		};
 		E71200000000000000000001 /* EasyTierVpnConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71200000000000000000003; };
 		E71200000000000000000002 /* EasyTierVpnConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71000000000000000000007; };
+		E71400000000000000000001 /* EasyTierPacketBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71400000000000000000003; };
+		E71400000000000000000002 /* EasyTierPacketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71000000000000000000006; };
 		E71300000000000000000001 /* EasyTierCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7100000000000000000000E; };
 		E71300000000000000000002 /* EasyTierControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71300000000000000000003; };
 /* End PBXBuildFile section */
@@ -201,6 +203,7 @@
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 		E71200000000000000000003 /* EasyTierVpnConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierVpnConfigTests.swift; sourceTree = "<group>"; };
+		E71400000000000000000003 /* EasyTierPacketBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierPacketBridgeTests.swift; sourceTree = "<group>"; };
 		E71200000000000000000004 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Signing.xcconfig; path = Flutter/Signing.xcconfig; sourceTree = "<group>"; };
 		E71300000000000000000003 /* EasyTierControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierControlClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -231,6 +234,7 @@
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
 				E71200000000000000000003 /* EasyTierVpnConfigTests.swift */,
+				E71400000000000000000003 /* EasyTierPacketBridgeTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -495,6 +499,8 @@
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
 				E71200000000000000000001 /* EasyTierVpnConfigTests.swift in Sources */,
 				E71200000000000000000002 /* EasyTierVpnConfig.swift in Sources */,
+				E71400000000000000000001 /* EasyTierPacketBridgeTests.swift in Sources */,
+				E71400000000000000000002 /* EasyTierPacketBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

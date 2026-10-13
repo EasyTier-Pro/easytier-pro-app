@@ -38,15 +38,15 @@ if [[ "$(git -C "$PATCHED_REPO" rev-parse HEAD)" != "$CORE_REVISION" ]]; then
   exit 1
 fi
 if [[ -n "$(git -C "$PATCHED_REPO" status --porcelain --untracked-files=no)" ]]; then
-  if [[ ! -f "$APPLIED_PATCH" ]] || ! git -C "$PATCHED_REPO" diff --binary | cmp -s - "$APPLIED_PATCH"; then
+  if [[ ! -f "$APPLIED_PATCH" ]] || ! git -C "$PATCHED_REPO" diff HEAD --binary | cmp -s - "$APPLIED_PATCH"; then
     echo "Derived iOS core checkout contains unexpected changes" >&2
     exit 1
   fi
   git -C "$PATCHED_REPO" reset --hard "$CORE_REVISION"
 fi
-git -C "$PATCHED_REPO" apply --check "$APP_ROOT/scripts/ios_core.patch"
-git -C "$PATCHED_REPO" apply "$APP_ROOT/scripts/ios_core.patch"
-git -C "$PATCHED_REPO" diff --binary > "$APPLIED_PATCH"
+git -C "$PATCHED_REPO" apply --check --index "$APP_ROOT/scripts/ios_core.patch"
+git -C "$PATCHED_REPO" apply --index "$APP_ROOT/scripts/ios_core.patch"
+git -C "$PATCHED_REPO" diff HEAD --binary > "$APPLIED_PATCH"
 cd "$PATCHED_REPO"
 export IPHONEOS_DEPLOYMENT_TARGET=13.0
 # Xcode and rustc may ship different LLVM versions. Emit native objects for
