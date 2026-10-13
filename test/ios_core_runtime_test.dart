@@ -20,6 +20,7 @@ void main() {
   late Map<String, Object?> status;
   late Map<String, Object?> snapshot;
   Future<Object?> Function(MethodCall)? waitForConnection;
+  Future<Object?> Function()? readStatus;
   String? failure;
 
   setUp(() {
@@ -27,6 +28,7 @@ void main() {
     calls = [];
     failure = null;
     waitForConnection = null;
+    readStatus = null;
     status = {
       'running': true,
       'vpn_ready': true,
@@ -57,6 +59,7 @@ void main() {
             case 'getHostname':
               return 'iPhone-stable';
             case 'readStatus':
+              if (readStatus != null) return readStatus!();
               return status;
             case 'ensureRunning':
               if (failure != null) throw PlatformException(code: failure!);
@@ -351,6 +354,50 @@ void main() {
       expect(await connection, '10.1.0.2');
     },
   );
+
+  testWidgets(
+    'a hung identity lookup times out and cannot later complete the join',
+    (tester) async {
+      final lookup = Completer<String?>();
+      final connection = runtime.waitForNetworkConnection(
+        'authorized-network',
+        readInstanceId: () => lookup.future,
+      );
+      final failed = expectLater(connection, throwsA(isA<TimeoutException>()));
+      await tester.pump();
+      expect(
+        calls.where((call) => call.method == 'waitForNetworkConnection').length,
+        1,
+      );
+      await tester.pump(const Duration(seconds: 41));
+      await failed;
+      lookup.complete('actual-instance-id');
+      await tester.pump();
+      expect(calls.where((call) => call.method == 'readStatus'), isEmpty);
+    },
+  );
+
+  testWidgets('a hung status recheck shares the connection timeout', (
+    tester,
+  ) async {
+    final snapshot = Completer<Object?>();
+    readStatus = () => snapshot.future;
+    final connection = runtime.waitForNetworkConnection(
+      'authorized-network',
+      readInstanceId: () async => 'actual-instance-id',
+    );
+    final failed = expectLater(connection, throwsA(isA<TimeoutException>()));
+    await tester.pump();
+    expect(calls.where((call) => call.method == 'readStatus').length, 1);
+    await tester.pump(const Duration(seconds: 41));
+    await failed;
+    snapshot.complete(status);
+    await tester.pump();
+    expect(
+      calls.where((call) => call.method == 'waitForNetworkConnection').length,
+      1,
+    );
+  });
 
   test('explicit disconnect stops the native extension', () async {
     await runtime.stop();

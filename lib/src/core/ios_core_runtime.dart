@@ -129,12 +129,17 @@ class IosCoreRuntime extends CorePlatformRuntime {
   }) async {
     final networkName = runtimeNetworkName.trim();
     final deadline = DateTime.now().add(const Duration(seconds: 40));
-    Map<String, Object?>? after;
-    while (true) {
+    Duration remainingTime() {
       final remaining = deadline.difference(DateTime.now());
       if (remaining <= Duration.zero) {
         throw StateError('等待网络连接超时。');
       }
+      return remaining;
+    }
+
+    Map<String, Object?>? after;
+    while (true) {
+      final remaining = remainingTime();
       final candidate = await _methodChannel
           .invokeMapMethod<String, Object?>('waitForNetworkConnection', {
             'networkName': networkName,
@@ -145,13 +150,15 @@ class IosCoreRuntime extends CorePlatformRuntime {
 
       // The join response identifies a console node before its runtime is
       // allocated. Resolve that node only after a native readiness wakeup.
-      final instanceId = (await readInstanceId())?.trim();
+      final lookupTime = remainingTime();
+      final instanceId = (await readInstanceId().timeout(lookupTime))?.trim();
       if (instanceId != null && instanceId.isNotEmpty) {
         // The extension may have changed while the console request was in
         // flight. Finish only if its current data path belongs to this node.
-        final current = await _methodChannel.invokeMapMethod<String, Object?>(
-          'readStatus',
-        );
+        final statusTime = remainingTime();
+        final current = await _methodChannel
+            .invokeMapMethod<String, Object?>('readStatus')
+            .timeout(statusTime);
         if (current?['running'] == true &&
             current?['vpn_ready'] == true &&
             current?['network_name'] == networkName &&
