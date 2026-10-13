@@ -17,6 +17,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   private var appliedID = ""
   private var settingsUpdating = false
   private var startCompletion: ((Error?) -> Void)?
+  private var startTimeout: DispatchWorkItem?
   private var eventSequence = 0
   private var events: [[String: Any]] = []
   private var lastError = ""
@@ -52,29 +53,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }, context))
         self.started = true
         self.generation += 1
-        let generation = self.generation
-        // Enrollment precedes joining a network. Claim no traffic while the
-        // control plane is waiting for the user to choose an authorized network.
-        self.settingsUpdating = true
-        self.setTunnelNetworkSettings(self.idleSettings()) { error in
-          self.queue.async {
-            self.settingsUpdating = false
-            guard self.started, self.generation == generation else { return }
-            if let error {
-              self.recordError(error)
-              self.finishStart(error)
-              self.stopCore(reason: "start_failed")
-              return
-            }
-            self.emit("config_server_started", ["hostname": hostname])
-            self.startMonitoring()
-            self.finishStart(nil)
-          }
+        // A VPN start succeeds only once a real network and packet bridge are
+        // ready. No network may survive the control-connection handoff.
+        let timeout = DispatchWorkItem { [weak self] in
+          guard let self, self.startCompletion != nil else { return }
+          let error = self.error("未收到可用的网络配置，请检查控制台后重试。")
+          self.recordError(error)
+          self.stopCore(reason: "start_failed", error: error)
+          self.cancelTunnelWithError(error)
         }
+        self.startTimeout = timeout
+        self.queue.asyncAfter(deadline: .now() + 30, execute: timeout)
+        self.emit("config_server_started", ["hostname": hostname])
+        self.startMonitoring()
       } catch {
         self.recordError(error)
-        self.finishStart(error)
-        self.stopCore(reason: "start_failed")
+        self.stopCore(reason: "start_failed", error: error)
       }
     }
   }
@@ -118,8 +112,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     timer.resume()
     let monitor = NWPathMonitor()
     monitor.pathUpdateHandler = { [weak self] path in
-      guard let self else { return }
-      self.reasserting = path.status != .satisfied
+      guard let self, self.started else { return }
+      if self.startCompletion == nil { self.reasserting = path.status != .satisfied }
       self.log("Network path \(path.status)")
       self.refresh()
     }
@@ -151,6 +145,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       selectedName = ""
       selectedID = ""
       runtimeName = ""
+      emit("vpn_stopped", ["reason": "network_removed"])
+      stopCore(reason: "network_removed")
+      cancelTunnelWithError(nil)
+      return
     }
     refresh()
   }
@@ -227,6 +225,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             self.emit("vpn_started", ["instance_name": name, "network_name": self.runtimeName,
                                        "addresses": [config.address], "routes": config.routes,
                                        "dns": config.dns])
+            self.finishStart(nil)
           } else {
             self.emit("vpn_stopped", ["reason": name.isEmpty ? "network_removed" : "address_unassigned"])
           }
@@ -240,10 +239,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
   }
 
-  private func stopCore(reason: String) {
-    finishStart(error("VPN 启动已取消。"))
+  private func stopCore(reason: String, error: Error? = nil) {
+    guard started || startCompletion != nil else { return }
     started = false
     generation += 1
+    finishStart(error ?? self.error("VPN 启动已取消。"))
     timer?.cancel()
     timer = nil
     pathMonitor?.cancel()
@@ -269,6 +269,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   }
 
   private func finishStart(_ error: Error?) {
+    startTimeout?.cancel()
+    startTimeout = nil
     let completion = startCompletion
     startCompletion = nil
     completion?(error)

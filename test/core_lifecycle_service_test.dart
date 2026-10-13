@@ -1618,6 +1618,56 @@ void main() {
     });
 
     test(
+      'foreground iOS control recovers without restarting the runtime',
+      () async {
+        final runtime = _LifecycleRuntime();
+        final service = CoreLifecycleService(
+          authService: _LifecycleAuthService(),
+          runtime: runtime,
+        );
+        addTearDown(service.dispose);
+        await service.bindSession(_session('tenant-1'));
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.vpnPermissionDenied,
+            data: {'platform': 'iOS'},
+          ),
+        );
+        await _waitUntil(
+          () => service.status.value.phase == CoreRunPhase.needsVpnPermission,
+        );
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.configServerStarted,
+            data: {
+              'platform': 'iOS',
+              'payload': {'mode': 'control'},
+            },
+          ),
+        );
+        await _waitUntil(
+          () => service.status.value.phase == CoreRunPhase.running,
+        );
+        expect(service.status.value.machineId, 'machine-1');
+        expect(runtime.ensureRunningCount, 1);
+
+        await service.stopRuntimeForUserExit();
+        runtime.emit(
+          const CoreRuntimeEvent(
+            type: CoreRuntimeEventTypes.configServerStarted,
+            data: {
+              'platform': 'iOS',
+              'payload': {'mode': 'control'},
+            },
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(service.status.value.phase, CoreRunPhase.stopped);
+        expect(runtime.ensureRunningCount, 1);
+      },
+    );
+
+    test(
       'reports Android VPN permission denial as an authorization state',
       () async {
         final authService = _LifecycleAuthService();

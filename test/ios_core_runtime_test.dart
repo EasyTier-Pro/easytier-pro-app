@@ -83,7 +83,7 @@ void main() {
   });
 
   test(
-    'starts the extension with encoded credentials and its actual core version',
+    'starts foreground control with encoded credentials and its actual core version',
     () async {
       final result = await runtime.ensureRunning(
         bootstrap,

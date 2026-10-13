@@ -58,6 +58,8 @@
 		};
 		E71200000000000000000001 /* EasyTierVpnConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71200000000000000000003; };
 		E71200000000000000000002 /* EasyTierVpnConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71000000000000000000007; };
+		E71300000000000000000001 /* EasyTierCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7100000000000000000000E; };
+		E71300000000000000000002 /* EasyTierControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71300000000000000000003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -200,6 +202,7 @@
 		};
 		E71200000000000000000003 /* EasyTierVpnConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierVpnConfigTests.swift; sourceTree = "<group>"; };
 		E71200000000000000000004 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Signing.xcconfig; path = Flutter/Signing.xcconfig; sourceTree = "<group>"; };
+		E71300000000000000000003 /* EasyTierControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyTierControlClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -208,6 +211,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
+				E71300000000000000000001 /* EasyTierCore.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,6 +274,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				E71300000000000000000003 /* EasyTierControlClient.swift */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -500,6 +505,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				E71000000000000000000022,
 				E71000000000000000000023,
+				E71300000000000000000002 /* EasyTierControlClient.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

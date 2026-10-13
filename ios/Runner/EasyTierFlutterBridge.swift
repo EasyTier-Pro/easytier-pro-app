@@ -17,6 +17,9 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   private var lastSessionID = ""
   private var wasRunning = false
   private var operation: Task<Void, Never>?
+  private let control = EasyTierControlClient()
+  private var shouldRun = false
+  private var vpnNeedsRetry = false
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let bridge = EasyTierFlutterBridge()
@@ -32,23 +35,37 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
       Task { @MainActor in bridge?.startPolling() }
     }
     bridge.backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak bridge] _ in
-      Task { @MainActor in bridge?.timer?.invalidate(); bridge?.timer = nil }
+      Task { @MainActor in
+        guard let bridge else { return }
+        bridge.timer?.invalidate()
+        bridge.timer = nil
+        bridge.enqueue {
+          guard !bridge.isForeground else { return }
+          do { try await bridge.control.stop() }
+          catch { bridge.report(error) }
+        }
+      }
     }
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
-    if call.method == "ensureRunning" || call.method == "stopRuntime" {
-      let previous = operation
-      let task = Task { @MainActor in
-        await previous?.value
-        await handleAsync(call.method, args: args, result: result)
-      }
-      operation = task
+    if ["ensureRunning", "stopRuntime", "readStatus", "collectNetworkInfos", "callJsonRpc"].contains(call.method) {
+      enqueue { await self.handleAsync(call.method, args: args, result: result) }
     } else {
       Task { @MainActor in await handleAsync(call.method, args: args, result: result) }
     }
   }
+
+  private func enqueue(_ action: @escaping @MainActor () async -> Void) {
+    let previous = operation
+    operation = Task { @MainActor in
+      await previous?.value
+      await action()
+    }
+  }
+
+  private var isForeground: Bool { UIApplication.shared.applicationState != .background }
 
   private func handleAsync(_ method: String, args: [String: Any], result: @escaping FlutterResult) async {
     do {
@@ -61,6 +78,7 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
           let raw = try EasyTierShared.readSecret("runtime_bootstrap") ?? "{}"
           let saved = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: String] ?? [:]
           if saved["url"] != url || saved["token"] != token { status["running"] = false }
+          else if isRunning { shouldRun = true; wasRunning = true }
         }
         result(status)
       case "ensureRunning": result(try await ensureRunning(args))
@@ -132,61 +150,108 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   }
 
   private func ensureRunning(_ args: [String: Any]) async throws -> [String: Any] {
-    #if targetEnvironment(simulator)
-    throw runtimeError("iOS 模拟器不支持系统 VPN，请使用真机连接网络。")
-    #else
     let url = try requiredString(args, "url")
     let token = try requiredString(args, "token")
     let hostname = try requiredString(args, "hostname")
     let bootstrap = try jsonString(["url": url, "token": token, "hostname": hostname])
     let oldBootstrap = try EasyTierShared.readSecret("runtime_bootstrap")
+    _ = try await loadManager()
+    shouldRun = true
+    vpnNeedsRetry = false
+    if oldBootstrap == bootstrap, args["forceReinstall"] as? Bool != true {
+      if isRunning { wasRunning = true; return try await readStatus() }
+      let status = try await control.status()
+      if status["running"] as? Bool == true { return status }
+    }
+    try await disconnectVPN()
+    try await control.stop()
+    try EasyTierShared.writeSecret("runtime_bootstrap", value: bootstrap)
+    guard isForeground else { return try await readStatus() }
+    let status = try await control.start(["url": url, "token": token, "hostname": hostname])
+    controlStarted(hostname)
+    return status
+  }
+
+  private func activateVPN() async throws {
+    #if targetEnvironment(simulator)
+    throw runtimeError("iOS 模拟器不支持系统 VPN，请使用真机连接网络。")
+    #else
+    let bootstrap = try savedBootstrap()
     let manager = try await loadManager() ?? NETunnelProviderManager()
     self.manager = manager
-    if oldBootstrap == bootstrap, isRunning, args["forceReinstall"] as? Bool != true {
-      return try await readStatus()
-    }
-    if manager.connection.status != .disconnected && manager.connection.status != .invalid {
-      manager.connection.stopVPNTunnel()
-      try await waitFor(manager, running: false)
-    }
-    try EasyTierShared.writeSecret("runtime_bootstrap", value: bootstrap)
+    if isRunning || !shouldRun { return }
     let config = NETunnelProviderProtocol()
     config.providerBundleIdentifier = Bundle.main.bundleIdentifier! + ".PacketTunnel"
-    config.serverAddress = URL(string: url)?.host ?? "EasyTier Pro"
+    config.serverAddress = URL(string: bootstrap["url"]!)?.host ?? "EasyTier Pro"
     // Secrets live in the shared Keychain, never in providerConfiguration.
     manager.protocolConfiguration = config
     manager.localizedDescription = "EasyTier Pro"
     manager.isEnabled = true
     manager.isOnDemandEnabled = false
+    // Keep the foreground connection until VPN authorization succeeds.
     try await save(manager)
+    try await control.stop()
     try manager.connection.startVPNTunnel()
     try await waitFor(manager, running: true)
-    return try await readStatus()
+    wasRunning = true
     #endif
   }
 
   private func stopRuntime() async throws {
-    guard let manager = try await loadManager() else {
-      try EasyTierShared.deleteSecret("runtime_bootstrap")
-      return
-    }
-    manager.isOnDemandEnabled = false
+    shouldRun = false
+    vpnNeedsRetry = false
+    try await disconnectVPN()
+    try await control.stop()
+    try EasyTierShared.deleteSecret("runtime_bootstrap")
+  }
+
+  private func disconnectVPN() async throws {
+    guard let manager = try await loadManager() else { return }
     if manager.connection.status != .disconnected && manager.connection.status != .invalid {
       manager.connection.stopVPNTunnel()
       try await waitFor(manager, running: false)
     }
-    try EasyTierShared.deleteSecret("runtime_bootstrap")
-    try await save(manager)
+    wasRunning = false
+  }
+
+  private func savedBootstrap() throws -> [String: String] {
+    let raw = try EasyTierShared.readSecret("runtime_bootstrap") ?? "{}"
+    let bootstrap = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: String] ?? [:]
+    for key in ["url", "hostname"] { _ = try requiredString(bootstrap, key) }
+    return bootstrap
+  }
+
+  private func resumeControl() async throws -> [String: Any] {
+    let before = try await control.status()
+    if before["running"] as? Bool == true { return before }
+    let bootstrap = try savedBootstrap()
+    let status = try await control.start(bootstrap)
+    controlStarted(bootstrap["hostname"]!)
+    return status
+  }
+
+  private func controlStarted(_ hostname: String) {
+    eventSink?(["type": "config_server_started", "payload": ["hostname": hostname, "mode": "control"]])
+  }
+
+  private func report(_ error: Error) {
+    let nsError = error as NSError
+    let permissionDenied = nsError.domain == NEVPNErrorDomain && nsError.code == NEVPNError.configurationReadWriteFailed.rawValue
+    eventSink?(["type": permissionDenied ? "vpn_permission_denied" : "error",
+                "payload": ["error": redacted(error.localizedDescription)]])
   }
 
   private func waitFor(_ manager: NETunnelProviderManager, running: Bool) async throws {
-    let deadline = Date().addingTimeInterval(30)
+    let deadline = Date().addingTimeInterval(40)
     var sawConnecting = false
-    while Date() < deadline {
+    while true {
       let status = manager.connection.status
       if status == .connecting { sawConnecting = true }
       if running && (status == .connected || status == .reasserting) { return }
       if !running && (status == .disconnected || status == .invalid) { return }
+      if Date() >= deadline {
+        throw runtimeError(running ? "等待 VPN 启动超时。" : "等待 VPN 断开超时。")
+      }
       if running && sawConnecting && status == .disconnected {
         let state = try EasyTierShared.readStatus()
         let message = state["last_error"] as? String ?? ""
@@ -194,7 +259,6 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
       }
       try await Task.sleep(nanoseconds: 200_000_000)
     }
-    throw runtimeError(running ? "等待 VPN 启动超时。" : "等待 VPN 断开超时。")
   }
 
   private func readStatus() async throws -> [String: Any] {
@@ -203,10 +267,13 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     if isRunning {
       status = try await providerMessage(["method": "readStatus"]) as? [String: Any] ?? [:]
     } else {
-      status = try EasyTierShared.readStatus()
-      status["running"] = false
-      status["connected"] = false
-      status["core_version"] = Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String ?? ""
+      status = try await control.status()
+      if status["running"] as? Bool != true {
+        status = try EasyTierShared.readStatus()
+        status["running"] = false
+        status["connected"] = false
+        status["core_version"] = Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String ?? ""
+      }
     }
     status["machine_id"] = try EasyTierShared.machineID()
     return status
@@ -254,24 +321,59 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
   private func poll() async {
     guard !polling, eventSink != nil else { return }
     polling = true
+    enqueue { await self.pollRuntime() }
+  }
+
+  private func pollRuntime() async {
     defer { polling = false }
+    guard isForeground else { return }
     do {
       let status = try await readStatus()
       let sessionID = status["session_id"] as? String ?? ""
       if sessionID != lastSessionID { lastSessionID = sessionID; lastEventID = 0 }
       for event in status["events"] as? [[String: Any]] ?? [] {
         let id = event["id"] as? Int ?? 0
-        if id > lastEventID { eventSink?(event); lastEventID = id }
+        guard id > lastEventID else { continue }
+        lastEventID = id
+        let reason = (event["payload"] as? [String: Any])?["reason"] as? String ?? ""
+        if event["type"] as? String == "config_server_stopped" && ["network_removed", "start_failed"].contains(reason) {
+          continue // Native ownership changes do not trigger Dart reconnection.
+        }
+        eventSink?(event)
       }
       if wasRunning && !isRunning {
         let lastStop = (status["events"] as? [[String: Any]] ?? []).last { $0["type"] as? String == "config_server_stopped" }
+        let reason = (lastStop?["payload"] as? [String: Any])?["reason"] as? String ?? "system_stop"
+        if !["network_removed", "start_failed"].contains(reason) {
+          shouldRun = false
+        }
         if lastStop == nil {
           eventSink?(["type": "config_server_stopped", "payload": ["reason": "system_stop"]])
         }
       }
       wasRunning = isRunning
+      guard shouldRun, !isRunning,
+            manager == nil || manager?.connection.status == .disconnected || manager?.connection.status == .invalid else { return }
+      let controlStatus = try await resumeControl()
+      if controlStatus["has_networks"] as? Bool != true {
+        if vpnNeedsRetry {
+          vpnNeedsRetry = false
+          controlStarted(try savedBootstrap()["hostname"]!)
+        }
+        return
+      }
+      guard !vpnNeedsRetry else { return }
+      do {
+        try await activateVPN()
+      } catch {
+        vpnNeedsRetry = true
+        // Never overlap the two cores, including after a failed VPN start.
+        try await disconnectVPN()
+        if shouldRun && isForeground { _ = try await resumeControl() }
+        report(error)
+      }
     } catch {
-      eventSink?(["type": "error", "payload": ["error": redacted(error.localizedDescription)]])
+      report(error)
     }
   }
 
@@ -279,10 +381,14 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
     let path = try requiredString(args, "path")
     guard path.hasPrefix(NSHomeDirectory() + "/") else { throw runtimeError("诊断文件不在应用目录中。") }
     if isRunning { _ = try await providerMessage(["method": "flushDiagnostics"]) }
+    await control.flushDiagnostics()
     let container = try EasyTierShared.container()
     var data = try Data(contentsOf: URL(fileURLWithPath: path))
     let logURLs = [container.appendingPathComponent("vpn.previous.log"), container.appendingPathComponent("vpn.log")]
-      + ((try? FileManager.default.contentsOfDirectory(at: container.appendingPathComponent("core-logs"), includingPropertiesForKeys: nil)) ?? []).sorted { $0.lastPathComponent < $1.lastPathComponent }
+      + ["core-logs", "control-logs"].flatMap { directory in
+        ((try? FileManager.default.contentsOfDirectory(at: container.appendingPathComponent(directory), includingPropertiesForKeys: nil)) ?? [])
+          .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      }
     for url in logURLs where url.pathExtension == "log" {
       if let logs = try? Data(contentsOf: url) {
         data.append(Data("\n--- iOS VPN: \(url.lastPathComponent) ---\n".utf8))

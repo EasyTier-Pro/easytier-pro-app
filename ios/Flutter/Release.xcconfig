@@ -1,3 +1,4 @@
 #include "Generated.xcconfig"
 #include "Signing.xcconfig"
 #include "../Frameworks/CoreVersion.xcconfig"
+OTHER_LDFLAGS = $(inherited) -framework SystemConfiguration -framework Security -framework NetworkExtension

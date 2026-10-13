@@ -34,18 +34,32 @@ class RunnerTests: XCTestCase {
 
   #if targetEnvironment(simulator)
   @MainActor
-  func testSimulatorReportsPackagedCoreAndRejectsVPN() async throws {
+  func testSimulatorRunsForegroundControlWithoutVPN() async throws {
     let bridge = EasyTierFlutterBridge()
     let status = try await call(bridge, "readStatus", [:]) as? [String: Any]
     XCTAssertEqual(status?["running"] as? Bool, false)
     XCTAssertEqual(status?["core_version"] as? String,
                    Bundle.main.object(forInfoDictionaryKey: "EasyTierCoreVersion") as? String)
+    let bootstrap: [String: Any] = ["url": "tcp://127.0.0.1:9/native-test", "token": "native-test",
+                                    "hostname": "native-test", "forceReinstall": false]
     do {
-      _ = try await call(bridge, "ensureRunning", [:])
-      XCTFail("Simulator must not report a working system VPN")
+      let first = try await call(bridge, "ensureRunning", bootstrap) as? [String: Any]
+      XCTAssertEqual(first?["running"] as? Bool, true)
+      XCTAssertEqual(first?["has_networks"] as? Bool, false)
+      XCTAssertEqual(first?["connected"] as? Bool, false)
+      XCTAssertEqual(first?["machine_id"] as? String, status?["machine_id"] as? String)
+      let second = try await call(bridge, "ensureRunning", bootstrap) as? [String: Any]
+      XCTAssertEqual(first?["session_id"] as? String, second?["session_id"] as? String)
+      let stale = try await call(bridge, "readStatus", ["url": "tcp://127.0.0.1:9/other", "token": "other"]) as? [String: Any]
+      XCTAssertEqual(stale?["running"] as? Bool, false)
     } catch {
-      XCTAssertTrue(error.localizedDescription.contains("模拟器不支持系统 VPN"))
+      _ = try? await call(bridge, "stopRuntime", [:])
+      throw error
     }
+    _ = try await call(bridge, "stopRuntime", [:])
+    let stopped = try await call(bridge, "readStatus", [:]) as? [String: Any]
+    XCTAssertEqual(stopped?["running"] as? Bool, false)
+    XCTAssertEqual(stopped?["machine_id"] as? String, status?["machine_id"] as? String)
   }
   #endif
 

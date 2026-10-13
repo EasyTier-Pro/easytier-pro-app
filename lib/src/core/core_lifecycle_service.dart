@@ -2450,6 +2450,9 @@ exit 3
     }
     if (event.type == CoreRuntimeEventTypes.configServerStarted) {
       final payload = _runtimeEventPayload(event);
+      if (event.data['platform'] == 'iOS' && payload['mode'] == 'control') {
+        _restoreRunningStatusAfterVpnRecovery(platform);
+      }
       _logger.info(
         'core.runtime',
         '$platform config server client started',
