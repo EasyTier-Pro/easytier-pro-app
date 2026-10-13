@@ -263,6 +263,11 @@ final class EasyTierFlutterBridge: NSObject, @preconcurrency FlutterPlugin, @pre
 
   private func readStatus() async throws -> [String: Any] {
     _ = try await loadManager()
+    if let manager, manager.connection.status != .disconnected && manager.connection.status != .invalid {
+      // iOS and Shortcuts can start the VPN independently of this bridge.
+      // Once it owns the tunnel, retire this process's control connection.
+      try await control.stop()
+    }
     var status: [String: Any]
     if isRunning {
       status = try await providerMessage(["method": "readStatus"]) as? [String: Any] ?? [:]

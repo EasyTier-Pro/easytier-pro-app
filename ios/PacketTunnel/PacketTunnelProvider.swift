@@ -243,7 +243,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     guard started || startCompletion != nil else { return }
     started = false
     generation += 1
-    finishStart(error ?? self.error("VPN 启动已取消。"))
     timer?.cancel()
     timer = nil
     pathMonitor?.cancel()
@@ -266,6 +265,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     reasserting = false
     emit("config_server_stopped", ["reason": reason])
     _ = easytier_ios_flush_diagnostic_logging()
+    finishStart(error ?? self.error("VPN 启动已取消。"))
   }
 
   private func finishStart(_ error: Error?) {
