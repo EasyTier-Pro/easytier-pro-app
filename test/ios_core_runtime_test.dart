@@ -189,8 +189,8 @@ void main() {
   test('control traffic growth leaves idle business traffic at zero', () async {
     for (final controlBytes in [1000, 2000]) {
       trafficMetrics = [
-        {'name': 'traffic_bytes_rx', 'value': 0},
-        {'name': 'traffic_bytes_tx', 'value': 0},
+        {'name': 'traffic_bytes_rx'},
+        {'name': 'traffic_bytes_tx'},
         {'name': 'traffic_bytes_self_rx', 'value': controlBytes},
         {'name': 'traffic_bytes_self_tx', 'value': controlBytes},
         {'name': 'traffic_control_bytes_rx', 'value': controlBytes},
@@ -201,6 +201,32 @@ void main() {
       expect(totals['authorized-network']?.uploadBytes, 0);
     }
   });
+
+  test(
+    'reads initial zero counters before the first business packet',
+    () async {
+      trafficMetrics = [
+        {'name': 'traffic_bytes_rx'},
+        {'name': 'traffic_bytes_tx'},
+      ];
+      final idle = await runtime.readNetworkTrafficTotals();
+      expect(idle.keys, ['authorized-network']);
+      expect(idle['authorized-network']?.downloadBytes, 0);
+      expect(idle['authorized-network']?.uploadBytes, 0);
+
+      trafficMetrics = [
+        {'name': 'traffic_bytes_rx', 'value': '4096'},
+        {'name': 'traffic_bytes_tx', 'value': '1024'},
+      ];
+      final active = await runtime.readNetworkTrafficTotals();
+      expect(active['authorized-network']?.downloadBytes, 4096);
+      expect(active['authorized-network']?.uploadBytes, 1024);
+
+      final settled = await runtime.readNetworkTrafficTotals();
+      expect(settled['authorized-network']?.downloadBytes, 4096);
+      expect(settled['authorized-network']?.uploadBytes, 1024);
+    },
+  );
 
   test('missing business counters do not produce a zero sample', () async {
     trafficMetrics = [

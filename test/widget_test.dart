@@ -4651,6 +4651,71 @@ void main() {
     expect(totals['nt-lab']?.uploadBytes, 8192);
   });
 
+  test('parses protobuf default zero business counters', () {
+    final sampledAt = DateTime.utc(2026, 1, 1);
+    final totals = CoreLifecycleService.parseNetworkTrafficTotalsFromJson(
+      jsonEncode([
+        {
+          'name': 'traffic_bytes_rx',
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_tx',
+          'labels': {'network_name': 'nt-office'},
+        },
+        {
+          'name': 'traffic_bytes_rx',
+          'labels': {'network_name': 'nt-lab'},
+        },
+        {
+          'name': 'traffic_bytes_tx',
+          'value': '2048',
+          'labels': {'network_name': 'nt-lab'},
+        },
+      ]),
+      sampledAt: sampledAt,
+    );
+
+    expect(totals.keys, ['nt-office', 'nt-lab']);
+    expect(totals['nt-office']?.downloadBytes, 0);
+    expect(totals['nt-office']?.uploadBytes, 0);
+    expect(totals['nt-office']?.sampledAt, sampledAt);
+    expect(totals['nt-lab']?.downloadBytes, 0);
+    expect(totals['nt-lab']?.uploadBytes, 2048);
+  });
+
+  test('rejects invalid business counter values and missing metrics', () {
+    for (final metrics in [
+      <Object?>[],
+      [
+        {
+          'name': 'traffic_bytes_self_rx',
+          'labels': {'network_name': 'nt-office'},
+        },
+      ],
+      for (final value in [null, 'invalid', -1])
+        [
+          {
+            'name': 'traffic_bytes_rx',
+            'value': value,
+            'labels': {'network_name': 'nt-office'},
+          },
+          {
+            'name': 'traffic_bytes_tx',
+            'value': value,
+            'labels': {'network_name': 'nt-office'},
+          },
+        ],
+    ]) {
+      expect(
+        CoreLifecycleService.parseNetworkTrafficTotalsFromJson(
+          jsonEncode(metrics),
+        ),
+        isEmpty,
+      );
+    }
+  });
+
   test('parses peer statuses by normalized ipv4', () {
     final statuses = CoreLifecycleService.parseNetworkPeerStatusesFromJson(
       jsonEncode([
@@ -5744,11 +5809,7 @@ void _expectTrafficSparklineWindow(
 
 void _expectTrafficChartAnimations(WidgetTester tester) {
   for (final chart in tester.widgetList<LineChart>(find.byType(LineChart))) {
-    if (chart.data.titlesData.show) {
-      expect(chart.duration, greaterThan(Duration.zero));
-    } else {
-      expect(chart.duration, Duration.zero);
-    }
+    expect(chart.duration, Duration.zero);
   }
 }
 

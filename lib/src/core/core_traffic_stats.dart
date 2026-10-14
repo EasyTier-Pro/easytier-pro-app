@@ -24,7 +24,10 @@ Map<String, CoreNetworkTrafficTotals> _parseNetworkTrafficTotals(
     if (runtimeNetworkName.isEmpty || runtimeNetworkName == '__access__') {
       continue;
     }
-    final value = CoreJsonValue.readInt(metric['value']);
+    // Protobuf JSON omits the value field when the counter is zero.
+    final value = metric.containsKey('value')
+        ? CoreJsonValue.readInt(metric['value'])
+        : 0;
     if (value == null || value < 0) continue;
 
     final totals = collected.putIfAbsent(

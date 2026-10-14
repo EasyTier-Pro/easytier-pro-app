@@ -603,8 +603,7 @@ class _HomeNetworkTrafficDetailChart extends StatelessWidget {
               uploadColor: uploadColor,
               detailed: true,
             ),
-            duration: appMotionMedium,
-            curve: appMotionCurve,
+            duration: Duration.zero,
           ),
         ),
       ],
@@ -907,8 +906,7 @@ LineChartBarData _buildTrafficLine(
 }) {
   return LineChartBarData(
     spots: spots,
-    isCurved: spots.length >= 4,
-    curveSmoothness: 0.3,
+    isCurved: false,
     barWidth: detailed ? 2.2 : 1.8,
     isStrokeCapRound: true,
     dotData: const FlDotData(show: false),
