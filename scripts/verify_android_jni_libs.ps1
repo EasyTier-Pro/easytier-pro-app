@@ -3,7 +3,9 @@ param(
     [string] $LibraryName = "libeasytier_android_jni.so",
     [string[]] $RequiredSymbol = @(
         "Java_com_easytier_jni_EasyTierJNI_callJsonRpc",
-        "Java_com_easytier_jni_EasyTierJNI_listInstances"
+        "Java_com_easytier_jni_EasyTierJNI_listInstances",
+        "Java_com_easytier_jni_EasyTierJNI_getMobileTunConfig",
+        "Java_com_easytier_jni_EasyTierJNI_attachMobileTunFd"
     )
 )
 

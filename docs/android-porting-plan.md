@@ -1,5 +1,9 @@
 # Android 移植可行性与实现方案
 
+> 本文保留早期移植设计。2026-10-28 起，多工作区与共享 TUN 实现以
+> [多工作区与移动端多网络](multi-workspace-networks.md) 为准；当前核心
+> 固定基线、共享补丁及构建方式见 [Android 发布](android-release.md)。
+
 本文记录基于上游 EasyTier Android JNI 与 config server client 能力，将 EasyTier Pro Flutter 客户端移植到 Android 平台的调研结论与实施方案。
 
 调研日期：2026-06-06

@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  EASYTIER_COMMIT: c0f42ebe8c0b18e49370ae810b13fba1bdbbb811
+  EASYTIER_COMMIT: 48ccc56a1aa4a63ec5192f71e85b330b155f0136
   RUST_TOOLCHAIN_VERSION: "1.95"
   ANDROID_NDK_VERSION: 28.2.13676358
   JNI_CACHE_VERSION: v1
@@ -61,7 +61,7 @@ jobs:
           path: |
             android/app/src/main/jniLibs/arm64-v8a/libeasytier_android_jni.so
             android/app/src/main/jniLibs/x86_64/libeasytier_android_jni.so
-          key: android-jni-${{ runner.os }}-${{ env.EASYTIER_COMMIT }}-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.JNI_CACHE_VERSION }}-${{ hashFiles('scripts/build_android_jni.ps1', 'scripts/verify_android_jni_libs.ps1') }}
+          key: android-jni-${{ runner.os }}-${{ env.EASYTIER_COMMIT }}-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.JNI_CACHE_VERSION }}-${{ hashFiles('scripts/build_android_jni.ps1', 'scripts/mobile_core.patch', 'scripts/verify_android_jni_libs.ps1') }}
 
       - name: Checkout EasyTier core
         if: steps.easytier-jni-cache.outputs.cache-hit != 'true'

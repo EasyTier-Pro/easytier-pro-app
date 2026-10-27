@@ -24,6 +24,12 @@ The Docker helper keeps large toolchain caches on the host under
 - `android-sdk/ndk/` for the Android NDK installed by Gradle;
 - `android-sdk/cmake/` for CMake installed by Gradle;
 - `android-sdk/temp/` for Android SDK manager temporary downloads.
+- `android-user-home/` for the debug signing key, so subsequent container
+  builds can replace the installed test app without losing its data.
+
+The reusable emulator container `casdoor-rehearsal-android` currently exposes
+adb at `localhost:5557`; inspect the container port mapping before running the
+commands below and substitute that serial when using this environment.
 
 By default the helper temporarily maps the Gradle wrapper distribution from
 `gradle-*-all.zip` to `gradle-*-bin.zip` inside the container. This does not

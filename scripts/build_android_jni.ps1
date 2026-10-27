@@ -1,6 +1,6 @@
 param(
     [string] $EasyTierRoot = "",
-    [string] $EasyTierCommit = "c0f42ebe8c0b18e49370ae810b13fba1bdbbb811",
+    [string] $EasyTierCommit = "48ccc56a1aa4a63ec5192f71e85b330b155f0136",
     [string] $AndroidSdk = "",
     [string] $NdkVersion = "28.2.13676358",
     [string[]] $Abi = @("arm64-v8a", "x86_64"),
@@ -79,7 +79,6 @@ function Read-AndroidSdkFromLocalProperties() {
 
 if ([string]::IsNullOrWhiteSpace($EasyTierRoot)) {
     $EasyTierRoot = Resolve-FirstPath @(
-        (Join-Path $PSScriptRoot "../../EasyTier-android-jni-c0f42"),
         (Join-Path $PSScriptRoot "../../EasyTier")
     )
 }
@@ -102,6 +101,28 @@ if (-not $SkipCommitCheck) {
     if ($currentCommit -ne $EasyTierCommit) {
         throw "EasyTier checkout is $currentCommit, expected $EasyTierCommit. Pass -SkipCommitCheck only when intentionally rebuilding another upstream revision."
     }
+}
+
+$mobilePatch = Join-Path $PSScriptRoot "mobile_core.patch"
+& git -C $EasyTierRoot apply --reverse --check $mobilePatch 2>$null
+if ($LASTEXITCODE -ne 0) {
+    & git -C $EasyTierRoot apply --check $mobilePatch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Shared mobile core patch does not match the EasyTier checkout."
+    }
+    & git -C $EasyTierRoot apply $mobilePatch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to apply shared mobile core patch."
+    }
+}
+Write-Host "Mobile core patch SHA256 $((Get-FileHash $mobilePatch -Algorithm SHA256).Hash)"
+
+if ([string]::IsNullOrWhiteSpace($env:CARGO_TARGET_DIR)) {
+    $gitCommonDir = (& git -C $EasyTierRoot rev-parse --path-format=absolute --git-common-dir).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to resolve the main EasyTier checkout."
+    }
+    $env:CARGO_TARGET_DIR = Join-Path (Split-Path $gitCommonDir -Parent) "target"
 }
 
 if ([string]::IsNullOrWhiteSpace($AndroidSdk)) {
@@ -186,7 +207,7 @@ foreach ($abiName in $Abi) {
             throw "rustup target add failed for $rustTarget"
         }
 
-        & cargo build --target $rustTarget --release
+        & cargo build --locked --target $rustTarget --release
         if ($LASTEXITCODE -ne 0) {
             throw "cargo build failed for $rustTarget"
         }
@@ -194,7 +215,7 @@ foreach ($abiName in $Abi) {
         Pop-Location
     }
 
-    $builtLibrary = Join-Path $EasyTierRoot "target/$rustTarget/release/libeasytier_android_jni.so"
+    $builtLibrary = Join-Path $env:CARGO_TARGET_DIR "$rustTarget/release/libeasytier_android_jni.so"
     if (-not (Test-Path $builtLibrary)) {
         throw "Expected JNI library was not produced: $builtLibrary"
     }

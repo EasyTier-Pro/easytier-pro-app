@@ -9,6 +9,7 @@ pub_cache="${EASYTIER_PUB_CACHE:-$cache_root/pub-cache}"
 ndk_cache="${EASYTIER_ANDROID_NDK_CACHE:-$cache_root/android-sdk/ndk}"
 cmake_cache="${EASYTIER_ANDROID_CMAKE_CACHE:-$cache_root/android-sdk/cmake}"
 android_temp_cache="${EASYTIER_ANDROID_TEMP_CACHE:-$cache_root/android-sdk/temp}"
+android_user_home="${EASYTIER_ANDROID_USER_HOME:-$cache_root/android-user-home}"
 image="${EASYTIER_FLUTTER_DOCKER_IMAGE:-ghcr.io/cirruslabs/flutter:stable}"
 gradle_distribution="${EASYTIER_GRADLE_DISTRIBUTION:-bin}"
 
@@ -29,6 +30,7 @@ Environment:
   EASYTIER_ANDROID_NDK_CACHE      Host Android NDK cache directory.
   EASYTIER_ANDROID_CMAKE_CACHE    Host Android CMake cache directory.
   EASYTIER_ANDROID_TEMP_CACHE     Host Android SDK temporary download directory.
+  EASYTIER_ANDROID_USER_HOME      Host Android user directory, including the persistent debug signing key.
 EOF
 }
 
@@ -37,7 +39,7 @@ if [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-mkdir -p "$gradle_home" "$pub_cache" "$ndk_cache" "$cmake_cache" "$android_temp_cache"
+mkdir -p "$gradle_home" "$pub_cache" "$ndk_cache" "$cmake_cache" "$android_temp_cache" "$android_user_home"
 
 tmp_wrapper=""
 wrapper_mount_args=()
@@ -74,6 +76,7 @@ docker run --rm \
   -v "$ndk_cache:/opt/android-sdk-linux/ndk" \
   -v "$cmake_cache:/opt/android-sdk-linux/cmake" \
   -v "$android_temp_cache:/opt/android-sdk-linux/.temp" \
+  -v "$android_user_home:/root/.android" \
   -e GRADLE_USER_HOME=/gradle-home \
   -e PUB_CACHE=/pub-cache \
   -w /workspace \
