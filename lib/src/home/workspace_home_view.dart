@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:forui/forui.dart';
 import 'package:flutter/foundation.dart';
@@ -48,6 +47,7 @@ part 'workspace_home_shared_widgets.dart';
 part 'workspace_home_settings_panel.dart';
 part 'workspace_home_network_switch.dart';
 part 'workspace_home_state_widgets.dart';
+part 'workspace_home_workspaces.dart';
 
 class WorkspaceHomeView extends StatefulWidget {
   const WorkspaceHomeView({
@@ -59,7 +59,6 @@ class WorkspaceHomeView extends StatefulWidget {
     required this.windowBehaviorPreferences,
     required this.session,
     required this.onLogout,
-    this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
@@ -69,7 +68,6 @@ class WorkspaceHomeView extends StatefulWidget {
   final WindowBehaviorPreferences windowBehaviorPreferences;
   final AuthSession session;
   final Future<void> Function() onLogout;
-  final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
   State<WorkspaceHomeView> createState() => _WorkspaceHomeViewState();
@@ -77,9 +75,6 @@ class WorkspaceHomeView extends StatefulWidget {
 
 class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     with HomeTrayActionsMixin<WorkspaceHomeView> {
-  static const Duration _devicePollDelay = Duration(seconds: 1);
-  static const int _devicePollAttempts = 60;
-
   List<ConsoleNetwork> _networks = const <ConsoleNetwork>[];
   List<ConsoleRegion> _regions = const <ConsoleRegion>[];
   List<ManagedDevice> _managedDevices = const <ManagedDevice>[];
@@ -144,7 +139,23 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
   String? _trayWorkspaceName;
   bool? _trayConnectionEnabled;
   bool? _trayConnectionDisconnecting;
-  ConsoleWorkspace? get _workspace => widget.session.user.currentWorkspace;
+  List<ConsoleWorkspace>? _availableWorkspaces;
+  bool _workspaceReady = false;
+  bool _isRestoringConnections = false;
+  int _workspaceGeneration = 0;
+  Set<String> _knownConnections = {};
+  String? _displayedWorkspaceId;
+  final Map<String, String?> _workspaceSelectedNetworks = {};
+
+  List<ConsoleWorkspace> get _workspaces =>
+      _availableWorkspaces ?? widget.session.user.workspaces;
+  ConsoleWorkspace? get _workspace {
+    final id = _displayedWorkspaceId;
+    for (final workspace in _workspaces) {
+      if (workspace.id == id) return workspace;
+    }
+    return _workspaces.firstOrNull;
+  }
 
   @override
   TraySupport get traySupport => widget.traySupport;
@@ -170,17 +181,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
       'Update check failed from tray',
       context: {'error': error.toString(), 'stack': stack.toString()},
     );
-  }
-
-  bool get _isAndroidMvpSingleActiveNetwork {
-    final override = widget.androidMvpSingleActiveNetworkOverride;
-    if (override != null) {
-      return override;
-    }
-    if (kIsWeb) {
-      return false;
-    }
-    return Platform.isAndroid || Platform.isIOS;
   }
 
   ConsoleNetwork? get _selectedNetwork {
@@ -351,11 +351,23 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     widget.coreLifecycleService.status.addListener(_onCoreStatusChanged);
     initHomeTrayActions();
     _syncTrayConnectionAction();
-    unawaited(_loadInitialData());
+    widget.coreLifecycleService.selectedWorkspaceId.addListener(
+      _onWorkspaceChanged,
+    );
+    widget.coreLifecycleService.networkConnections.addListener(
+      _onConnectionsChanged,
+    );
+    unawaited(_initializeWorkspaces());
   }
 
   @override
   void dispose() {
+    widget.coreLifecycleService.selectedWorkspaceId.removeListener(
+      _onWorkspaceChanged,
+    );
+    widget.coreLifecycleService.networkConnections.removeListener(
+      _onConnectionsChanged,
+    );
     _trafficPollTimer?.cancel();
     _peerPollTimer?.cancel();
     _newNetworkNameController.dispose();
@@ -376,6 +388,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     syncHomeTrayCoreUpdateAction();
     _refreshTrafficPolling();
     _refreshPeerPolling();
+    if (_workspaceReady && widget.coreLifecycleService.status.value.isRunning) {
+      unawaited(_restoreWorkspaceConnections());
+    }
     final selectedNetworkId = _selectedNetworkId;
     if (_activeView == _DashboardView.network && selectedNetworkId != null) {
       unawaited(_loadLocalNodeConfigForNetworkId(selectedNetworkId));
@@ -387,6 +402,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     final workspaceName = _workspace?.name ?? '未关联工作区';
     final contentKey = ValueKey<String>(
       [
+        _workspace?.id ?? 'none',
         _activeView.name,
         if (_activeView == _DashboardView.network) _selectedNetworkId ?? 'none',
       ].join(':'),
@@ -396,6 +412,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
       desktopHeader: _DashboardHeader(
         userName: widget.session.user.effectiveName,
         workspaceName: workspaceName,
+        workspaceSelector: _workspaceSelector(),
+        connectionSummary: _connectionSummary(),
         activeView: _activeView,
         networks: _networks,
         deviceCount: _totalDeviceCount,
@@ -411,6 +429,8 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
       mobileHeader: _MobileDashboardHeader(
         userName: widget.session.user.effectiveName,
         workspaceName: workspaceName,
+        workspaceSelector: _workspaceSelector(),
+        connectionSummary: _connectionSummary(),
         onShowSettings: _showSettings,
         onLogout: widget.onLogout,
         coreStatusListenable: widget.coreLifecycleService.status,

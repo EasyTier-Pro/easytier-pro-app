@@ -186,16 +186,18 @@ class HomeShellMobileHeader extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

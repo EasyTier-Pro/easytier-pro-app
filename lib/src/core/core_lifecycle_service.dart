@@ -12,6 +12,7 @@ import 'core_json_value.dart';
 import 'core_peer_status.dart';
 
 part 'core_lifecycle_models.dart';
+part 'core_workspace_connections.dart';
 part 'core_platform_runtime.dart';
 part 'core_traffic_stats.dart';
 part 'desktop_core_runtime.dart';
@@ -94,6 +95,19 @@ class CoreLifecycleService {
   late final CorePlatformRuntime _runtime;
   late final StreamSubscription<CoreRuntimeEvent> _runtimeEvents;
   AuthSession? _session;
+  WorkspacePreferences _workspacePreferences = const WorkspacePreferences();
+  String? _workspaceAccountId;
+  Future<void>? _workspaceInitialization;
+  Future<ManagedDevice>? _sourceDeviceRequest;
+  final selectedWorkspaceId = ValueNotifier<String?>(null);
+  final networkConnections = ValueNotifier<Map<String, CoreNetworkConnection>>(
+    {},
+  );
+  final Map<String, Future<void>> _networkOperations = {};
+  final Map<String, int> _networkOperationGenerations = {};
+  int _connectionGeneration = 0;
+  bool _connectionsDisposed = false;
+
   TokenConnectionProfile? _tokenConnectionProfile;
   Future<void> _serial = Future<void>.value();
   String? _cliPath;
@@ -112,40 +126,25 @@ class CoreLifecycleService {
 
   Future<void> bindSession(AuthSession session) {
     return _enqueue(() async {
-      final previousWorkspace = _session?.user.currentWorkspace?.id;
-      final nextWorkspace = session.user.currentWorkspace?.id;
+      final accountChanged =
+          _session != null && _session!.user.id != session.user.id;
+      if (accountChanged) {
+        _resetWorkspaceConnections();
+        await _runtime.stop();
+      }
       final versionScopeChanged =
           _engineVersionScopeForSession(_session) !=
           _engineVersionScopeForSession(session);
-      final workspaceChanged =
-          previousWorkspace != null &&
-          nextWorkspace != null &&
-          previousWorkspace != nextWorkspace;
-
+      await initializeWorkspaceSession(session, checkSourceAccess: false);
       _session = session;
       _tokenConnectionProfile = null;
       _invalidateEngineVersionChecks();
       if (versionScopeChanged) {
         engineVersionStatus.value = CoreEngineVersionStatus.unknown;
       }
-      _logger.info(
-        'core',
-        'Binding session',
-        context: {
-          'workspace_changed': workspaceChanged,
-          'previous_workspace': previousWorkspace,
-          'next_workspace': nextWorkspace,
-        },
-      );
       _reportSessionEstablished(session);
-      if (workspaceChanged) {
-        status.value = const CoreRunStatus(
-          phase: CoreRunPhase.repairing,
-          message: '工作区变更，正在重建连接引擎...',
-        );
-      }
-      await _ensureRunning(forceReinstall: workspaceChanged);
-      if (_session?.user.currentWorkspace != null) {
+      await _ensureRunning(forceReinstall: accountChanged);
+      if (sourceWorkspaceId != null) {
         _startEngineVersionCheckTimer();
       }
     });
@@ -166,6 +165,7 @@ class CoreLifecycleService {
 
   Future<void> onSessionExpired(Object error) {
     return _enqueue(() async {
+      _resetWorkspaceConnections();
       _session = null;
       _invalidateEngineVersionChecks();
       _stopEngineVersionCheckTimer();
@@ -175,6 +175,7 @@ class CoreLifecycleService {
 
   Future<void> onLogout() {
     return _enqueue(() async {
+      _resetWorkspaceConnections();
       _session = null;
       _tokenConnectionProfile = null;
       _invalidateEngineVersionChecks();
@@ -323,6 +324,7 @@ class CoreLifecycleService {
     _stopEngineVersionCheckTimer();
     await _runtimeEvents.cancel();
     await _runtime.dispose();
+    _disposeWorkspaceConnections();
     engineVersionStatus.dispose();
     status.dispose();
   }
@@ -333,6 +335,7 @@ class CoreLifecycleService {
 
   Future<void> bindTokenConnection(TokenConnectionProfile profile) {
     return _enqueue(() async {
+      _resetWorkspaceConnections();
       _session = null;
       _tokenConnectionProfile = profile;
       _invalidateEngineVersionChecks();
@@ -379,7 +382,7 @@ class CoreLifecycleService {
           return;
         }
 
-        if (session != null && session.user.currentWorkspace == null) {
+        if (session != null && _sourceWorkspace == null) {
           status.value = const CoreRunStatus(
             phase: CoreRunPhase.error,
             message: '当前账号未绑定工作区',
@@ -401,11 +404,8 @@ class CoreLifecycleService {
         try {
           final CoreBootstrapConfig bootstrap;
           if (session != null) {
-            final workspace = session.user.currentWorkspace!;
-            bootstrap = await authService.prepareCoreBootstrap(
-              accessToken: session.tokenSet.accessToken,
-              workspaceId: workspace.id,
-            );
+            final workspace = _sourceWorkspace!;
+            bootstrap = await _prepareSourceBootstrap(session, workspace.id);
           } else {
             final defaults = await authService.fetchCoreBootstrapDefaults();
             bootstrap = profile!.toBootstrap(
@@ -1123,7 +1123,7 @@ exit 3
         );
         return;
       }
-      final workspace = session.user.currentWorkspace;
+      final workspace = _sourceWorkspace;
       if (workspace == null) {
         _logger.error('core', 'No workspace available for lifecycle binding');
         if (status.value.phase != CoreRunPhase.signedOut) {
@@ -1151,10 +1151,7 @@ exit 3
       );
 
       try {
-        final bootstrap = await authService.prepareCoreBootstrap(
-          accessToken: session.tokenSet.accessToken,
-          workspaceId: workspace.id,
-        );
+        final bootstrap = await _prepareSourceBootstrap(session, workspace.id);
         if (!forceReinstall) {
           final runtimeStatus = await _runtime.readStatus(bootstrap);
           final machineId = runtimeStatus?.machineId;
@@ -1470,7 +1467,7 @@ exit 3
       );
       return;
     }
-    final workspace = session.user.currentWorkspace;
+    final workspace = _sourceWorkspace;
     if (workspace == null) {
       engineVersionStatus.value = CoreEngineVersionStatus.unknown;
       return;
@@ -1545,11 +1542,7 @@ exit 3
   }
 
   String? _engineVersionScopeForSession(AuthSession? session) {
-    final workspaceId = session?.user.currentWorkspace?.id;
-    if (session == null || workspaceId == null) {
-      return null;
-    }
-    return '${session.user.email}\n$workspaceId';
+    return session?.user.id;
   }
 
   bool _isCurrentEngineVersionCheck({
@@ -1560,7 +1553,7 @@ exit 3
     final currentSession = _session;
     return generation == _engineVersionCheckGeneration &&
         identical(currentSession, session) &&
-        currentSession?.user.currentWorkspace?.id == workspaceId;
+        sourceWorkspaceId == workspaceId;
   }
 
   bool _isCurrentTokenEngineVersionCheck({

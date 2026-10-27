@@ -22,6 +22,82 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   Future<TokenSet>? _tokenRefreshInFlight;
   int _authGeneration = 0;
 
+  String _workspacePreferencesKey(String accountId) =>
+      'workspace_context:${Uri.encodeComponent(consoleBaseUrl.replaceFirst(RegExp(r"/+$"), ""))}:${Uri.encodeComponent(accountId)}';
+
+  @override
+  Future<WorkspacePreferences> loadWorkspacePreferences(
+    String accountId,
+  ) async {
+    final raw = tokenStore._preferences.getString(
+      _workspacePreferencesKey(accountId),
+    );
+    return raw == null
+        ? const WorkspacePreferences()
+        : WorkspacePreferences.fromJson(_decodeObject(raw));
+  }
+
+  @override
+  Future<void> saveWorkspacePreferences(
+    String accountId,
+    WorkspacePreferences preferences,
+  ) async {
+    await tokenStore._preferences.setString(
+      _workspacePreferencesKey(accountId),
+      jsonEncode(preferences.toJson()),
+    );
+  }
+
+  @override
+  Future<void> authorizeDeviceWorkspace({
+    required String accessToken,
+    required String sourceWorkspaceId,
+    required String deviceId,
+    required String targetWorkspaceId,
+  }) async {
+    // Console owns default-key selection and approval policy. This exact
+    // account-mode request acquires the member default without enrolling again.
+    final keyResponse = await _post(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$targetWorkspaceId/device-enrollment-keys',
+      ),
+      operation: 'authorizeDeviceWorkspace.defaultKey',
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'display_name': _enrollmentKeyDisplayName(),
+        'reusable': true,
+        'pre_approved': true,
+      }),
+    );
+    if (keyResponse.statusCode < 200 || keyResponse.statusCode >= 300) {
+      throw _authAwareException(keyResponse, '获取工作区设备授权失败');
+    }
+    final keyBody = _decodeObject(keyResponse.body);
+    final key = keyBody['enrollment_key'] as Map<String, dynamic>?;
+    final keyId = key?['id']?.toString() ?? '';
+    if (keyId.isEmpty) throw const AuthException('控制台未返回设备注册密钥标识。');
+    final response = await _post(
+      Uri.parse(
+        '$consoleBaseUrl/api/v1/tenants/$sourceWorkspaceId/devices/$deviceId/shares',
+      ),
+      operation: 'authorizeDeviceWorkspace.share',
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'target_workspace_id': targetWorkspaceId,
+        'enrollment_key_id': keyId,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _authAwareException(response, '授权本机使用此工作区失败');
+    }
+  }
+
   @override
   Stream<SessionExpiredException> get sessionExpirations =>
       _sessionExpirations.stream;
@@ -37,7 +113,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
 
     try {
       final tokenSet = await _ensureFreshToken(storedTokenSet);
-      final user = await _fetchCurrentUser(tokenSet.accessToken);
+      final user = await fetchCurrentUser(tokenSet.accessToken);
       _logger.info(
         'auth',
         'Session restored',
@@ -139,7 +215,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
         );
 
         await _saveNewTokenSet(tokenSet);
-        final user = await _fetchCurrentUser(tokenSet.accessToken);
+        final user = await fetchCurrentUser(tokenSet.accessToken);
         _logger.info(
           'auth',
           'Device authorization completed',
@@ -428,6 +504,21 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
             osDistribution: item['os_distribution']?.toString() ?? '',
             lifecycleState: item['lifecycle_state']?.toString() ?? '',
             desiredState: item['desired_state']?.toString() ?? '',
+            workspaceId: item['tenant_id']?.toString() ?? '',
+            enrollmentKeyId: item['enrollment_key_id']?.toString(),
+            workspaceApprovalState:
+                (item['workspace_authorization']
+                        as Map<String, dynamic>?)?['approval_state']
+                    ?.toString(),
+            workspaceAuthorizationPresent:
+                item['workspace_authorization'] == null ||
+                (item['workspace_authorization']
+                        as Map<String, dynamic>)['desired_state'] ==
+                    'present',
+            canManageNodes:
+                (item['permissions']
+                    as Map<String, dynamic>?)?['can_manage_nodes'] ==
+                true,
           );
         })
         .whereType<ManagedDevice>()
@@ -864,6 +955,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
+    String? enrollmentKeyId,
   }) async {
     _logger.info(
       'auth.bootstrap',
@@ -874,6 +966,28 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
       operation: 'prepareCoreBootstrap.release',
     );
     final version = _releaseVersionFromBody(releaseBody);
+
+    if (enrollmentKeyId != null) {
+      final response = await _get(
+        Uri.parse(
+          '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys/$enrollmentKeyId/secret',
+        ),
+        operation: 'prepareCoreBootstrap.boundKeySecret',
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _authAwareException(response, '原设备接入凭据不可用，请检查源工作区授权');
+      }
+      final token =
+          _decodeObject(response.body)['bootstrap_token']?.toString() ?? '';
+      if (token.isEmpty) throw const AuthException('原设备接入凭据不可用。');
+      return CoreBootstrapConfig(
+        bootstrapToken: token,
+        version: version,
+        configServer: _configServerFromReleaseBody(releaseBody),
+        enrollmentKeyId: enrollmentKeyId,
+      );
+    }
 
     final keysResponse = await _get(
       Uri.parse(
@@ -893,8 +1007,10 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
     );
 
     String bootstrapToken;
+    String? selectedKeyId;
     if (key.isNotEmpty) {
       final keyId = key['id']!.toString();
+      selectedKeyId = keyId;
       final secretResponse = await _get(
         Uri.parse(
           '$consoleBaseUrl/api/v1/tenants/$workspaceId/device-enrollment-keys/$keyId/secret',
@@ -938,6 +1054,9 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
       }
       final createBody = _decodeObject(createResponse.body);
       bootstrapToken = createBody['bootstrap_token']?.toString() ?? '';
+      selectedKeyId =
+          (createBody['enrollment_key'] as Map<String, dynamic>?)?['id']
+              ?.toString();
       if (bootstrapToken.isEmpty) {
         throw const AuthException('创建密钥后未返回 bootstrap_token');
       }
@@ -945,6 +1064,7 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
 
     return CoreBootstrapConfig(
       bootstrapToken: bootstrapToken,
+      enrollmentKeyId: selectedKeyId,
       version: version,
       configServer: _configServerFromReleaseBody(releaseBody),
     );
@@ -1290,7 +1410,8 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
     return uri.replace(query: '<redacted>').toString();
   }
 
-  Future<ConsoleUser> _fetchCurrentUser(String accessToken) async {
+  @override
+  Future<ConsoleUser> fetchCurrentUser(String accessToken) async {
     final response = await _get(
       Uri.parse('$consoleBaseUrl/api/v1/auth/me'),
       operation: 'fetchCurrentUser',
@@ -1310,12 +1431,16 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
           (item) => ConsoleWorkspace(
             id: item['id']?.toString() ?? '',
             name: item['name']?.toString() ?? '',
+            capabilities: (item['capabilities'] as List<dynamic>? ?? const [])
+                .whereType<String>()
+                .toList(),
           ),
         )
         .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
         .toList(growable: false);
 
     return ConsoleUser(
+      id: user['id']?.toString() ?? '',
       email: user['email']?.toString() ?? '',
       displayName: user['display_name']?.toString() ?? '',
       workspaces: tenants,

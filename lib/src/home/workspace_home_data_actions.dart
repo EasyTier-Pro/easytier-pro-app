@@ -205,6 +205,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _loadNetworkDevices(List<ConsoleNetwork> networks) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     if (workspace == null || networks.isEmpty) {
       if (mounted) {
         _updateState(() {
@@ -228,7 +229,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         }
       }),
     );
-    if (!mounted) {
+    if (!mounted ||
+        _workspace?.id != workspace.id ||
+        generation != _workspaceGeneration) {
       return;
     }
     _updateState(() {
@@ -244,6 +247,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _loadSingleNetworkDevices(String networkId) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     if (workspace == null) {
       return;
     }
@@ -252,7 +256,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       workspaceId: workspace.id,
       networkId: networkId,
     );
-    if (!mounted) {
+    if (!mounted ||
+        _workspace?.id != workspace.id ||
+        generation != _workspaceGeneration) {
       return;
     }
     _updateState(() {
@@ -280,6 +286,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _loadNetworkSubnetRoutes(String networkId) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     if (workspace == null || networkId.isEmpty) {
       return;
     }
@@ -303,7 +310,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         workspaceId: workspace.id,
         networkId: networkId,
       );
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -314,7 +323,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         };
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -332,6 +343,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _loadLocalNodeConfigForNetworkId(String networkId) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     final node = _localNodeForNetworkId(networkId);
     if (workspace == null || node == null || node.id.isEmpty) {
       return;
@@ -353,7 +365,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         workspaceId: workspace.id,
         nodeId: node.id,
       );
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -361,7 +375,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         _nodeConfigLoading = {..._nodeConfigLoading, node.id: false};
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -385,7 +401,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       if (!device.attached) {
         continue;
       }
-      if (device.machineId?.trim() == machineId) {
+      if (widget.coreLifecycleService.localDeviceId != null
+          ? device.deviceId == widget.coreLifecycleService.localDeviceId
+          : device.machineId?.trim() == machineId) {
         return device;
       }
     }
@@ -397,6 +415,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     VoidCallback? onStateChanged,
   }) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     final regionCode = _selectedRegionCode;
     final name = _newNetworkName.trim();
     final ipv4Cidr = _newNetworkIPv4Cidr.trim();
@@ -429,7 +448,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         regions: [regionCode],
         ipv4Cidr: ipv4Cidr.isEmpty ? null : ipv4Cidr,
       );
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -445,7 +466,9 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       unawaited(_loadNetworks());
       onSuccess?.call();
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {
@@ -500,6 +523,7 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
   Future<void> _deleteNetwork(ConsoleNetwork network) async {
     final workspace = _workspace;
+    final generation = _workspaceGeneration;
     if (workspace == null) {
       _showNetworkActionToast('当前账号未关联工作区。', destructive: true);
       return;
@@ -518,13 +542,17 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
         workspaceId: workspace.id,
         networkId: network.id,
       );
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _removeDeletedNetworkLocally(network);
       _showNetworkActionToast('网络已删除，相关节点会自动退出。');
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          _workspace?.id != workspace.id ||
+          generation != _workspaceGeneration) {
         return;
       }
       _updateState(() {

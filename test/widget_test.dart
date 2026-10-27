@@ -1141,7 +1141,169 @@ void main() {
     },
   );
 
-  testWidgets('android blocks joining a second active network', (
+  testWidgets(
+    'workspace switch is shallow and preserves background connection',
+    (tester) async {
+      _useDesktopViewport(tester);
+      final auth = _FakeAuthService(
+        workspaces: const [
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+          ConsoleWorkspace(id: 'tenant-2', name: '团队空间'),
+        ],
+        networksByWorkspace: const {
+          'tenant-1': [ConsoleNetwork(id: 'net-1', name: '个人网络')],
+          'tenant-2': [ConsoleNetwork(id: 'net-2', name: '团队网络')],
+        },
+        managedDevices: const [
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'test',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+      );
+      final core = _NoopCoreLifecycleService(
+        authService: auth,
+        machineId: 'machine-1',
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: auth,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
+      await tester.pumpAndSettle();
+      expect(find.text('团队网络'), findsWidgets);
+      expect(core.sourceWorkspaceId, 'tenant-1');
+      expect(
+        core.networkConnections.value['net-1']?.phase,
+        CoreNetworkConnectionPhase.joined,
+      );
+      expect(auth.removedNodeIds, isEmpty);
+      await tester.tap(find.byKey(const ValueKey('workspace-connections')));
+      await tester.pumpAndSettle();
+      expect(find.text('个人空间 · 个人网络'), findsOneWidget);
+      await tester.tap(find.text('断开'));
+      await tester.pumpAndSettle();
+      expect(auth.removedNodeIds, ['node-1']);
+    },
+  );
+
+  testWidgets(
+    'narrow mobile header keeps long workspace and connected summary reachable',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 780);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final auth = _FakeAuthService(
+        workspaces: const [
+          ConsoleWorkspace(id: 'tenant-1', name: '一个很长的移动端个人与团队工作区名称'),
+          ConsoleWorkspace(id: 'tenant-2', name: '另一个很长的工作区名称用于验证切换'),
+        ],
+        networksByWorkspace: const {
+          'tenant-1': [ConsoleNetwork(id: 'net-1', name: '个人网络')],
+          'tenant-2': [ConsoleNetwork(id: 'net-2', name: '团队网络')],
+        },
+        managedDevices: const [
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'test',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+      );
+      final core = _NoopCoreLifecycleService(
+        authService: auth,
+        machineId: 'machine-1',
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: auth,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final switcher = find.byKey(const ValueKey('workspace-switcher'));
+      final summary = find.byKey(const ValueKey('workspace-connections'));
+      expect(
+        tester.getRect(switcher).overlaps(tester.getRect(summary)),
+        isFalse,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await tester.tap(summary);
+      await tester.pumpAndSettle();
+      expect(find.text('所有工作区的连接'), findsOneWidget);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(switcher);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
+      await tester.pumpAndSettle();
+      expect(core.selectedWorkspaceId.value, 'tenant-2');
+      expect(find.text('团队网络'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'stale workspace network response cannot overwrite the current view',
+    (tester) async {
+      _useDesktopViewport(tester);
+      final gate = Completer<void>();
+      final auth = _FakeAuthService(
+        workspaces: const [
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+          ConsoleWorkspace(id: 'tenant-2', name: '团队空间'),
+        ],
+        networksByWorkspace: const {
+          'tenant-1': [ConsoleNetwork(id: 'net-1', name: '过期个人网络')],
+          'tenant-2': [ConsoleNetwork(id: 'net-2', name: '当前团队网络')],
+        },
+        networkFetchGates: {'tenant-1': gate.future},
+      );
+      final core = _NoopCoreLifecycleService(
+        authService: auth,
+        machineId: 'machine-1',
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: auth,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('当前团队网络'), findsWidgets);
+      expect(find.text('过期个人网络'), findsNothing);
+      expect(core.selectedWorkspaceId.value, 'tenant-2');
+    },
+  );
+
+  testWidgets('allows joining and leaving networks independently', (
     WidgetTester tester,
   ) async {
     _useDesktopViewport(tester);
@@ -1170,7 +1332,6 @@ void main() {
           authService: authService,
           machineId: 'machine-1',
         ),
-        androidMvpSingleActiveNetworkOverride: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -1182,14 +1343,13 @@ void main() {
     await tester.tap(find.byType(FSwitch).at(1));
     await tester.pumpAndSettle();
 
-    expect(authService.attachedNetworkIds, <String>['net-1']);
-    _expectAndroidSingleNetworkLimitToastOnly();
+    expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
 
     await tester.tap(find.byType(FSwitch).at(1));
     await tester.pumpAndSettle();
 
-    expect(authService.attachedNetworkIds, <String>['net-1']);
-    _expectAndroidSingleNetworkLimitToastOnly();
+    expect(authService.attachedNetworkIds, <String>['net-1', 'net-2']);
+    expect(authService.removedNodeIds, ['node-2']);
 
     await tester.pump(const Duration(milliseconds: 3200));
     await tester.pumpAndSettle();
@@ -1226,7 +1386,6 @@ void main() {
           authService: authService,
           machineId: 'machine-1',
         ),
-        androidMvpSingleActiveNetworkOverride: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -1236,7 +1395,7 @@ void main() {
     await tester.tap(find.byType(FSwitch).at(1));
     await tester.pumpAndSettle();
 
-    _expectAndroidSingleNetworkLimitToastOnly();
+    expect(authService.attachedNetworkIds, unorderedEquals(['net-1', 'net-2']));
     final toastRect = tester.getRect(find.byType(FToast).last);
     final navigationRect = tester.getRect(
       find.byKey(const ValueKey<String>('mobile-dashboard-navigation')),
@@ -1245,123 +1404,118 @@ void main() {
     expect(toastRect.bottom, lessThanOrEqualTo(navigationRect.top));
   });
 
-  testWidgets(
-    'android blocks joining a second network while first is joining',
-    (WidgetTester tester) async {
-      _useDesktopViewport(tester);
+  testWidgets('allows a second network while first is joining', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
 
-      final attachGate = Completer<void>();
-      final authService = _FakeAuthService(
-        networks: const <ConsoleNetwork>[
-          ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-          ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
-        ],
-        managedDevices: const <ManagedDevice>[
-          ManagedDevice(
-            id: 'device-1',
-            machineId: 'machine-1',
-            hostname: 'android-phone',
-            approvalState: 'approved',
-            connectivityState: 'online',
-          ),
-        ],
-        attachDeviceDelay: attachGate.future,
-      );
-
-      await tester.pumpWidget(
-        MyApp(
-          authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
-            authService: authService,
-            machineId: 'machine-1',
-          ),
-          androidMvpSingleActiveNetworkOverride: true,
+    final attachGate = Completer<void>();
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'android-phone',
+          approvalState: 'approved',
+          connectivityState: 'online',
         ),
-      );
-      await tester.pumpAndSettle();
+      ],
+      attachDeviceDelay: attachGate.future,
+    );
 
-      await tester.tap(find.byType(FSwitch).first);
-      await tester.pump();
-      await tester.pump();
-      expect(authService.attachedNetworkIds, isEmpty);
-
-      await tester.tap(find.byType(FSwitch).at(1));
-      await tester.pump();
-      await tester.pump();
-
-      expect(authService.attachedNetworkIds, isEmpty);
-      _expectAndroidSingleNetworkLimitToastOnly();
-
-      attachGate.complete();
-      await tester.pumpAndSettle();
-    },
-  );
-
-  testWidgets(
-    'android blocks joining a second network while first is leaving',
-    (WidgetTester tester) async {
-      _useDesktopViewport(tester);
-
-      final removeGate = Completer<void>();
-      final authService = _FakeAuthService(
-        networks: const <ConsoleNetwork>[
-          ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
-          ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
-        ],
-        managedDevices: const <ManagedDevice>[
-          ManagedDevice(
-            id: 'device-1',
-            machineId: 'machine-1',
-            hostname: 'android-phone',
-            approvalState: 'approved',
-            connectivityState: 'online',
-          ),
-        ],
-        networkDevices: const <String, List<NetworkDevice>>{
-          'net-1': <NetworkDevice>[
-            NetworkDevice(
-              id: 'node-1',
-              name: 'android-phone',
-              online: true,
-              ipv4: '10.144.0.2',
-              deviceId: 'device-1',
-              machineId: 'machine-1',
-            ),
-          ],
-        },
-        removeNetworkNodeDelay: removeGate.future,
-      );
-
-      await tester.pumpWidget(
-        MyApp(
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
           authService: authService,
-          traySupport: createTraySupport(),
-          coreLifecycleService: _NoopCoreLifecycleService(
-            authService: authService,
+          machineId: 'machine-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pump();
+    await tester.pump();
+    expect(authService.attachedNetworkIds, isEmpty);
+
+    await tester.tap(find.byType(FSwitch).at(1));
+    await tester.pump();
+    await tester.pump();
+
+    expect(authService.attachedNetworkIds, isEmpty);
+    expect(find.textContaining('Android 当前仅支持'), findsNothing);
+
+    attachGate.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('allows a second network while first is leaving', (
+    WidgetTester tester,
+  ) async {
+    _useDesktopViewport(tester);
+
+    final removeGate = Completer<void>();
+    final authService = _FakeAuthService(
+      networks: const <ConsoleNetwork>[
+        ConsoleNetwork(id: 'net-1', name: '办公网', regions: ['ap-east']),
+        ConsoleNetwork(id: 'net-2', name: '研发网', regions: ['ap-east']),
+      ],
+      managedDevices: const <ManagedDevice>[
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'android-phone',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+      networkDevices: const <String, List<NetworkDevice>>{
+        'net-1': <NetworkDevice>[
+          NetworkDevice(
+            id: 'node-1',
+            name: 'android-phone',
+            online: true,
+            ipv4: '10.144.0.2',
+            deviceId: 'device-1',
             machineId: 'machine-1',
           ),
-          androidMvpSingleActiveNetworkOverride: true,
+        ],
+      },
+      removeNetworkNodeDelay: removeGate.future,
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        authService: authService,
+        traySupport: createTraySupport(),
+        coreLifecycleService: _NoopCoreLifecycleService(
+          authService: authService,
+          machineId: 'machine-1',
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(FSwitch).first);
-      await tester.pump();
-      await tester.pump();
-      expect(authService.removedNodeIds, isEmpty);
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pump();
+    await tester.pump();
+    expect(authService.removedNodeIds, isEmpty);
 
-      await tester.tap(find.byType(FSwitch).at(1));
-      await tester.pump();
-      await tester.pump();
+    await tester.tap(find.byType(FSwitch).at(1));
+    await tester.pump();
+    await tester.pump();
 
-      expect(authService.attachedNetworkIds, isEmpty);
-      _expectAndroidSingleNetworkLimitToastOnly();
+    expect(authService.attachedNetworkIds, ['net-2']);
 
-      removeGate.complete();
-      await tester.pumpAndSettle();
-    },
-  );
+    removeGate.complete();
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('shows realtime traffic after joining a network', (
     WidgetTester tester,
@@ -5777,18 +5931,6 @@ void _useDesktopViewport(
   });
 }
 
-void _expectAndroidSingleNetworkLimitToastOnly() {
-  final messageFinder = find.textContaining('Android 当前仅支持一个活跃 VPN 网络');
-  expect(messageFinder, findsOneWidget);
-  expect(
-    find.descendant(
-      of: find.byKey(const ValueKey<String>('network-switch-net-2')),
-      matching: messageFinder,
-    ),
-    findsNothing,
-  );
-}
-
 void _expectTrafficSparklineWindow(
   WidgetTester tester,
   List<double> expectedXs,
@@ -6030,6 +6172,37 @@ class _FakeUrlLauncherPlatform extends UrlLauncherPlatform {
 }
 
 class _LoginFlowAuthService implements AuthService {
+  WorkspacePreferences workspacePreferences = const WorkspacePreferences();
+
+  @override
+  Future<WorkspacePreferences> loadWorkspacePreferences(
+    String accountId,
+  ) async => workspacePreferences;
+
+  @override
+  Future<void> saveWorkspacePreferences(
+    String accountId,
+    WorkspacePreferences preferences,
+  ) async {
+    workspacePreferences = preferences;
+  }
+
+  @override
+  Future<ConsoleUser> fetchCurrentUser(String accessToken) async =>
+      const ConsoleUser(
+        email: 'tester@example.com',
+        displayName: 'Test',
+        workspaces: [ConsoleWorkspace(id: 'tenant-1', name: '个人空间')],
+      );
+
+  @override
+  Future<void> authorizeDeviceWorkspace({
+    required String accessToken,
+    required String sourceWorkspaceId,
+    required String deviceId,
+    required String targetWorkspaceId,
+  }) async {}
+
   int startDeviceAuthCount = 0;
   int completeDeviceAuthCount = 0;
 
@@ -6194,6 +6367,7 @@ class _LoginFlowAuthService implements AuthService {
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
+    String? enrollmentKeyId,
   }) async {
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',
@@ -6270,7 +6444,41 @@ NodeInstanceConfigView _emptyNodeConfigView() {
 }
 
 class _FakeAuthService implements AuthService {
+  WorkspacePreferences workspacePreferences = const WorkspacePreferences();
+
+  @override
+  Future<WorkspacePreferences> loadWorkspacePreferences(
+    String accountId,
+  ) async => workspacePreferences;
+
+  @override
+  Future<void> saveWorkspacePreferences(
+    String accountId,
+    WorkspacePreferences preferences,
+  ) async {
+    workspacePreferences = preferences;
+  }
+
+  @override
+  Future<ConsoleUser> fetchCurrentUser(String accessToken) async =>
+      const ConsoleUser(
+        email: 'tester@example.com',
+        displayName: 'Test',
+        workspaces: [ConsoleWorkspace(id: 'tenant-1', name: '个人空间')],
+      );
+
+  @override
+  Future<void> authorizeDeviceWorkspace({
+    required String accessToken,
+    required String sourceWorkspaceId,
+    required String deviceId,
+    required String targetWorkspaceId,
+  }) async {}
+
   _FakeAuthService({
+    this.workspaces = const [ConsoleWorkspace(id: 'tenant-1', name: '个人空间')],
+    this.networksByWorkspace = const {},
+    this.networkFetchGates = const {},
     List<ConsoleNetwork> networks = const <ConsoleNetwork>[],
     this.managedDevices = const <ManagedDevice>[],
     Map<String, List<NetworkDevice>> networkDevices =
@@ -6291,6 +6499,9 @@ class _FakeAuthService implements AuthService {
        ),
        nodeConfigs = Map<String, NodeInstanceConfigView>.from(nodeConfigs);
 
+  final List<ConsoleWorkspace> workspaces;
+  final Map<String, List<ConsoleNetwork>> networksByWorkspace;
+  final Map<String, Future<void>> networkFetchGates;
   final List<ConsoleNetwork> networks;
   final List<ManagedDevice> managedDevices;
   final Map<String, List<NetworkDevice>> networkDevices;
@@ -6317,12 +6528,10 @@ class _FakeAuthService implements AuthService {
   @override
   Future<AuthSession?> restoreSession() async {
     return AuthSession(
-      user: const ConsoleUser(
+      user: ConsoleUser(
         email: 'tester@example.com',
         displayName: 'Test User',
-        workspaces: <ConsoleWorkspace>[
-          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
-        ],
+        workspaces: workspaces,
       ),
       tokenSet: TokenSet(
         accessToken: 'token',
@@ -6343,7 +6552,10 @@ class _FakeAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
-    return List<ConsoleNetwork>.unmodifiable(networks);
+    await networkFetchGates[workspaceId];
+    return List<ConsoleNetwork>.unmodifiable(
+      networksByWorkspace[workspaceId] ?? networks,
+    );
   }
 
   @override
@@ -6444,7 +6656,27 @@ class _FakeAuthService implements AuthService {
     required String accessToken,
     required String workspaceId,
   }) async {
-    return List<ManagedDevice>.unmodifiable(managedDevices);
+    if (managedDevices.isNotEmpty) {
+      return List<ManagedDevice>.unmodifiable(managedDevices);
+    }
+    return networkDevices.values
+        .expand((nodes) => nodes)
+        .where((node) => node.machineId != null && node.deviceId != null)
+        .map(
+          (node) => ManagedDevice(
+            id: node.deviceId!,
+            machineId: node.machineId!,
+            hostname: node.hostname,
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        )
+        .fold<Map<String, ManagedDevice>>(
+          {},
+          (devices, device) => devices..[device.id] = device,
+        )
+        .values
+        .toList();
   }
 
   @override
@@ -6524,6 +6756,7 @@ class _FakeAuthService implements AuthService {
   Future<CoreBootstrapConfig> prepareCoreBootstrap({
     required String accessToken,
     required String workspaceId,
+    String? enrollmentKeyId,
   }) async {
     return const CoreBootstrapConfig(
       bootstrapToken: 'bootstrap-token',

@@ -4,6 +4,8 @@ class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.userName,
     required this.workspaceName,
+    required this.workspaceSelector,
+    required this.connectionSummary,
     required this.activeView,
     required this.networks,
     required this.deviceCount,
@@ -19,6 +21,8 @@ class _DashboardHeader extends StatelessWidget {
 
   final String userName;
   final String workspaceName;
+  final Widget workspaceSelector;
+  final Widget connectionSummary;
   final _DashboardView activeView;
   final List<ConsoleNetwork> networks;
   final int deviceCount;
@@ -71,6 +75,8 @@ class _DashboardHeader extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          workspaceSelector,
+          connectionSummary,
           const HomeOpenConsoleButton(
             buttonKey: ValueKey<String>('workspace-open-console'),
           ),
@@ -92,6 +98,8 @@ class _MobileDashboardHeader extends StatelessWidget {
   const _MobileDashboardHeader({
     required this.userName,
     required this.workspaceName,
+    required this.workspaceSelector,
+    required this.connectionSummary,
     required this.onShowSettings,
     required this.onLogout,
     required this.coreStatusListenable,
@@ -99,6 +107,8 @@ class _MobileDashboardHeader extends StatelessWidget {
 
   final String userName;
   final String workspaceName;
+  final Widget workspaceSelector;
+  final Widget connectionSummary;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
   final ValueListenable<CoreRunStatus> coreStatusListenable;
@@ -108,20 +118,43 @@ class _MobileDashboardHeader extends StatelessWidget {
     final trimmedName = userName.trim();
     final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
 
-    return HomeShellMobileHeader(
-      title: 'EasyTier Pro',
-      subtitle: workspaceName,
-      suffixes: [
-        HomeCoreStatusDot(statusListenable: coreStatusListenable),
-        const HomeOpenConsoleButton(
-          buttonKey: ValueKey<String>('workspace-mobile-open-console'),
+    return Column(
+      children: [
+        HomeShellMobileHeader(
+          title: 'EasyTier Pro',
+          subtitle: '',
+          suffixes: [
+            HomeCoreStatusDot(statusListenable: coreStatusListenable),
+            const HomeOpenConsoleButton(
+              buttonKey: ValueKey<String>('workspace-mobile-open-console'),
+            ),
+            _UserMenu(
+              userName: trimmedName,
+              workspaceName: workspaceName,
+              initial: initial,
+              onShowSettings: onShowSettings,
+              onLogout: onLogout,
+            ),
+          ],
         ),
-        _UserMenu(
-          userName: trimmedName,
-          workspaceName: workspaceName,
-          initial: initial,
-          onShowSettings: onShowSettings,
-          onLogout: onLogout,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFFFFF),
+            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: workspaceSelector,
+                ),
+              ),
+              const SizedBox(width: 8),
+              connectionSummary,
+            ],
+          ),
         ),
       ],
     );

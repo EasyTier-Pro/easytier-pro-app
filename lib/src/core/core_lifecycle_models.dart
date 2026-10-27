@@ -150,3 +150,25 @@ class CoreRunStatus {
     message: '未登录',
   );
 }
+
+enum CoreNetworkConnectionPhase { joining, joined, leaving, error }
+
+class CoreNetworkConnection {
+  const CoreNetworkConnection({
+    required this.workspace,
+    required this.network,
+    required this.phase,
+    this.nodeId,
+    this.ipv4,
+    this.message,
+    this.ready = false,
+  });
+
+  final ConsoleWorkspace workspace;
+  final ConsoleNetwork network;
+  final CoreNetworkConnectionPhase phase;
+  final String? nodeId;
+  final String? ipv4;
+  final String? message;
+  final bool ready;
+}

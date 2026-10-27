@@ -27,7 +27,9 @@ class _StateMessage extends StatelessWidget {
 }
 
 String _approvalLabel(ManagedDevice device) {
-  return switch (device.approvalState.toLowerCase()) {
+  if (!device.workspaceAuthorizationPresent) return '授权已撤销';
+  return switch ((device.workspaceApprovalState ?? device.approvalState)
+      .toLowerCase()) {
     'approved' => '已批准',
     'pending' => '待批准',
     'rejected' => '已拒绝',

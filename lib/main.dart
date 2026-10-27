@@ -110,7 +110,6 @@ class MyApp extends StatefulWidget {
     AppUpdateService? appUpdateService,
     TokenConnectionProfileStore? tokenConnectionProfileStore,
     this.windowBehaviorPreferences,
-    this.androidMvpSingleActiveNetworkOverride,
   }) : appUpdateService = appUpdateService ?? AppUpdateService(),
        tokenConnectionProfileStore =
            tokenConnectionProfileStore ?? TokenConnectionProfileStore.memory();
@@ -121,7 +120,6 @@ class MyApp extends StatefulWidget {
   final AppUpdateService appUpdateService;
   final TokenConnectionProfileStore tokenConnectionProfileStore;
   final WindowBehaviorPreferences? windowBehaviorPreferences;
-  final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -337,8 +335,6 @@ class _MyAppState extends State<MyApp> {
         traySupport: widget.traySupport,
         appUpdateService: widget.appUpdateService,
         windowBehaviorPreferences: _windowBehaviorPreferences,
-        androidMvpSingleActiveNetworkOverride:
-            widget.androidMvpSingleActiveNetworkOverride,
       ),
     );
   }

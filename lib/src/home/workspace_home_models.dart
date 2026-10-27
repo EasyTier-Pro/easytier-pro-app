@@ -47,8 +47,6 @@ class _JoinNetworkState {
   final bool requiresCoreAction;
 
   static const idle = _JoinNetworkState(phase: _JoinPhase.idle);
-  static const joining = _JoinNetworkState(phase: _JoinPhase.joining);
-  static const leaving = _JoinNetworkState(phase: _JoinPhase.leaving);
 
   static _JoinNetworkState joinedWithIp(String? localIpv4, {String? message}) {
     final value = localIpv4?.trim();

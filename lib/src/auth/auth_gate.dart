@@ -36,7 +36,6 @@ class AuthGate extends StatefulWidget {
     required this.traySupport,
     required this.appUpdateService,
     required this.windowBehaviorPreferences,
-    this.androidMvpSingleActiveNetworkOverride,
   });
 
   final AuthService authService;
@@ -45,7 +44,6 @@ class AuthGate extends StatefulWidget {
   final TraySupport traySupport;
   final AppUpdateService appUpdateService;
   final WindowBehaviorPreferences windowBehaviorPreferences;
-  final bool? androidMvpSingleActiveNetworkOverride;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -545,8 +543,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         appUpdateService: widget.appUpdateService,
         windowBehaviorPreferences: widget.windowBehaviorPreferences,
         onLogout: _logout,
-        androidMvpSingleActiveNetworkOverride:
-            widget.androidMvpSingleActiveNetworkOverride,
       );
     }
 
