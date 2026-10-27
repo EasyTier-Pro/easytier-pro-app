@@ -88,7 +88,11 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
                 }
                 "prepareNotifications" -> prepareNotifications(result)
                 "prepareVpn" -> prepareVpn(result)
-                "startVpn" -> startVpn(call, result)
+                "refreshVpn" -> {
+                    refreshVpn()
+                    result.success(null)
+                }
+                "getVpnState" -> result.success(EasyTierVpnService.state())
                 "stopVpn" -> {
                     stopVpn()
                     result.success(null)
@@ -124,6 +128,7 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         Log.i(logTag, "VPN permission result granted=$granted")
         pendingVpnResult?.success(granted)
         pendingVpnResult = null
+        if (granted) refreshVpn()
         emit(
             if (granted) "vpn_permission_granted" else "vpn_permission_denied",
             mapOf("granted" to granted),
@@ -216,15 +221,8 @@ class EasyTierFlutterBridge(private val activity: MainActivity) :
         activity.startActivityForResult(intent, vpnRequestCode)
     }
 
-    private fun startVpn(call: MethodCall, result: MethodChannel.Result) {
-        val instanceName = call.argument<String>("instanceName")?.trim().orEmpty()
-        require(instanceName.isNotEmpty()) { "instanceName is required" }
-
-        val vpnConfig = call.argument<Map<String, Any?>>("vpnConfig") ?: emptyMap()
-        Log.i(logTag, "Starting VPN service for instance=$instanceName")
-        val intent = EasyTierVpnIntentFactory.startIntent(activity, instanceName, vpnConfig)
-        startRuntimeService(intent)
-        result.success(null)
+    private fun refreshVpn() {
+        EasyTierVpnService.requestRefresh()
     }
 
     private fun shareFile(call: MethodCall, result: MethodChannel.Result) {

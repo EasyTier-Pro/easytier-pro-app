@@ -121,7 +121,7 @@ index 7d11b106..a6058281 100644
      let config_cstr = match jstring_to_cstring(&mut env, &config) {
          Ok(cstr) => cstr,
 diff --git a/easytier-contrib/easytier-ffi/src/lib.rs b/easytier-contrib/easytier-ffi/src/lib.rs
-index 6c332c89..91b692fe 100644
+index 6c332c89..13223be6 100644
 --- a/easytier-contrib/easytier-ffi/src/lib.rs
 +++ b/easytier-contrib/easytier-ffi/src/lib.rs
 @@ -12,6 +12,8 @@
@@ -141,7 +141,7 @@ index 6c332c89..91b692fe 100644
  mod state;
  mod strings;
  mod types;
-@@ -196,6 +199,48 @@ pub unsafe extern "C" fn set_tun_fd(inst_name: *const c_char, fd: c_int) -> c_in
+@@ -196,6 +199,50 @@ pub unsafe extern "C" fn set_tun_fd(inst_name: *const c_char, fd: c_int) -> c_in
      unsafe { instance_api::set_tun_fd(inst_name, fd) }
  }
  
@@ -168,7 +168,9 @@ index 6c332c89..91b692fe 100644
 +/// `instance_ids_json` is a JSON array of UUID strings; null selects all running
 +/// TUN-enabled instances. An empty array attaches no members. `fd <= 0` detaches
 +/// every member. Positive descriptors remain owned by the caller, who must
-+/// detach them before closing. This does not stop or delete network instances.
++/// detach them before closing. A successful replacement also releases the
++/// previously attached descriptor. Rejected and deselected members are detached;
++/// this does not stop or delete network instances.
 +/// Serialize calls with host VPN reconfiguration. Do not invoke this from a
 +/// config-server event callback. Only Android and iOS support this operation.
 +///
@@ -192,10 +194,10 @@ index 6c332c89..91b692fe 100644
  /// This generic bridge intentionally excludes instance lifecycle management
 diff --git a/easytier-contrib/easytier-ffi/src/mobile_tun.rs b/easytier-contrib/easytier-ffi/src/mobile_tun.rs
 new file mode 100644
-index 00000000..b62aaf59
+index 00000000..bb675d90
 --- /dev/null
 +++ b/easytier-contrib/easytier-ffi/src/mobile_tun.rs
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,115 @@
 +use std::ffi::{CStr, CString, c_char, c_int};
 +
 +use uuid::Uuid;
@@ -257,25 +259,59 @@ index 00000000..b62aaf59
 +            return Err("cannot attach mobile TUN from config server callback".to_owned());
 +        }
 +        let ids = unsafe { instance_ids(instance_ids_json) }?;
-+        #[cfg(any(target_os = "android", target_os = "ios"))]
-+        {
-+            let context = crate::state::ffi_context();
-+            let config = context
-+                .runtime
-+                .block_on(easytier::instance::factory::attach_mobile_tun_fd(
++        let context = crate::state::ffi_context();
++        context.runtime.block_on(async {
++            // Config-server mutations remove members before awaiting their stop.
++            // Share their transaction lock so detach also waits for those fds.
++            let _mutation = context.manager.mutation_lock().lock_owned().await;
++            #[cfg(any(target_os = "android", target_os = "ios"))]
++            {
++                let config = easytier::instance::factory::attach_mobile_tun_fd(
 +                    &context.manager,
 +                    fd,
 +                    ids.as_deref(),
-+                ))
++                )
++                .await
 +                .map_err(|error| format!("{error:#}"))?;
-+            serde_json::to_string(&config).map_err(|error| error.to_string())
-+        }
-+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-+        {
-+            let _ = (fd, ids);
-+            Err("mobile TUN attachment is unavailable on this platform".to_owned())
-+        }
++                serde_json::to_string(&config).map_err(|error| error.to_string())
++            }
++            #[cfg(not(any(target_os = "android", target_os = "ios")))]
++            {
++                let _ = (fd, ids);
++                Err("mobile TUN attachment is unavailable on this platform".to_owned())
++            }
++        })
 +    })())
++}
++
++#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
++mod tests {
++    #[test]
++    fn attachment_waits_for_instance_mutation() {
++        let lock = crate::state::ffi_context().manager.mutation_lock();
++        let mutation = lock.blocking_lock();
++        let (entered, started) = std::sync::mpsc::channel();
++        let (completed, finished) = std::sync::mpsc::channel();
++        let thread = std::thread::spawn(move || {
++            entered.send(()).unwrap();
++            let result = unsafe { super::attach(0, std::ptr::null()) };
++            // Desktop rejects the operation, after respecting the mutation lock.
++            completed.send(result.is_null()).unwrap();
++        });
++        started.recv().unwrap();
++        assert!(
++            finished
++                .recv_timeout(std::time::Duration::from_millis(50))
++                .is_err()
++        );
++        drop(mutation);
++        assert!(
++            finished
++                .recv_timeout(std::time::Duration::from_secs(5))
++                .unwrap()
++        );
++        thread.join().unwrap();
++    }
 +}
 diff --git a/easytier-contrib/easytier-ffi/src/tests.rs b/easytier-contrib/easytier-ffi/src/tests.rs
 index c008a66f..a6d68bad 100644
@@ -317,106 +353,92 @@ index c008a66f..a6d68bad 100644
  fn free_key_value_pairs(infos: &[KeyValuePair]) {
      for info in infos {
          free_string(info.key);
-diff --git a/easytier-contrib/easytier-ios/easytier-ios.h b/easytier-contrib/easytier-ios/easytier-ios.h
-index e1295569..21c8c301 100644
---- a/easytier-contrib/easytier-ios/easytier-ios.h
-+++ b/easytier-contrib/easytier-ios/easytier-ios.h
-@@ -2,9 +2,9 @@
-  * @file easytier-ios.h
-  * @brief iOS-facing C ABI for EasyTier.
-  *
-- * This library embeds EasyTier into an iOS app without a TUN device or
-- * NEPacketTunnel: it manages EasyTier instances and bridges to the EasyTier
-- * management RPC surface. Loopback port forwarding into the virtual network
-+ * This library manages EasyTier instances and bridges to the management RPC
-+ * surface. A PacketTunnel provider can attach its shared mobile TUN, or an app
-+ * can run instances without a TUN. Loopback forwarding into the virtual network
-  * is configured through easytier_ios_call_json_rpc() with
-  * api.config.ConfigRpcService/PatchConfig port-forward patches; there is no
-  * built-in forwarder.
-@@ -57,6 +57,26 @@ int easytier_ios_flush_diagnostic_logging(void);
- /** @brief Delete all diagnostic log content and reopen the active log. */
- int easytier_ios_clear_diagnostic_logs(void);
- 
-+/**
-+ * @brief Get shared TUN settings for a JSON array of instance UUID strings.
-+ *
-+ * Returns JSON with instance_ids, addresses, routes, dns and rejected members.
-+ * Call outside config-server callbacks; serialize with VPN reconfiguration.
-+ * Free the result with easytier_ios_free_string(). NULL indicates an error.
-+ */
-+char *easytier_ios_get_mobile_tun_config(const char *instance_ids_json);
-+
-+/**
-+ * @brief Attach one caller-owned TUN to multiple instances and await completion.
-+ *
-+ * instance_ids_json is a JSON UUID array; NULL selects all running TUN instances.
-+ * fd <= 0 detaches all members. Wait for detach before closing the borrowed fd.
-+ * Returns the same JSON shape as easytier_ios_get_mobile_tun_config(), containing
-+ * the actual accepted members. Free with easytier_ios_free_string().
-+ * NULL indicates failure; inspect easytier_ios_last_error() on the same thread.
-+ */
-+char *easytier_ios_attach_mobile_tun_fd(int fd, const char *instance_ids_json);
-+
- /**
-  * @brief Start one EasyTier network instance from a TOML config string.
-  *
-@@ -143,9 +163,8 @@ char *easytier_ios_last_error(void);
- /**
-  * @brief Release a string returned by this library.
-  *
-- * Use this for strings returned by easytier_ios_collect_network_infos(),
-- * easytier_ios_call_json_rpc() and easytier_ios_last_error(). Passing NULL
-- * is a no-op. The string must not be used after this call.
-+ * Use this for strings returned by this library's JSON and error functions.
-+ * Passing NULL is a no-op. The string must not be used after this call.
-  *
-  * @param s NULL, or a string previously returned by this library.
-  */
-diff --git a/easytier-contrib/easytier-ios/src/lib.rs b/easytier-contrib/easytier-ios/src/lib.rs
-index de2a8959..c60e0443 100644
---- a/easytier-contrib/easytier-ios/src/lib.rs
-+++ b/easytier-contrib/easytier-ios/src/lib.rs
-@@ -224,6 +224,39 @@ unsafe fn cstr_arg<'a>(value: *const c_char, what: &str) -> Result<&'a str, Stri
-         .map_err(|_| format!("{what} is not valid UTF-8"))
+diff --git a/easytier/src/instance/factory/mobile_tun.rs b/easytier/src/instance/factory/mobile_tun.rs
+index 1327a467..63653c13 100644
+--- a/easytier/src/instance/factory/mobile_tun.rs
++++ b/easytier/src/instance/factory/mobile_tun.rs
+@@ -130,6 +130,24 @@ fn config_for_members(
+     config
  }
  
-+/// Return shared mobile TUN settings for a JSON array of instance UUID strings.
-+/// Free the returned JSON with `easytier_ios_free_string`; null indicates an error.
-+///
-+/// # Safety
-+/// `instance_ids_json` must point to a NUL-terminated UTF-8 JSON array.
-+#[unsafe(no_mangle)]
-+pub unsafe extern "C" fn easytier_ios_get_mobile_tun_config(
-+    instance_ids_json: *const c_char,
-+) -> *mut c_char {
-+    guarded(ptr::null_mut(), || {
-+        error::clear_error();
-+        unsafe { easytier_ffi::get_mobile_tun_config(instance_ids_json) }
-+    })
++#[cfg(any(mobile, test))]
++async fn detach_unselected_members<F, Fut>(
++    all_ids: &[uuid::Uuid],
++    members: &[MobileTunMember],
++    mut detach: F,
++) -> anyhow::Result<()>
++where
++    F: FnMut(uuid::Uuid) -> Fut,
++    Fut: std::future::Future<Output = anyhow::Result<()>>,
++{
++    for &id in all_ids {
++        if !members.iter().any(|member| member.instance_id == id) {
++            detach(id).await?;
++        }
++    }
++    Ok(())
 +}
 +
-+/// Attach one caller-owned mobile TUN to multiple instances and await completion.
-+/// Null IDs select all running TUN instances; `fd <= 0` detaches all members.
-+/// Free the returned JSON with `easytier_ios_free_string`; null indicates an error.
-+///
-+/// # Safety
-+/// `instance_ids_json`, when non-null, must point to a NUL-terminated UTF-8 JSON
-+/// array. Positive `fd` must remain valid until a subsequent detach succeeds.
-+#[unsafe(no_mangle)]
-+pub unsafe extern "C" fn easytier_ios_attach_mobile_tun_fd(
-+    fd: c_int,
-+    instance_ids_json: *const c_char,
-+) -> *mut c_char {
-+    guarded(ptr::null_mut(), || {
-+        error::clear_error();
-+        unsafe { easytier_ffi::attach_mobile_tun_fd(fd, instance_ids_json) }
+ #[cfg(mobile)]
+ async fn collect_members(
+     manager: &NativeInstanceManager,
+@@ -143,6 +161,16 @@ async fn collect_members(
+             continue;
+         }
+         let instance = manager.instance(instance_id);
++        // Starting an instance is asynchronous. It has no TUN claims yet and
++        // should be retried by the next refresh, not reported as rejected.
++        if instance.as_ref().is_some_and(|instance| {
++            matches!(
++                instance.state(),
++                CoreInstanceState::Created | CoreInstanceState::Starting
++            )
++        }) {
++            continue;
++        }
+         let runtime = instance
+             .as_ref()
+             .filter(|instance| instance.state() == CoreInstanceState::Running)
+@@ -220,6 +248,12 @@ pub async fn attach_mobile_tun_fd(
+     }
+     let (members, rejected) = collect_members(manager, instance_ids.unwrap_or(&all_ids)).await;
+     let (members, mut rejected) = select_members(members, rejected);
++    // Select before detaching so unchanged members keep their priority. A
++    // rejected or deselected old member must stop borrowing the shared fd too.
++    detach_unselected_members(&all_ids, &members, |id| {
++        attach_member(manager, id, 0, false, None)
 +    })
-+}
++    .await?;
+     let mut attached = Vec::new();
+     // Open once; a rejected member never replaces or tears down this shared fd.
+     for member in members {
+@@ -313,6 +347,26 @@ mod tests {
+         assert_eq!(config.rejected[0].instance_id, uuid::Uuid::from_u128(1));
+     }
+ 
++    #[tokio::test]
++    async fn detaches_reconfigured_conflicts_and_deselected_members() {
++        let mut changed = member(1, "10.0.2.1/24");
++        changed.current_claims = Some(member(1, "10.0.1.1/24").claims);
++        let mut unchanged = member(2, "10.0.2.2/24");
++        unchanged.current_claims = Some(unchanged.claims.clone());
++        let (selected, rejected) = select_members(vec![changed, unchanged], Vec::new());
++        let all_ids = [1, 2, 3].map(uuid::Uuid::from_u128);
++        let mut detached = Vec::new();
++        detach_unselected_members(&all_ids, &selected, |id| {
++            detached.push(id);
++            std::future::ready(Ok(()))
++        })
++        .await
++        .unwrap();
++        assert_eq!(detached, vec![all_ids[0], all_ids[2]]);
++        assert_eq!(selected[0].instance_id, all_ids[1]);
++        assert_eq!(rejected[0].instance_id, all_ids[0]);
++    }
 +
- /// Start one EasyTier network instance from a TOML config string.
- ///
- /// Returns 0 on success, -1 on failure (see `easytier_ios_last_error`).
+     #[test]
+     fn projects_ipv6_and_shared_dns_and_rejects_overlapping_proxy_routes() {
+         let mut first = member(1, "10.0.1.1/24");
 diff --git a/easytier/src/instance/shared_virtual_nic.rs b/easytier/src/instance/shared_virtual_nic.rs
 index 444ba7f0..becdb104 100644
 --- a/easytier/src/instance/shared_virtual_nic.rs

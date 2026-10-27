@@ -5,6 +5,7 @@ import java.lang.IllegalStateException
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import org.json.JSONArray
 
 object EasyTierNative {
     private const val libraryName = "easytier_android_jni"
@@ -87,6 +88,14 @@ object EasyTierNative {
     fun setTunFd(instanceName: String, fd: Int) {
         invokeStatus("setTunFd", instanceName, fd)
     }
+
+    fun getMobileTunConfig(instanceIds: List<String>): String =
+        invoke("getMobileTunConfig", JSONArray(instanceIds).toString())?.toString()
+            ?: throw IllegalStateException(getLastError())
+
+    fun attachMobileTunFd(fd: Int, instanceIds: List<String>?): String =
+        invoke("attachMobileTunFd", fd, instanceIds?.let { JSONArray(it).toString() })?.toString()
+            ?: throw IllegalStateException(getLastError())
 
     fun getLastError(): String {
         return try {

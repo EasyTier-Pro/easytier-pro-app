@@ -11,6 +11,10 @@ object EasyTierJNI {
 
     @JvmStatic external fun setTunFd(instanceName: String, fd: Int): Int
 
+    @JvmStatic external fun getMobileTunConfig(instanceIdsJson: String): String?
+
+    @JvmStatic external fun attachMobileTunFd(fd: Int, instanceIdsJson: String?): String?
+
     @JvmStatic external fun parseConfig(config: String): Int
 
     @JvmStatic external fun runNetworkInstance(config: String): Int

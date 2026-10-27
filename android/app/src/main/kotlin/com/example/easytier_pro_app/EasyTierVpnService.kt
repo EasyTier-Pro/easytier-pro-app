@@ -8,105 +8,95 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import java.io.IOException
+import org.json.JSONObject
 
 class EasyTierVpnService : VpnService() {
     private var tunFd: Int? = null
-    private var tunDescriptor: ParcelFileDescriptor? = null
-    private var activeInstanceName: String? = null
+    private var pendingTunFd: Int? = null
+    private var activeTunConfig: EasyTierMobileTunConfig? = null
+    private var activeBuilderConfig: AndroidVpnAppliedConfig? = null
     private var activeConfigServerConfig: ConfigServerConfig? = null
-    private var configServerClientStarted = false
-    private var explicitStopSelfRequested = false
+    private var membershipChanged = true
+    @Volatile private var explicitStopSelfRequested = false
+    @Volatile private var destroyed = false
+    private var lastRefreshError: String? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return try {
-            when (intent?.action) {
-                actionStartConfigServer -> {
-                    startConfigServerClient(intent)
-                    START_REDELIVER_INTENT
+    override fun onCreate() {
+        super.onCreate()
+        activeService = this
+    }
+
+    private val refresh = object : Runnable {
+        override fun run() {
+            if (destroyed || activeConfigServerConfig == null) return
+            try {
+                refreshVpn()
+                lastRefreshError = null
+            } catch (error: Throwable) {
+                val message = error.message ?: error.toString()
+                if (message != lastRefreshError) {
+                    Log.e(logTag, "Shared VPN update failed", error)
+                    EasyTierFlutterBridge.emitFromService("vpn_config_error", mapOf("error" to message))
                 }
-                actionStopConfigServer -> {
-                    stopConfigServerClient()
-                    START_NOT_STICKY
+                lastRefreshError = message
+                vpnState = vpnState + mapOf("error" to message)
+            } finally {
+                if (!destroyed && activeConfigServerConfig != null) {
+                    worker.postDelayed(this, 3000)
                 }
-                actionStopRuntime -> {
-                    stopRuntime(
-                        runtimeStopReason = intent
-                            .getStringExtra(extraStopReason)
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() },
-                    )
-                    START_NOT_STICKY
-                }
-                actionStop -> {
-                    stopVpn(stopService = !configServerClientStarted)
-                    START_NOT_STICKY
-                }
-                actionStart -> {
-                    startVpn(intent)
-                    START_REDELIVER_INTENT
-                }
-                else -> START_NOT_STICKY
             }
-        } catch (error: Throwable) {
-            Log.e(logTag, "VPN service command failed", error)
-            val action = intent?.action.orEmpty()
-            val instanceName = intent
-                ?.getStringExtra(extraInstanceName)
-                ?.trim()
-                .orEmpty()
-            val payload = mutableMapOf<String, Any?>(
-                "error" to (error.message ?: error.toString()),
-                "action" to action,
-            )
-            if (instanceName.isNotEmpty()) {
-                payload["instanceName"] = instanceName
-            }
-            if (action == actionStart) {
-                payload.putAll(
-                    EasyTierVpnStartConfigParser.diagnosticPayload(
-                        intent,
-                        packageName,
-                    ),
-                )
-            }
-            EasyTierFlutterBridge.emitFromService(
-                "error",
-                payload,
-            )
-            if (action == actionStart) {
-                stopVpn(
-                    stopService = !configServerClientStarted,
-                    reason = "start_failed",
-                    fallbackInstanceName = instanceName,
-                )
-            } else {
-                stopVpn()
-            }
-            START_NOT_STICKY
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action ?: return START_NOT_STICKY
+        if (action == actionStartConfigServer || action == actionStart) {
+            startForeground(notificationId, notification("Connecting to EasyTier networks"))
+        }
+        worker.post {
+            if (destroyed) return@post
+            try {
+                when (action) {
+                    actionStartConfigServer -> startConfigServerClient(intent)
+                    actionStopConfigServer, actionStopRuntime -> stopRuntime(
+                        reason = intent.getStringExtra(extraStopReason),
+                    )
+                    actionStop -> stopVpn()
+                    actionStart -> scheduleRefresh()
+                }
+            } catch (error: Throwable) {
+                Log.e(logTag, "VPN service command failed", error)
+                EasyTierFlutterBridge.emitFromService(
+                    "error", mapOf("error" to (error.message ?: error.toString()), "action" to action),
+                )
+            }
+        }
+        return if (action == actionStartConfigServer) START_REDELIVER_INTENT else START_NOT_STICKY
+    }
+
     override fun onDestroy() {
-        if (explicitStopSelfRequested) {
-            stopConfigServerClient(stopServiceIfIdle = false, emitEvent = false)
-            stopNetworkInstances()
-            stopVpn(stopService = false)
-        } else {
-            stopRuntime(
-                runtimeStopReason = stopReasonServiceDestroyed,
-                stopService = false,
-            )
+        destroyed = true
+        if (activeService === this) activeService = null
+        worker.removeCallbacks(refresh)
+        if (!explicitStopSelfRequested) {
+            worker.post { stopRuntime(stopReasonServiceDestroyed, stopService = false) }
         }
         super.onDestroy()
     }
 
     override fun onRevoke() {
-        Log.i(logTag, "VPN revoked by system")
-        stopRuntime(runtimeStopReason = "revoked")
+        worker.post { stopRuntime("revoked") }
         super.onRevoke()
+    }
+
+    private fun scheduleRefresh() {
+        worker.removeCallbacks(refresh)
+        if (!destroyed && activeConfigServerConfig != null) worker.post(refresh)
     }
 
     private fun startConfigServerClient(intent: Intent) {
@@ -118,211 +108,158 @@ class EasyTierVpnService : VpnService() {
         require(url.isNotEmpty()) { "config server url is required" }
         require(hostname.isNotEmpty()) { "hostname is required" }
         require(machineId.isNotEmpty()) { "machineId is required" }
-
         val config = ConfigServerConfig(url, hostname, machineId, secureMode)
-        if (configServerClientStarted) {
-            if (activeConfigServerConfig == config) {
-                startForeground(notificationId, notification("Connecting to EasyTier network"))
-                Log.i(logTag, "Config server client already started for host=$hostname")
-                emitConfigServerStarted(hostname, alreadyStarted = true)
-                return
+        val alreadyStarted = activeConfigServerConfig == config
+        if (!alreadyStarted) {
+            if (activeConfigServerConfig != null) stopRuntime(stopService = false)
+            EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
+                // The service owns membership even when Flutter is suspended or detached.
+                worker.post {
+                    if (destroyed || activeConfigServerConfig != config) return@post
+                    EasyTierFlutterBridge.emitFromService(
+                        "config_server",
+                        mapOf("raw" to payload, "payload" to (parseJson(payload) ?: mapOf("raw" to payload))),
+                    )
+                    // A replacement may reuse the UUID and addresses with a new runtime host.
+                    membershipChanged = true
+                    scheduleRefresh()
+                }
             }
-            stopConfigServerClient(stopServiceIfIdle = false, emitEvent = false)
+            activeConfigServerConfig = config
         }
-
-        startForeground(notificationId, notification("Connecting to EasyTier network"))
-        Log.i(logTag, "Starting config server client in foreground service host=$hostname")
-        EasyTierNative.startConfigServerClient(url, hostname, machineId, secureMode) { payload ->
-            Log.d(logTag, "Received config server event")
-            EasyTierFlutterBridge.emitFromService(
-                "config_server",
-                mapOf(
-                    "raw" to payload,
-                    "payload" to (parseJson(payload) ?: mapOf("raw" to payload)),
-                ),
-            )
-        }
-        configServerClientStarted = true
-        activeConfigServerConfig = config
-        emitConfigServerStarted(hostname, alreadyStarted = false)
-    }
-
-    private fun emitConfigServerStarted(hostname: String, alreadyStarted: Boolean) {
         EasyTierFlutterBridge.emitFromService(
-            "config_server_started",
-            mapOf(
-                "hostname" to hostname,
-                "alreadyStarted" to alreadyStarted,
-            ),
+            "config_server_started", mapOf("hostname" to hostname, "alreadyStarted" to alreadyStarted),
         )
+        scheduleRefresh()
     }
 
-    private fun stopConfigServerClient(
-        stopServiceIfIdle: Boolean = true,
-        emitEvent: Boolean = true,
-        stopReason: String? = null,
-    ) {
-        if (!configServerClientStarted) {
+    private fun refreshVpn() {
+        if (pendingTunFd != null) stopVpn()
+        if (prepare(this) != null) return
+        val instances = JSONObject(EasyTierNative.listInstances(4096))
+        val ids = instances.keys().asSequence().map { instances.getString(it) }.distinct().toList()
+        val config = EasyTierMobileTunConfig.parse(EasyTierNative.getMobileTunConfig(ids))
+        if (config.instanceIds.isEmpty() || config.addresses.isEmpty()) {
+            if (tunFd != null) stopVpn()
+            publishState(config.copy(instanceIds = emptyList()))
             return
         }
-        configServerClientStarted = false
-        activeConfigServerConfig = null
-        try {
-            EasyTierNative.stopConfigServerClient()
-            Log.i(logTag, "Stopped config server client")
-        } catch (error: Throwable) {
-            Log.w(logTag, "Failed to stop config server client", error)
-        }
-        if (emitEvent) {
-            val payload = if (stopReason == null) {
-                emptyMap()
-            } else {
-                mapOf("reason" to stopReason)
-            }
-            EasyTierFlutterBridge.emitFromService("config_server_stopped", payload)
-        }
-        if (stopServiceIfIdle && activeInstanceName == null) {
-            stopForegroundCompat()
-            explicitStopSelfRequested = true
-            stopSelf()
-        }
-    }
-
-    private fun stopRuntime(
-        runtimeStopReason: String? = null,
-        stopService: Boolean = true,
-    ) {
-        stopConfigServerClient(
-            stopServiceIfIdle = false,
-            stopReason = runtimeStopReason,
-        )
-        stopNetworkInstances()
-        stopVpn(stopService = stopService, reason = runtimeStopReason)
-    }
-
-    private fun stopNetworkInstances() {
-        try {
-            EasyTierNative.stopAllInstances()
-            Log.i(logTag, "Stopped all EasyTier network instances")
-        } catch (error: Throwable) {
-            Log.w(logTag, "Failed to stop EasyTier network instances", error)
-        }
-    }
-
-    private fun startVpn(intent: Intent) {
-        explicitStopSelfRequested = false
-        val config = EasyTierVpnStartConfigParser.fromIntent(intent, packageName)
-        val allowDebugBypass = isDebuggableBuild()
-
-        stopVpn(stopService = false)
-        Log.i(
-            logTag,
-            "Establishing VPN for instance=${config.instanceName} addresses=${config.addresses} routes=${config.routes} dns=${config.dnsServers} mtu=${config.mtu} disallowed=${config.disallowedApplications}",
-        )
-
-        startForeground(notificationId, notification("Connected to ${config.instanceName}"))
-
-        val builder = Builder()
-        val builderConfig = EasyTierVpnBuilderConfigurator.configure(
-            EasyTierVpnServiceBuilderOperations(builder),
-            config,
-            sdkInt = Build.VERSION.SDK_INT,
-            allowBypass = allowDebugBypass,
-        ) { application, error ->
-            Log.w(logTag, "Ignoring unknown disallowed application=$application", error)
+        val previous = activeTunConfig
+        if (!membershipChanged && tunFd != null && previous?.instanceIds == config.instanceIds && previous.sameInterface(config)) {
+            publishState(config)
+            return
         }
 
-        val descriptor = builder.establish() ?: throw IllegalStateException("VpnService establish returned null")
-        tunDescriptor = descriptor
-        val fd = descriptor.detachFd()
-        tunDescriptor = null
-        tunFd = fd
-        activeInstanceName = config.instanceName
-        EasyTierNative.setTunFd(config.instanceName, fd)
-        Log.i(logTag, "Injected TUN fd for instance=${config.instanceName}")
-        EasyTierFlutterBridge.emitFromService(
-            "vpn_started",
-            mapOf(
-                "instanceName" to config.instanceName,
-                "fd" to fd,
-                "addresses" to config.addresses,
-                "routes" to config.routes,
-                "dnsServers" to config.dnsServers,
-                "mtu" to config.mtu,
-                "disallowedApplications" to config.disallowedApplications,
-                "builderAddresses" to builderConfig.addresses,
-                "builderRoutes" to builderConfig.routes,
-                "builderDnsServers" to builderConfig.dnsServers,
-                "builderDisallowedApplications" to builderConfig.disallowedApplications,
-                "ignoredDisallowedApplications" to builderConfig.ignoredDisallowedApplications,
-                "allowBypass" to allowDebugBypass,
-                "builderAllowBypass" to builderConfig.allowBypass,
-                "packageName" to packageName,
-                "addressCount" to config.addresses.size,
-                "routeCount" to config.routes.size,
-                "disallowedApplicationCount" to config.disallowedApplications.size,
-                "builderAddressCount" to builderConfig.addresses.size,
-                "builderRouteCount" to builderConfig.routes.size,
-                "builderDisallowedApplicationCount" to builderConfig.disallowedApplications.size,
-                "ignoredDisallowedApplicationCount" to
-                    builderConfig.ignoredDisallowedApplications.size,
-                "selfDisallowed" to config.disallowedApplications.contains(packageName),
-                "builderSelfDisallowed" to
-                    builderConfig.disallowedApplications.contains(packageName),
-            ),
-        )
-    }
-
-    private fun isDebuggableBuild(): Boolean {
-        return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    }
-
-    private fun stopVpn(
-        stopService: Boolean = true,
-        reason: String? = null,
-        fallbackInstanceName: String? = null,
-    ) {
-        val fd = tunFd
-        val instanceName = activeInstanceName
-            ?: fallbackInstanceName?.takeIf { it.isNotEmpty() }
-        tunFd = null
-        activeInstanceName = null
-        tunDescriptor?.close()
-        tunDescriptor = null
-        if (fd != null) {
-            closeDetachedTunFd(fd)
-            Log.i(logTag, "Stopped VPN fd=$fd instance=$instanceName")
-        }
-        if (fd != null || reason != null) {
-            val payload = mutableMapOf<String, Any?>("instanceName" to instanceName)
-            if (fd != null) {
-                payload["fd"] = fd
-            }
-            if (reason != null) {
-                payload["reason"] = reason
-            }
-            EasyTierFlutterBridge.emitFromService(
-                "vpn_stopped",
-                payload,
-            )
-        }
-        if (configServerClientStarted && !stopService) {
-            startForeground(notificationId, notification("Waiting for network config"))
+        val oldFd = tunFd
+        val replaceInterface = oldFd == null || previous?.sameInterface(config) != true
+        var builderConfig = activeBuilderConfig
+        val builder = if (replaceInterface) {
+            val builder = Builder()
+            builderConfig = EasyTierVpnBuilderConfigurator.configure(
+                EasyTierVpnServiceBuilderOperations(builder),
+                config.toVpnStartConfig(packageName),
+                sdkInt = Build.VERSION.SDK_INT,
+                allowBypass = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
+            ) { application, error -> Log.w(logTag, "Unknown disallowed application=$application", error) }
+            builder
         } else {
-            stopForegroundCompat()
+            null
         }
+        val newFd = if (builder != null) {
+            (builder.establish() ?: error("VpnService establish returned null")).detachFd()
+        } else {
+            checkNotNull(oldFd)
+        }
+        if (newFd != oldFd) pendingTunFd = newFd
+        try {
+            // Selection runs before old members are detached, preserving their priority.
+            // Successful attach also waits for the old borrowed fd to be released.
+            val attached = EasyTierMobileTunConfig.parse(
+                EasyTierNative.attachMobileTunFd(newFd, ids),
+            )
+            tunFd = newFd
+            pendingTunFd = null
+            if (oldFd != null && oldFd != newFd) closeDetachedTunFd(oldFd)
+            if (attached.instanceIds.isEmpty()) {
+                stopVpn()
+                publishState(attached)
+                return
+            }
+            // Remember installed OS settings, not a newer config observed during attach.
+            activeTunConfig = config.copy(instanceIds = attached.instanceIds)
+            activeBuilderConfig = builderConfig
+            membershipChanged = false
+            publishState(if (config.sameInterface(attached)) attached else attached.copy(instanceIds = emptyList()))
+            startForeground(notificationId, notification("Connected to ${attached.instanceIds.size} networks"))
+            EasyTierFlutterBridge.emitFromService(
+                if (replaceInterface) "vpn_started" else "vpn_config_refreshed",
+                attached.toMap() + mapOf(
+                    "fd" to newFd,
+                    "disallowedApplications" to listOf(packageName),
+                    "selfDisallowed" to true,
+                    "packageName" to packageName,
+                    "builderAddresses" to builderConfig?.addresses,
+                    "builderRoutes" to builderConfig?.routes,
+                    "builderDnsServers" to builderConfig?.dnsServers,
+                    "builderDisallowedApplications" to builderConfig?.disallowedApplications,
+                    "builderSelfDisallowed" to builderConfig?.disallowedApplications?.contains(packageName),
+                    "ignoredDisallowedApplications" to builderConfig?.ignoredDisallowedApplications,
+                    "allowBypass" to builderConfig?.allowBypass,
+                    "builderAllowBypass" to builderConfig?.allowBypass,
+                    "mtu" to 1280,
+                ),
+            )
+        } catch (error: Throwable) {
+            // A failed attach must release borrowed descriptors before closing them.
+            activeTunConfig = null
+            vpnState = mapOf("instance_ids" to emptyList<String>())
+            try {
+                stopVpn()
+            } catch (detachError: Throwable) {
+                // Both descriptors remain owned until a later detach succeeds.
+                error.addSuppressed(detachError)
+            }
+            throw error
+        }
+    }
+
+    private fun publishState(config: EasyTierMobileTunConfig) {
+        vpnState = config.toMap()
+    }
+
+    private fun stopRuntime(reason: String? = null, stopService: Boolean = true) {
+        worker.removeCallbacks(refresh)
+        activeConfigServerConfig = null
+        stopVpn(reason)
+        EasyTierNative.stopConfigServerClient()
+        EasyTierNative.stopAllInstances()
+        EasyTierFlutterBridge.emitFromService("config_server_stopped", mapOf("reason" to reason))
         if (stopService) {
+            stopForegroundCompat()
             explicitStopSelfRequested = true
             stopSelf()
         }
     }
 
-    private fun intentStringList(intent: Intent?, extraName: String): List<String> {
-        return intent
-            ?.getStringArrayListExtra(extraName)
-            .orEmpty()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+    private fun stopVpn(reason: String? = null) {
+        val fd = tunFd
+        val descriptors = listOfNotNull(fd, pendingTunFd).distinct()
+        if (descriptors.isNotEmpty()) {
+            EasyTierNative.attachMobileTunFd(0, null)
+            descriptors.forEach(::closeDetachedTunFd)
+        }
+        tunFd = null
+        pendingTunFd = null
+        activeTunConfig = null
+        activeBuilderConfig = null
+        membershipChanged = true
+        vpnState = mapOf("instance_ids" to emptyList<String>(), "rejected" to emptyList<Any>())
+        if (fd != null || reason != null) {
+            EasyTierFlutterBridge.emitFromService("vpn_stopped", mapOf("reason" to reason))
+        }
+        if (!destroyed && activeConfigServerConfig != null) {
+            startForeground(notificationId, notification("Waiting for network config"))
+        }
     }
 
     private fun closeDetachedTunFd(fd: Int) {
@@ -407,6 +344,15 @@ class EasyTierVpnService : VpnService() {
     )
 
     companion object {
+        private val workerThread = HandlerThread("EasyTierVpn").apply { start() }
+        private val worker = Handler(workerThread.looper)
+        @Volatile private var activeService: EasyTierVpnService? = null
+        @Volatile private var vpnState: Map<String, Any?> = mapOf("instance_ids" to emptyList<String>())
+        fun state(): Map<String, Any?> = vpnState
+        fun requestRefresh() {
+            worker.post { activeService?.scheduleRefresh() }
+        }
+
         const val actionStartConfigServer = "net.easytier.pro.action.START_CONFIG_SERVER"
         const val actionStopConfigServer = "net.easytier.pro.action.STOP_CONFIG_SERVER"
         const val actionStopRuntime = "net.easytier.pro.action.STOP_RUNTIME"

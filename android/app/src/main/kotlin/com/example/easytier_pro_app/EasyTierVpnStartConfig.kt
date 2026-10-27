@@ -80,8 +80,9 @@ object EasyTierVpnStartConfigParser {
         val normalized = routeEndpointCidr(value)
         val parts = normalized.split("/", limit = 2)
         require(parts.firstOrNull()?.isNotEmpty() == true) { "Invalid CIDR: $value" }
-        val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 32
-        require(prefix in 0..32) { "Invalid CIDR prefix: $value" }
+        val bits = if (parts[0].contains(':')) 128 else 32
+        val prefix = parts.getOrNull(1)?.toIntOrNull() ?: bits
+        require(prefix in 0..bits) { "Invalid CIDR prefix: $value" }
         return AndroidVpnCidr(parts[0], prefix)
     }
 

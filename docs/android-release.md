@@ -75,26 +75,26 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 原生服务事件会在 Flutter `EventChannel` 暂未监听时短暂缓存，避免回前台或 engine 重建期间丢失 config server/VPN 状态事件。
 - Android Dart runtime 在本轮进程尚未确认 `VpnService.prepare()` 已授权前，不会仅凭 config server client 在线就报告 running；这会强制重新进入 VPN 授权/恢复路径，避免控制面在线但系统 VPN route 未恢复时出现假阳性。
 - Android runtime 主动停止时会清空 Dart 侧本轮 VPN 授权确认状态，避免退出登录、工作区失效或登录态失效后的 stop 过程中继续凭旧状态报告 running。
-- Android VPN 会从 `my_node_info.virtual_ipv4` 派生虚拟网自身路由，并从 `routes[].proxy_cidrs`、`peer_route_pairs`、按 peer/route id 分组的 map 形路由、runtime config 的 `routes`/`proxy_networks` 和常见子网路由别名下发虚拟网/子网路由；如果子网路由使用 `real_cidr->mapped_cidr` 映射，Android 系统 VPN route 使用右侧 mapped CIDR。如果 native 运行态同时返回嵌套 `vpn_config` 和外层 route 信息，Android runtime 会合并两侧配置，避免只拿到虚拟 IP 而丢失外层路由。原生层在建立 VPN 前会再次把 route 规范为网络 CIDR，例如 `10.10.0.42/24` 会进入系统 VPN route 表为 `10.10.0.0/24`；本机地址仍保留主机 IP 传给 `addAddress`。
-- `Android VPN established` 诊断日志会同时记录 Dart/Kotlin 解析出的 `routes` 和实际传给 `VpnService.Builder.addRoute()` 的 `builder_routes`；如果两者不一致，优先用 `builder_routes` 判断 Android 系统 VPN interface 应该拥有的路由。
+- Android VPN 的地址、路由和 DNS 直接使用核心 `MobileTunConfig` 的聚合结果；核心负责虚拟网、子网映射和地址冲突判断。系统地址保留主机 IP，路由使用网络 CIDR，支持 IPv4 与 IPv6。
+- `Android VPN established` 诊断日志同时记录核心聚合 `routes` 和实际传给 `VpnService.Builder.addRoute()` 的 `builder_routes`；如果两者不一致，优先用 `builder_routes` 判断系统接口设置。
 - Android VPN interface 会以 non-blocking TUN fd 建立后再交给 EasyTier core，保持与上游 mobile launcher 对 raw fd 的使用方式一致，降低 Rust/tokio 数据面读写被阻塞 fd 卡住的风险。
-- Android MVP 只保留一个活跃 VPN 网络实例；Android UI 会阻止在已有 joined/joining/leaving 网络时加入第二个网络。若授权前连续收到多个 `run_network_instance`，最新下发会覆盖旧的 pending 配置，避免授权恢复后回切到旧网络。
-- Android VPN 建立后会先以 3 秒间隔刷新路由配置，随后降为 15 秒间隔；若虚拟 IP、子网路由、DNS 或 MTU 变化，会重新建立 VPN interface 并重新注入 TUN fd。
-- Android `START_VPN` 建立失败会带 `action`、`instanceName`、addresses、routes、DNS、已归一化的 disallowed applications、`packageName`、数量统计和 `selfDisallowed` 上报错误，并只清理本次 VPN 启动状态；即使配置解析失败，失败 payload 也会补上 EasyTier Pro 自身包名，便于排查路由回环防护是否生效。如果 config server client 仍在运行，原生 service 会保持前台等待下一次配置刷新，避免路由/地址错误直接中断控制面连接。
-- Dart 侧收到 Android runtime error 时会写入 `Android runtime error` 诊断日志，保留 action、instance、addresses、routes、DNS、disallowed applications 和 `self_disallowed`，便于在 `Android VPN established` 缺失时反查失败前的 VPN 配置。
-- Android VPN 后续收到原生 `vpn_started` 后，Dart 运行态会把此前的 VPN 运行时错误恢复为 running，避免诊断错误在已恢复连接后继续占据首页状态；Dart 侧 `vpn_config_refreshed` 只表示已请求原生服务刷新配置，不作为 TUN 注入成功证据。
+- Android 使用一个系统 VPN 承载多个核心实例，允许同工作区及跨工作区网络同时连接；工作区切换只改变浏览范围，不裁剪运行实例。系统授权前收到的所有网络配置由核心保留，授权后一起接入。
+- 系统地址、路由或 DNS 变化时，Service 串行更新聚合 VPN interface；成员变化但接口配置相同时复用系统 fd。新 fd 挂接成功并确认旧借用释放后才关闭旧 fd；整体停止则先 detach。移除单个成员不会停止其他核心实例。
+- 原生聚合或挂接失败通过 `vpn_config_error` 记录；`getVpnState` 返回具体错误及仍就绪的实例。冲突由核心决定，逐实例保留 `rejected` 原因，不把新网络失败显示为全部网络失败。
+- Dart 等待目标实例 ID 出现在已接入集合且获得虚拟地址后才显示连接成功。原生 Service 的维护独立于 Flutter 页面，页面关闭或进入后台不会取消其他网络。
+- `vpn_started` 表示系统接口已建立且核心挂接成功，诊断记录实际 Builder 配置；`vpn_config_refreshed` 表示在同一接口上更新了已接入成员。
 - Android 通知权限或 VPN 授权请求已在系统弹窗中等待时，重复启动不会进入运行时错误；通知权限 pending 会继续后续流程，VPN 授权 pending 会继续展示 `needsVpnPermission` 等待用户处理。
 - 用户拒绝系统 VPN 授权时，Dart 运行态会继续展示 `needsVpnPermission`，并在诊断状态中记录授权被拒绝，避免被误判为 config server 或 JNI 运行时错误。
 - Android 节点运行态会从 `my_node_info`、`routes` 和 `peer_route_pairs` 映射到现有 peer/status 展示模型。
 - Android 流量统计采用 2 秒间隔轮询 JSON RPC stats，peer/status 采用 5 秒间隔刷新节点详情状态；系统 VPN 由原生 Service 的串行任务维护全部实例；配置事件立即触发刷新，Service 每 3 秒读取核心聚合配置以处理地址和路由变化，不依赖 Flutter 后台计时器。随包 JNI 固定到 EasyTier main commit `48ccc56a1aa4a63ec5192f71e85b330b155f0136` + `scripts/mobile_core.patch`，共享补丁提供 `getMobileTunConfig` 和 `attachMobileTunFd` 桥接，核心返回聚合地址、路由、DNS 及逐实例拒绝原因。
 - Android bridge 会区分 JNI library/class/method 缺失和 JNI 方法已加载后的 native status 失败；前者按 `JNI_UNAVAILABLE` 处理，后者按运行时错误上报，避免停止或 retain 实例失败被误当作库缺失而吞掉。
 - Android 导出诊断日志会写入应用缓存日志目录，并通过 `FileProvider` 拉起系统分享面板；导出聚合时会跳过旧的 `diagnostics-*.log` 文件，避免重复导出导致日志自我嵌套膨胀。
-- 随包 JNI 构建会给 config server callback 补充 `instance_name` 和 `network_name`，并暴露 `listInstances` 与 JSON RPC；Dart 使用 `listInstances` / callback 定位 EasyTier instance name，使用 `instance_name` 调用 `retainNetworkInstance`、`START_VPN` 和 `setTunFd`，通过 JSON RPC `show_node_info` / `list_route` / `get_stats` 获取虚拟 IP、动态路由和流量统计，并使用 `network_name` 关联首页 readiness、peer status、流量统计和后续删除事件，避免把 UUID 或控制台网络名误当 EasyTier instance name 导致 TUN 注入、路由刷新或停止失败。
+- 核心 config server callback 包含 `instance_id`、`instance_name` 和 `network_name`。Service 使用实例 ID 聚合和挂接 TUN；Dart 使用 callback 与 JSON RPC 名称映射关联各网络的 readiness、peer status 和流量。移除实例后不能用剩余的唯一实例替代已移除网络。
 - 已登录且运行中的 Android runtime 收到 `config_server_stopped` 事件时会自动重新连接；退出登录和工作区重建期间不会被该事件反向拉起。
-- workspace 切换会强制重建 runtime；如果当前账号失去 workspace 绑定，会先停止 runtime，避免继续保持旧 workspace 的控制面/VPN 连接。
+- 工作区切换不重建 runtime。浏览范围与本机源设备绑定分离；目标工作区首次连接复用 Console 的设备共享授权，源设备和凭据不随浏览选择变化。
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
-- Android bootstrap 会优先复用当前 workspace 中未撤销、未过期且可复用的 `Android Auto Key`；如果只存在 `Desktop Auto Key`、一次性 key 或其他平台 key，会创建新的 Android 平台注册密钥，避免 Android 设备注册审计混用桌面密钥。
-- 退出登录、工作区失效、登录态失效、常驻通知 Disconnect 或系统 VPN 设置撤销连接时，会由原生 `STOP_RUNTIME` 路径按顺序停止 config server client，调用 `retainNetworkInstance(null)` 清理 EasyTier core 网络实例，再停止 Android VPN interface；常驻通知 Disconnect 和系统撤销路径会在 `config_server_stopped`/`vpn_stopped` 事件中带 stop reason，Dart 运行态进入 stopped 且不会自动重连。如果 Android 在非显式停止流程中销毁原生 service，原生清理事件（`config_server_stopped` 或 `vpn_stopped`）会带 `service_destroyed`，Dart 会按非主动断开处理并在会话仍有效时尝试重连；用户主动断开后的 `stopSelf()` 销毁只做静默兜底清理，不再追加 `service_destroyed` 诊断噪声。
+- Android bootstrap 使用源工作区当前成员的默认注册密钥，沿用 Console 自动取钥契约。目标工作区授权使用其独立默认密钥及审批状态，不替换源设备凭据。
+- 退出登录、源设备授权失效、登录态失效、通知 Disconnect 或系统 VPN 撤权通过原生 `STOP_RUNTIME` 停止整个 VPN、控制连接及全部实例。借用 fd 必须在核心串行 detach 完成后关闭。通知 Disconnect 与系统撤权带 stop reason，Dart 不自动重连；系统异常销毁 Service 时带 `service_destroyed`，会话有效时按现有恢复流程重连。目标授权撤销只移除对应网络，不走全局停止路径。
 - VPN 会通过 `addDisallowedApplication(packageName)` 排除 EasyTier Pro 自身，避免控制面连接和 EasyTier 底层传输被自己的 VPN 路由回环；如果未来 EasyTier core、控制面客户端或保活组件拆到独立 Android package，也应把对应 package 加入 disallowed applications。不要默认排除浏览器、Termux、ping 工具等诊断应用，它们需要走 VPN 才能验证虚拟网和子网连通性；不应用 EasyTier Pro 自己访问虚拟网作为判断依据。
 - VPN 连接会显示常驻通知；用户可以点击通知返回应用，也可以通过通知动作、系统 VPN 设置或应用内退出/断开操作停止连接。
 - 应用不会在客户端硬编码只适用于生产环境的控制面地址；控制台和本地 E2E 环境应继续通过上层配置或控制台接口提供。
