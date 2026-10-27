@@ -14,6 +14,28 @@ extension _WorkspaceHomeJoinActions on _WorkspaceHomeViewState {
       );
       return;
     }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final connections = widget.coreLifecycleService.networkConnections.value;
+      final candidates = <String, ConsoleNetwork>{
+        for (final item in _networks) item.id: item,
+        for (final connection in connections.values)
+          connection.network.id: connection.network,
+      };
+      for (final other in candidates.values) {
+        if (other.id == network.id) continue;
+        final phase = _joinStateFor(other).phase;
+        if (phase == _JoinPhase.joined ||
+            phase == _JoinPhase.joining ||
+            phase == _JoinPhase.leaving ||
+            connections[other.id]?.nodeId != null) {
+          _showNetworkActionToast(
+            'iOS 当前仅支持一个活跃 VPN 网络，请先断开「${other.name}」后再加入此网络。',
+            destructive: true,
+          );
+          return;
+        }
+      }
+    }
     try {
       await widget.coreLifecycleService.connectNetwork(workspace, network);
       if (!mounted) return;

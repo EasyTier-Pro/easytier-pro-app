@@ -1357,6 +1357,65 @@ void main() {
     expect(find.textContaining('Android 当前仅支持一个活跃 VPN 网络'), findsNothing);
   });
 
+  testWidgets('iOS keeps its single active network across workspace switches', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      _useDesktopViewport(tester, size: const Size(390, 760));
+      final auth = _FakeAuthService(
+        workspaces: const [
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+          ConsoleWorkspace(id: 'tenant-2', name: '团队空间'),
+        ],
+        networksByWorkspace: const {
+          'tenant-1': [ConsoleNetwork(id: 'net-1', name: '个人网络')],
+          'tenant-2': [ConsoleNetwork(id: 'net-2', name: '团队网络')],
+        },
+        managedDevices: const [
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'test',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+      );
+      final core = _NoopCoreLifecycleService(
+        authService: auth,
+        machineId: 'machine-1',
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: auth,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      expect(auth.attachedNetworkIds, ['net-1']);
+      expect(auth.removedNodeIds, isEmpty);
+      expect(find.textContaining('iOS 当前仅支持一个活跃 VPN 网络'), findsOneWidget);
+      expect(
+        core.networkConnections.value['net-1']?.phase,
+        CoreNetworkConnectionPhase.joined,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('mobile toast avoids bottom navigation', (
     WidgetTester tester,
   ) async {
@@ -3532,7 +3591,12 @@ void main() {
 
     expect(find.text('设置'), findsOneWidget);
     expect(_hasSelectionAreaAncestor(tester, find.text('Test User')), isFalse);
-    expect(_hasSelectionAreaAncestor(tester, find.text('个人空间')), isFalse);
+    final menuWorkspace = find.descendant(
+      of: find.byType(FItemGroup),
+      matching: find.text('个人空间'),
+    );
+    expect(menuWorkspace, findsOneWidget);
+    expect(_hasSelectionAreaAncestor(tester, menuWorkspace), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('设置')), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
   });
@@ -4612,7 +4676,7 @@ void main() {
     await tester.tap(find.byType(FSwitch).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('本机设备尚未批准，请先在控制台批准设备。'), findsOneWidget);
+    expect(find.text('本机在此工作区尚未批准，请等待管理员批准。'), findsOneWidget);
     expect(authService.attachedNetworkIds, isEmpty);
   });
 
