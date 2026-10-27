@@ -166,9 +166,8 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     });
 
     try {
-      final networks = await widget.authService.fetchNetworks(
-        accessToken: widget.session.tokenSet.accessToken,
-        workspaceId: workspace.id,
+      final networks = await widget.coreLifecycleService.fetchWorkspaceNetworks(
+        workspace,
       );
       if (!mounted || requestId != _networkRequestId) {
         return;
@@ -183,6 +182,11 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
 
       _updateState(() {
         _networks = networks;
+        _networkDevices = {
+          for (final network in networks)
+            if (_networkDevices.containsKey(network.id))
+              network.id: _networkDevices[network.id]!,
+        };
         _selectedNetworkId = selectedId;
         _isLoadingNetworks = false;
       });
@@ -218,14 +222,11 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
     final results = await Future.wait(
       networks.map((network) async {
         try {
-          final devices = await widget.authService.fetchNetworkDevices(
-            accessToken: widget.session.tokenSet.accessToken,
-            workspaceId: workspace.id,
-            networkId: network.id,
-          );
+          final devices = await widget.coreLifecycleService
+              .fetchWorkspaceNetworkDevices(workspace, network);
           return MapEntry(network.id, devices);
         } catch (_) {
-          return MapEntry(network.id, const <NetworkDevice>[]);
+          return MapEntry(network.id, null);
         }
       }),
     );
@@ -235,7 +236,11 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
       return;
     }
     _updateState(() {
-      _networkDevices = Map<String, List<NetworkDevice>>.fromEntries(results);
+      _networkDevices = {
+        ..._networkDevices,
+        for (final result in results)
+          if (result.value != null) result.key: result.value!,
+      };
     });
     final selectedNetworkId = _selectedNetworkId;
     if (selectedNetworkId != null) {
@@ -248,15 +253,14 @@ extension _WorkspaceHomeDataActions on _WorkspaceHomeViewState {
   Future<void> _loadSingleNetworkDevices(String networkId) async {
     final workspace = _workspace;
     final generation = _workspaceGeneration;
-    if (workspace == null) {
+    final network = _networkById(networkId);
+    if (workspace == null || network == null) {
       return;
     }
-    final devices = await widget.authService.fetchNetworkDevices(
-      accessToken: widget.session.tokenSet.accessToken,
-      workspaceId: workspace.id,
-      networkId: networkId,
-    );
-    if (!mounted ||
+    final devices = await widget.coreLifecycleService
+        .fetchWorkspaceNetworkDevices(workspace, network);
+    if (devices == null ||
+        !mounted ||
         _workspace?.id != workspace.id ||
         generation != _workspaceGeneration) {
       return;

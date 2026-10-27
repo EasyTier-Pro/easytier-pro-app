@@ -34,9 +34,8 @@ extension _WorkspaceHomeWorkspaces on _WorkspaceHomeViewState {
         if (!mounted) return;
         final networks = workspace.id == _workspace?.id
             ? _networks
-            : await widget.authService.fetchNetworks(
-                accessToken: widget.session.tokenSet.accessToken,
-                workspaceId: workspace.id,
+            : await widget.coreLifecycleService.fetchWorkspaceNetworks(
+                workspace,
               );
         if (!mounted) return;
         await widget.coreLifecycleService.refreshWorkspaceConnections(

@@ -170,9 +170,8 @@ extension _WorkspaceHomePolling on _WorkspaceHomeViewState {
           nextTraffic.remove(network.id);
           nextPrevious.remove(runtimeName);
           nextHistories.remove(network.id);
-          if (nextInstanceReady[network.id] != true) {
-            instanceReadinessFallbacks.add(network);
-          }
+          nextInstanceReady[network.id] = false;
+          instanceReadinessFallbacks.add(network);
           continue;
         }
 

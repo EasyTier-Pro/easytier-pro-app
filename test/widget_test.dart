@@ -1199,6 +1199,107 @@ void main() {
   );
 
   testWidgets(
+    'refresh clears a revoked target connection and retains the source',
+    (tester) async {
+      _useDesktopViewport(tester);
+      final auth = _FakeAuthService(
+        workspaces: const [
+          ConsoleWorkspace(id: 'tenant-1', name: '个人空间'),
+          ConsoleWorkspace(id: 'tenant-2', name: '团队空间'),
+        ],
+        networksByWorkspace: const {
+          'tenant-1': [ConsoleNetwork(id: 'net-1', name: '个人网络')],
+          'tenant-2': [ConsoleNetwork(id: 'net-2', name: '团队网络')],
+        },
+        managedDevices: const [
+          ManagedDevice(
+            id: 'device-1',
+            machineId: 'machine-1',
+            hostname: 'test',
+            approvalState: 'approved',
+            connectivityState: 'online',
+          ),
+        ],
+      );
+      final core = _NoopCoreLifecycleService(
+        authService: auth,
+        machineId: 'machine-1',
+      );
+      await tester.pumpWidget(
+        MyApp(
+          authService: auth,
+          traySupport: createTraySupport(),
+          coreLifecycleService: core,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FSwitch).first);
+      await tester.pumpAndSettle();
+      expect(
+        core.networkConnections.value.keys,
+        containsAll(['net-1', 'net-2']),
+      );
+      auth.networkDevices['net-2'] = [];
+      await tester.tap(find.byKey(const ValueKey('network-refresh-button')));
+      await tester.pumpAndSettle();
+      expect(core.networkConnections.value.keys, ['net-1']);
+      expect(tester.widget<FSwitch>(find.byType(FSwitch).first).value, isFalse);
+      await tester.tap(find.byKey(const ValueKey('workspace-connections')));
+      await tester.pumpAndSettle();
+      expect(find.text('个人空间 · 个人网络'), findsOneWidget);
+      expect(find.text('团队空间 · 团队网络'), findsNothing);
+      expect(auth.removedNodeIds, isEmpty);
+    },
+  );
+
+  testWidgets('missing runtime traffic rechecks a previously ready instance', (
+    tester,
+  ) async {
+    _useDesktopViewport(tester);
+    final auth = _FakeAuthService(
+      networks: const [
+        ConsoleNetwork(id: 'net-1', name: '个人网络', runtimeNetworkName: 'nt-1'),
+      ],
+      managedDevices: const [
+        ManagedDevice(
+          id: 'device-1',
+          machineId: 'machine-1',
+          hostname: 'test',
+          approvalState: 'approved',
+          connectivityState: 'online',
+        ),
+      ],
+    );
+    final core = _NoopCoreLifecycleService(
+      authService: auth,
+      machineId: 'machine-1',
+    );
+    await tester.pumpWidget(
+      MyApp(
+        authService: auth,
+        traySupport: createTraySupport(),
+        coreLifecycleService: core,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FSwitch).first);
+    await tester.pumpAndSettle();
+    expect(core.networkConnections.value['net-1']?.ready, isTrue);
+    core.instanceRunning = false;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(core.networkConnections.value['net-1']?.ready, isFalse);
+    expect(find.text('0 已连接'), findsOneWidget);
+    expect(auth.removedNodeIds, isEmpty);
+  });
+
+  testWidgets(
     'narrow mobile header keeps long workspace and connected summary reachable',
     (tester) async {
       tester.view.physicalSize = const Size(320, 780);
@@ -6868,7 +6969,7 @@ class _NoopCoreLifecycleService extends CoreLifecycleService {
   });
 
   final String? machineId;
-  final bool instanceRunning;
+  bool instanceRunning;
   final List<Map<String, CoreNetworkTrafficTotals>> trafficSamples;
   final Object? trafficError;
   final List<Map<String, CorePeerStatus>> peerSamples;

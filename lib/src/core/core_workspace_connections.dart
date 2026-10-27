@@ -419,51 +419,101 @@ extension CoreWorkspaceConnections on CoreLifecycleService {
     ConsoleWorkspace workspace,
     List<ConsoleNetwork> networks,
   ) async {
-    final generation = _connectionGeneration;
     if (!status.value.isRunning || _session == null || networks.isEmpty) return;
-    final device = await _resolveSourceDevice();
+    await _resolveSourceDevice();
     for (final network in networks) {
-      _checkConnectionGeneration(generation);
-      if (_networkOperations.containsKey(network.id)) continue;
-      final operationGeneration = _networkOperationGenerations[network.id] ?? 0;
-      final nodes = await authService.fetchNetworkDevices(
-        accessToken: _session!.tokenSet.accessToken,
-        workspaceId: workspace.id,
-        networkId: network.id,
-      );
-      _checkConnectionGeneration(generation);
-      if (_networkOperations.containsKey(network.id) ||
-          operationGeneration !=
-              (_networkOperationGenerations[network.id] ?? 0)) {
-        continue;
+      await fetchWorkspaceNetworkDevices(workspace, network);
+    }
+  }
+
+  Future<List<ConsoleNetwork>> fetchWorkspaceNetworks(
+    ConsoleWorkspace workspace,
+  ) async {
+    final generation = _connectionGeneration;
+    final operationGenerations = Map<String, int>.of(
+      _networkOperationGenerations,
+    );
+    final networks = await authService.fetchNetworks(
+      accessToken: _session!.tokenSet.accessToken,
+      workspaceId: workspace.id,
+    );
+    _checkConnectionGeneration(generation);
+    final visibleIds = networks.map((network) => network.id).toSet();
+    final next = {...networkConnections.value};
+    for (final connection in networkConnections.value.values) {
+      final id = connection.network.id;
+      if (connection.workspace.id == workspace.id &&
+          !visibleIds.contains(id) &&
+          !_networkOperations.containsKey(id) &&
+          (operationGenerations[id] ?? 0) ==
+              (_networkOperationGenerations[id] ?? 0)) {
+        next.remove(id);
+        // Fence node reads started before this successful list response.
+        _networkOperationGenerations[id] =
+            (_networkOperationGenerations[id] ?? 0) + 1;
       }
-      final node = nodes
-          .where((n) => n.deviceId == device.id && n.attached)
-          .firstOrNull;
-      if (node == null) {
+    }
+    if (next.length != networkConnections.value.length) {
+      networkConnections.value = next;
+    }
+    return networks;
+  }
+
+  /// A null result means a join/leave superseded the read. Callers keep their
+  /// current topology instead of treating that result as an empty node list.
+  Future<List<NetworkDevice>?> fetchWorkspaceNetworkDevices(
+    ConsoleWorkspace workspace,
+    ConsoleNetwork network,
+  ) async {
+    final generation = _connectionGeneration;
+    final operationGeneration = _networkOperationGenerations[network.id] ?? 0;
+    if (_networkOperations.containsKey(network.id)) return null;
+    final nodes = await authService.fetchNetworkDevices(
+      accessToken: _session!.tokenSet.accessToken,
+      workspaceId: workspace.id,
+      networkId: network.id,
+    );
+    _checkConnectionGeneration(generation);
+    bool superseded() =>
+        _networkOperations.containsKey(network.id) ||
+        operationGeneration != (_networkOperationGenerations[network.id] ?? 0);
+    if (superseded()) return null;
+    final deviceId = localDeviceId;
+    if (deviceId == null) return nodes;
+    final node = nodes
+        .where((n) => n.deviceId == deviceId && n.attached)
+        .firstOrNull;
+    if (node == null) {
+      if (networkConnections.value.containsKey(network.id)) {
         networkConnections.value = {...networkConnections.value}
           ..remove(network.id);
-        continue;
+        _networkOperationGenerations[network.id] = operationGeneration + 1;
       }
-      final ready = await isNetworkInstanceRunning(network.runtimeNetworkName);
-      _checkConnectionGeneration(generation);
-      if (_networkOperations.containsKey(network.id) ||
-          operationGeneration !=
-              (_networkOperationGenerations[network.id] ?? 0)) {
-        continue;
-      }
-      _publishConnection(
-        CoreNetworkConnection(
-          workspace: workspace,
-          network: network,
-          phase: CoreNetworkConnectionPhase.joined,
-          nodeId: node.id,
-          ipv4: node.ipv4,
-          ready: ready,
-        ),
-        generation,
-      );
+      return nodes;
     }
+    final previous = networkConnections.value[network.id];
+    // Console attachment alone does not repair a rejected local instance.
+    if (previous?.phase == CoreNetworkConnectionPhase.error &&
+        previous?.nodeId == node.id) {
+      return nodes;
+    }
+    final ready =
+        status.value.isRunning &&
+        await isNetworkInstanceRunning(network.runtimeNetworkName);
+    _checkConnectionGeneration(generation);
+    if (superseded()) return null;
+    _publishConnection(
+      CoreNetworkConnection(
+        workspace: workspace,
+        network: network,
+        phase: CoreNetworkConnectionPhase.joined,
+        nodeId: node.id,
+        ipv4: node.ipv4,
+        ready: ready,
+      ),
+      generation,
+    );
+    return nodes;
   }
 
   void updateNetworkReadiness(String networkId, bool ready) {

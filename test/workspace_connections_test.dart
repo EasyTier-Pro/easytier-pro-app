@@ -168,6 +168,112 @@ void main() {
       expect(runtime.stopCount, 1);
     },
   );
+
+  test(
+    'Console node removal clears only the affected workspace connection',
+    () async {
+      final auth = _Auth();
+      final runtime = _Runtime();
+      final core = CoreLifecycleService(
+        authService: auth,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(core.dispose);
+      await core.bindSession(session());
+      await core.connectNetwork(source, networkA);
+      await core.connectNetwork(target, networkB);
+      // Revoking the target grant removes its projected Node, even if a native
+      // readiness sample still reflects the old instance.
+      auth.shared = false;
+      auth.nodes['b'] = [];
+      await core.fetchWorkspaceNetworkDevices(target, networkB);
+      expect(core.networkConnections.value.keys, ['a']);
+      expect(core.networkConnections.value['a']?.ready, isTrue);
+      expect(runtime.stopCount, 0);
+    },
+  );
+
+  test('Console network removal clears only that workspace summary', () async {
+    final auth = _Auth();
+    final core = CoreLifecycleService(
+      authService: auth,
+      runtime: _Runtime(),
+      engineVersionCheckInterval: Duration.zero,
+    );
+    addTearDown(core.dispose);
+    await core.bindSession(session());
+    await core.connectNetwork(source, networkA);
+    await core.connectNetwork(target, networkB);
+    auth.networks['target'] = [];
+    expect(await core.fetchWorkspaceNetworks(target), isEmpty);
+    expect(core.networkConnections.value.keys, ['a']);
+  });
+
+  test('stale node read cannot revive a completed disconnect', () async {
+    final auth = _Auth();
+    final core = CoreLifecycleService(
+      authService: auth,
+      runtime: _Runtime(),
+      engineVersionCheckInterval: Duration.zero,
+    );
+    addTearDown(core.dispose);
+    await core.bindSession(session());
+    await core.connectNetwork(source, networkA);
+    final gate = Completer<void>();
+    auth.nodeReadGate = gate;
+    final stale = core.fetchWorkspaceNetworkDevices(source, networkA);
+    await core.disconnectNetwork(source, networkA);
+    gate.complete();
+    expect(await stale, isNull);
+    expect(core.networkConnections.value, isEmpty);
+  });
+
+  test('stale network list cannot erase a newly completed join', () async {
+    final auth = _Auth()..networks['target'] = [];
+    final core = CoreLifecycleService(
+      authService: auth,
+      runtime: _Runtime(),
+      engineVersionCheckInterval: Duration.zero,
+    );
+    addTearDown(core.dispose);
+    await core.bindSession(session());
+    final gate = Completer<void>();
+    auth.networkReadGate = gate;
+    final stale = core.fetchWorkspaceNetworks(target);
+    await core.connectNetwork(target, networkB);
+    gate.complete();
+    await stale;
+    expect(core.networkConnections.value.keys, ['b']);
+  });
+
+  test(
+    'ordinary Console and readiness reads preserve an attached instance error',
+    () async {
+      final auth = _Auth();
+      final runtime = _Runtime();
+      final core = CoreLifecycleService(
+        authService: auth,
+        runtime: runtime,
+        engineVersionCheckInterval: Duration.zero,
+      );
+      addTearDown(core.dispose);
+      await core.bindSession(session());
+      await core.connectNetwork(source, networkA);
+      runtime.waitError = StateError('route conflict');
+      await expectLater(
+        core.connectNetwork(target, networkB),
+        throwsStateError,
+      );
+      final error = core.networkConnections.value['b'];
+      expect(error?.nodeId, 'node-b');
+      await core.fetchWorkspaceNetworkDevices(target, networkB);
+      await core.refreshWorkspaceConnections(target, [networkB]);
+      core.updateNetworkReadiness('b', false);
+      expect(core.networkConnections.value['b'], same(error));
+      expect(core.networkConnections.value['a']?.ready, isTrue);
+    },
+  );
 }
 
 class _Auth extends Fake implements AuthService {
@@ -177,10 +283,28 @@ class _Auth extends Fake implements AuthService {
   final shares = <String>[];
   final attaches = <String>[];
   final nodes = <String, List<NetworkDevice>>{};
+  final networks = <String, List<ConsoleNetwork>>{
+    'source': [networkA],
+    'target': [networkB],
+  };
   bool shared = false;
   bool targetApproved = true;
   bool includeDuplicateMachine = false;
   Completer<void>? attachGate;
+  Completer<void>? nodeReadGate;
+  Completer<void>? networkReadGate;
+
+  @override
+  Future<List<ConsoleNetwork>> fetchNetworks({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    final result = List<ConsoleNetwork>.of(networks[workspaceId] ?? []);
+    final gate = networkReadGate;
+    networkReadGate = null;
+    await gate?.future;
+    return result;
+  }
 
   @override
   Future<WorkspacePreferences> loadWorkspacePreferences(
@@ -257,7 +381,14 @@ class _Auth extends Fake implements AuthService {
     required String accessToken,
     required String workspaceId,
     required String networkId,
-  }) async => nodes[networkId] ?? [];
+  }) async {
+    final result = List<NetworkDevice>.of(nodes[networkId] ?? []);
+    final gate = nodeReadGate;
+    nodeReadGate = null;
+    await gate?.future;
+    return result;
+  }
+
   @override
   Future<AttachNetworkResult> attachDeviceToNetwork({
     required String accessToken,
@@ -298,6 +429,7 @@ class _Runtime extends CorePlatformRuntime {
   int stopCount = 0;
   int waitCount = 0;
   final running = <String>{};
+  Object? waitError;
   @override
   Future<CoreRuntimeStartResult?> readStatus(
     CoreBootstrapConfig bootstrap,
@@ -329,6 +461,7 @@ class _Runtime extends CorePlatformRuntime {
   }) async {
     waitCount++;
     expect(await readInstanceId(), isNotNull);
+    if (waitError != null) throw waitError!;
     running.add(runtimeNetworkName);
     return '10.1.0.2';
   }
