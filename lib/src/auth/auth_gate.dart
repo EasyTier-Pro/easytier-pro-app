@@ -850,6 +850,43 @@ class _LoginRequiredView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
+            if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+              Text(
+                '本服务仅面向中国大陆地区用户。为提供身份认证、设备管理和组网服务，'
+                '我们会收集账号信息、设备标识、网络配置与连接状态，并统计中继流量用量。'
+                '你主动反馈问题时可提供诊断日志。请在使用前阅读以下说明。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  FButton(
+                    variant: .ghost,
+                    onPress: () => unawaited(
+                      launchUrl(
+                        Uri.parse('https://easytier.net/privacy/'),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                    ),
+                    child: const Text('隐私政策'),
+                  ),
+                  FButton(
+                    variant: .ghost,
+                    onPress: () => unawaited(
+                      launchUrl(
+                        Uri.parse('https://easytier.net/terms/'),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                    ),
+                    child: const Text('服务条款'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
             FButton(
               onPress: () => unawaited(onLogin()),
               child: const Row(

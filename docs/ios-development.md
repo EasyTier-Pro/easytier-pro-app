@@ -323,3 +323,51 @@ VPN 服务，启用网络时应用会提示使用真机，不会报告虚假的 
 6. 本地 E2E 与线上控制台分别完成验证。使用已有控制台 URL 配置入口；
    本地 HTTP E2E 构建可通过 Xcode 的本地网络/ATS 调试配置测试，正式分发
    保持 HTTPS。
+
+## TestFlight 发布
+
+App Store Connect 应用为 [EasyTier Pro](https://appstoreconnect.apple.com/apps/6827401593/testflight)，
+Apple ID 为 `6827401593`，Bundle ID 为 `net.easytier.pro`，主要语言为简体中文。
+主应用与 `net.easytier.pro.PacketTunnel` 扩展分别使用 App Store 分发描述文件，
+保留相同 Team、App Group 和 Keychain 权限。开发描述文件不能代替分发描述文件。
+
+2026-10-27 的首个上传构建为 `1.0.8 (9)`：
+
+- 用户确认已完成真机功能验收，本轮不重复该验收。
+- iOS 登录页增加使用前的数据说明及隐私政策、服务条款入口；文案事实来源为
+  控制台仓库 `landing-page/src/pages/privacy.astro`、`terms.astro`，公开页面为
+  `https://easytier.net/privacy/` 和 `https://easytier.net/terms/`。
+- iOS 图标从控制台官网已有的品牌 SVG 生成；源文件保存在
+  `assets/images/ios_app_icon.svg`。背景为完整不透明方形，圆角由系统处理。
+  按 AppIcon `Contents.json` 中的尺寸和倍率使用 `rsvg-convert` 输出各 PNG，
+  所有输出均为不含 alpha 通道的 RGB 图像。
+- 静态分析通过；Linux 与实际归档使用的 Mac 工具链分别通过 249 项 Flutter
+  测试。登录回归明确定位“开始登录”，不再依赖第一个按钮的位置。
+- Mac 使用 Flutter 3.47.0、Xcode 26.6、iOS 26.5 SDK，以及已验证的固定核心
+  框架；152 个应用构建输入与本仓库候选逐项 SHA-256 比对一致。
+- 主应用和扩展通过严格签名校验，分发描述文件均为
+  `get-task-allow=false`、`beta-reports-active=true`。
+- Archive、IPA 导出及 `altool --validate-app` 成功。Apple 在北京时间
+  11:44:45 确认上传成功，Delivery UUID 为
+  `8baa9a3f-afec-4ffd-a718-942cf557463f`。
+- Apple 完成构建处理，`processingState=VALID`。按正常产品采用系统之外的
+  标准加密算法、且不在法国分发完成网页问卷，Apple 将该构建标记为
+  `usesNonExemptEncryption=false`，解除出口合规等待。
+- 专用审核登录信息、测试步骤及公司审核联系方式已通过 App Store Connect
+  保存。构建已分配至两个测试分组，并成功提交外部 Beta App Review；提交后
+  状态为 `WAITING_FOR_REVIEW`，外部构建为 `WAITING_FOR_BETA_REVIEW`，
+  内部构建为 `READY_FOR_BETA_TESTING`。尚未获得外部审核批准。
+- IPA 大小为 40,714,802 字节，SHA-256 为
+  `c8fb726cb65d1e14090cfe6d8235b1557a2ef96f422db8fea5c7ea57c20a8fac`。
+
+Mac 的归档、IPA、分发配置及原始日志位于
+`/Users/admin/apple-signing/easytier-pro-testflight-20261027/`，
+IPA 为 `export/EasyTier Pro.ipa`。API 密钥、签名私钥及审核登录凭据不提交仓库。
+开发机另保存 `build/testflight/1.0.8-9/EasyTier-Pro.ipa`，哈希与上传文件一致。
+远程 SSH 会话与桌面会话可能具有不同的钥匙串锁定状态；本次在用户解锁后的
+桌面会话中执行归档和导出，复用现有分发证书，没有创建替代证书。
+
+已创建“内部测试”和“中国大陆测试”分组，关闭 Apple Silicon Mac 与
+Apple Vision 测试入口，未开启公开邀请链接。“中国大陆测试”是分组名称，
+不代表 TestFlight 提供地理位置限制；测试者范围仍需通过邀请管理。
+上传成功不等于构建处理完成、加密声明完成或外部 Beta App Review 通过。

@@ -141,7 +141,7 @@ void main() {
           );
           await tester.pumpAndSettle();
 
-          await tester.tap(find.byType(FButton).first);
+          await tester.tap(find.widgetWithText(FButton, '开始登录'));
           await tester.pumpAndSettle();
 
           expect(launcher.launchCount, 1);
