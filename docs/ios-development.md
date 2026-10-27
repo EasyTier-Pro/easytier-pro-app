@@ -379,6 +379,59 @@ Apple Vision 测试入口，未开启公开邀请链接。“中国大陆测试�
 客户端没有对应控制入口的底层验证项目。
 
 2026-10-27 已在独立浏览器会话实际验证审核账号登录成功，能够看到“测试”网络
-（`10.55.55.0/24`）及其运行节点。尚未完成 iOS 客户端接入和 HTTP 页面访问：
-配对 iPhone 的开发连接超时，随后 `devicectl` 显示 `unavailable`，同时仍待提供
-HTTP 服务的完整地址。控制台登录成功不作为真机连通性验收。
+（`10.55.55.0/24`）及其运行节点。已创建专用 `testflight-http` 节点，审核页面为
+`http://10.55.55.5:8080/`，成功时显示“连接成功 / Connection successful”。
+TestFlight 的测试内容及审核步骤均已保存此完整地址，并通过 API 回读核对。
+
+服务位于开发机 `/data/services/easytier-testflight/`，Docker 容器名为
+`easytier-testflight-http`。EasyTier 节点与 HTTP 服务在同一容器中运行，使用固定
+machine ID 和持久化配置，设置 `restart=unless-stopped`。HTTP 只监听组网地址
+`10.55.55.5:8080`，没有发布宿主机端口。设备接入凭据保存在该目录的受限文件，
+不提交仓库。审核期间应保留此节点、网络和容器。
+
+独立验证节点 `testflight-check` 使用另一个网络命名空间，以 `10.55.55.3` 通过
+`tun0` 访问该地址，收到 `HTTP 200`，响应内容 SHA-256 与服务页面一致，服务端
+日志同时记录了该虚拟 IP 的成功请求。最终服务容器重启后复验仍返回 `HTTP 200`。
+原始路由、响应、HTTP 服务日志及不含秘密的容器
+清单位于 `build/testflight/1.0.8-9/http-verification/`。这证明组网 HTTP 服务可用，
+不单独作为 iOS 客户端接入和 Safari 访问的验收。
+验证完成后已移除临时 `testflight-check` 设备及容器，只保留 HTTP 服务节点。
+
+审核账号的默认设备接入密钥仍为 `pre_approved=false`。每台新设备注册后需要
+工作区管理员批准；已批准服务节点和验证节点不代表 Apple 后续使用的新设备也获准。
+控制台当前没有修改现有默认密钥审批策略的接口，重新登录或替换默认密钥也保留
+原策略（控制台仓库 `docs/adr/0059-owner-default-enrollment-approval.md`）。因此，
+HTTP 服务可用与审核账号的新设备能够自行完成接入是两个不同的验收条件。
+
+同日已在 iPhone 上完成审核账号的密码登录、返回 App、接入“测试”网络和 Safari
+访问。手机节点 `iPhone-e2367b76` 已获批准，地址为 `10.55.55.3/24`；北京时间
+14:03:41，服务端收到该地址的 `GET /` 并返回 `200`，Safari 截图与 XCTest
+同时确认“连接成功 / Connection successful”正文。所装包由上传的 `1.0.8 (9)`
+archive 复制后替换开发签名，Mach-O section 和非签名资源与上传候选一致。
+此次已批准手机的成功不代表其他全新审核设备已自动获准。
+
+`1.0.8 (10)` 将登录页条款入口移到页面最底部，使用居中的 12px 小字链接；
+移除登录卡片中的长说明和两个独占一行的条款按钮。隐私政策、服务条款链接仍指向
+原有官方页面。
+
+该改动通过静态检查、105 项现有 widget 测试及最终只读审查。新版真机截图确认
+小字位于屏幕底部安全区上方，两个链接分别打开对应官方页面，“开始登录”打开
+控制台登录表单。自动填充浮层使测试脚本的 Safari 前台状态断言失败，原始失败
+xcresult 已保留；实际跳转由可见表单和截图确认，未将该脚本结果记为全通过。
+测试后取消未完成登录，手机停留在新版登录页，独立 UI runner 已卸载。
+
+构建 10 的 Archive、导出、严格签名检查及 Apple 上传前验证通过，主 App 和
+PacketTunnel 均为 `1.0.8 (10)`。Mac 实际依赖锁文件与构建 9 一致；153 个实际
+构建输入已有哈希清单。Apple 于北京时间 2026-10-27 14:18:07 接收上传，
+Delivery UUID 为 `fdd2ccea-7f1c-4e2c-92b7-d6b223c784c3`。
+IPA 大小为 40,712,877 字节，SHA-256 为
+`dd1ec73a5224663da0ee177de8225ad2f648b3e7c324751265e7275796efb82a`。
+本地包、输入清单及日志位于 `build/testflight/1.0.8-10/`；Mac 对应目录为
+`/Users/admin/apple-signing/easytier-pro-testflight-20261027-build10/`，包含完整
+`ui-validation/` 真机验证证据。原构建 9 的归档与验收证据保留。
+
+Apple 完成构建 10 处理，状态为 `VALID`；沿用相同核心和已完成的加密申报结论，
+该构建为 `usesNonExemptEncryption=false`。构建 9 已从审核队列及两个测试分组
+移除，构建 10 已加入“内部测试”和“中国大陆测试”，并重新提交外部审核。
+回读状态为 `WAITING_FOR_REVIEW` / `WAITING_FOR_BETA_REVIEW`，内部构建为
+`READY_FOR_BETA_TESTING`。公开邀请链接及自动通知保持关闭，尚未获得外部审核批准。

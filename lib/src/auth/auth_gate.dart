@@ -607,7 +607,57 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       ),
     );
 
-    return FScaffold(child: content);
+    return FScaffold(
+      child: Column(
+        children: [
+          Expanded(child: content),
+          if (defaultTargetPlatform == TargetPlatform.iOS &&
+              _stage == AuthStage.loginRequired)
+            const _PolicyFooterLinks(),
+        ],
+      ),
+    );
+  }
+}
+
+class _PolicyFooterLinks extends StatelessWidget {
+  const _PolicyFooterLinks();
+
+  Widget _link(String label, String url) => FTappable(
+    onPress: () => unawaited(
+      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(label),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: DefaultTextStyle(
+          style: theme.textTheme.bodySmall!.copyWith(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text('使用前请阅读'),
+              _link('《隐私政策》', 'https://easytier.net/privacy/'),
+              const Text('和'),
+              _link('《服务条款》', 'https://easytier.net/terms/'),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -850,43 +900,6 @@ class _LoginRequiredView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            if (defaultTargetPlatform == TargetPlatform.iOS) ...[
-              Text(
-                '本服务仅面向中国大陆地区用户。为提供身份认证、设备管理和组网服务，'
-                '我们会收集账号信息、设备标识、网络配置与连接状态，并统计中继流量用量。'
-                '你主动反馈问题时可提供诊断日志。请在使用前阅读以下说明。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FButton(
-                    variant: .ghost,
-                    onPress: () => unawaited(
-                      launchUrl(
-                        Uri.parse('https://easytier.net/privacy/'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                    ),
-                    child: const Text('隐私政策'),
-                  ),
-                  FButton(
-                    variant: .ghost,
-                    onPress: () => unawaited(
-                      launchUrl(
-                        Uri.parse('https://easytier.net/terms/'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                    ),
-                    child: const Text('服务条款'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
             FButton(
               onPress: () => unawaited(onLogin()),
               child: const Row(
