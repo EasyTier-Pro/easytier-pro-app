@@ -201,6 +201,7 @@ class EasyTierVpnService : VpnService() {
                     "builderAddresses" to builderConfig?.addresses,
                     "builderRoutes" to builderConfig?.routes,
                     "builderDnsServers" to builderConfig?.dnsServers,
+                    "builderSearchDomains" to builderConfig?.searchDomains,
                     "builderDisallowedApplications" to builderConfig?.disallowedApplications,
                     "builderSelfDisallowed" to builderConfig?.disallowedApplications?.contains(packageName),
                     "ignoredDisallowedApplications" to builderConfig?.ignoredDisallowedApplications,

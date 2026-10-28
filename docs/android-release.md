@@ -95,6 +95,8 @@ Android 客户端通过 `VpnService` 创建系统 VPN interface，并把 TUN fd 
 - 本地 token 过期或控制台 bootstrap 返回 401/403 时会停止 runtime，并提示用户重新登录，避免旧控制面/VPN 连接继续运行。
 - Android bootstrap 使用源工作区当前成员的默认注册密钥，沿用 Console 自动取钥契约。目标工作区授权使用其独立默认密钥及审批状态，不替换源设备凭据。
 - 退出登录、源设备授权失效、登录态失效、通知 Disconnect 或系统 VPN 撤权通过原生 `STOP_RUNTIME` 停止整个 VPN、控制连接及全部实例。借用 fd 必须在核心串行 detach 完成后关闭。通知 Disconnect 与系统撤权带 stop reason，Dart 不自动重连；系统异常销毁 Service 时带 `service_destroyed`，会话有效时按现有恢复流程重连。目标授权撤销只移除对应网络，不走全局停止路径。
+- MagicDNS 的系统设置来自 native 聚合配置：启用 DNS 的已接入成员提供 DNS 服务器、对应主机路由及 `search_domains`，Android 分别调用 `addDnsServer` 和 `addSearchDomain`，使 `ixx-nas` 这样的短名称使用网络的 DNS 域。默认域为 `et.net`，自定义域沿用该成员的 `tld_dns_zone`；多网络域去重后一起安装。搜索域变化也会重建 VPN，移除最后一个启用 DNS 的成员后清除 DNS 和搜索域。`vpn_started`/`vpn_config_refreshed` 原生事件的 `builderDnsServers`、`builderSearchDomains` 记录实际传给 Builder 的设置。
+- `EasyTierMobileTunConfigInstrumentedTest` 覆盖默认/自定义 DNS 域、关闭 DNS、成员移除，以及用户态协议栈开关两种配置下各 10 次 TUN fd 交接后的真实 TCP 数据包收发；同时检查 detach 后 fd 仍由 Android 调用方持有。socketpair 回归验证 JNI 和核心收发，不代替未排除应用通过系统 VPN 访问远端 Web 服务的验收。
 - VPN 会通过 `addDisallowedApplication(packageName)` 排除 EasyTier Pro 自身，避免控制面连接和 EasyTier 底层传输被自己的 VPN 路由回环；如果未来 EasyTier core、控制面客户端或保活组件拆到独立 Android package，也应把对应 package 加入 disallowed applications。不要默认排除浏览器、Termux、ping 工具等诊断应用，它们需要走 VPN 才能验证虚拟网和子网连通性；不应用 EasyTier Pro 自己访问虚拟网作为判断依据。
 - VPN 连接会显示常驻通知；用户可以点击通知返回应用，也可以通过通知动作、系统 VPN 设置或应用内退出/断开操作停止连接。
 - 应用不会在客户端硬编码只适用于生产环境的控制面地址；控制台和本地 E2E 环境应继续通过上层配置或控制台接口提供。

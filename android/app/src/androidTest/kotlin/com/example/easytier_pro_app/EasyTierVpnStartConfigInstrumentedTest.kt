@@ -144,6 +144,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
                 "10.2.0.0/24->192.168.2.0/24",
             ),
             dnsServers = listOf("10.10.0.53"),
+            searchDomains = listOf("et.net", "nas.internal"),
             disallowedApplications = listOf(context.packageName),
             mtu = 1280,
         )
@@ -160,6 +161,7 @@ class EasyTierVpnStartConfigInstrumentedTest {
             appliedConfig.routes,
         )
         assertEquals(listOf("10.10.0.53"), appliedConfig.dnsServers)
+        assertEquals(listOf("et.net", "nas.internal"), appliedConfig.searchDomains)
         assertEquals(listOf(context.packageName), appliedConfig.disallowedApplications)
         assertEquals(emptyList<String>(), appliedConfig.ignoredDisallowedApplications)
         assertEquals(
@@ -173,6 +175,8 @@ class EasyTierVpnStartConfigInstrumentedTest {
                 "addRoute:10.30.0.0/24",
                 "addRoute:192.168.2.0/24",
                 "addDnsServer:10.10.0.53",
+                "addSearchDomain:et.net",
+                "addSearchDomain:nas.internal",
                 "setMetered:false",
             ),
             builder.operations,
@@ -303,6 +307,10 @@ class EasyTierVpnStartConfigInstrumentedTest {
 
         override fun addDnsServer(server: String) {
             operations.add("addDnsServer:$server")
+        }
+
+        override fun addSearchDomain(domain: String) {
+            operations.add("addSearchDomain:$domain")
         }
 
         override fun setMetered(metered: Boolean) {

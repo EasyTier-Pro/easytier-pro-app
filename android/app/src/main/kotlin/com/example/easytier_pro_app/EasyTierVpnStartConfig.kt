@@ -9,6 +9,7 @@ data class AndroidVpnStartConfig(
     val dnsServers: List<String>,
     val disallowedApplications: List<String>,
     val mtu: Int,
+    val searchDomains: List<String> = emptyList(),
 )
 
 data class AndroidVpnCidr(val address: String, val prefixLength: Int)

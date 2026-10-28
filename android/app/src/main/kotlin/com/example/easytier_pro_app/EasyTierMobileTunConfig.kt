@@ -7,16 +7,19 @@ data class EasyTierMobileTunConfig(
     val addresses: List<String>,
     val routes: List<String>,
     val dns: String?,
+    val searchDomains: List<String>,
     val rejected: List<Map<String, String>>,
 ) {
     fun sameInterface(other: EasyTierMobileTunConfig): Boolean =
-        addresses == other.addresses && routes == other.routes && dns == other.dns
+        addresses == other.addresses && routes == other.routes && dns == other.dns &&
+            searchDomains == other.searchDomains
 
     fun toVpnStartConfig(packageName: String) = AndroidVpnStartConfig(
         instanceName = "EasyTier Pro",
         addresses = addresses,
         routes = routes,
         dnsServers = listOfNotNull(dns),
+        searchDomains = searchDomains,
         disallowedApplications = listOf(packageName),
         mtu = 1280,
     )
@@ -26,6 +29,7 @@ data class EasyTierMobileTunConfig(
         "addresses" to addresses,
         "routes" to routes,
         "dns" to dns,
+        "search_domains" to searchDomains,
         "rejected" to rejected,
     )
 
@@ -42,6 +46,7 @@ data class EasyTierMobileTunConfig(
                 addresses = strings("addresses"),
                 routes = strings("routes"),
                 dns = if (value.isNull("dns")) null else value.getString("dns"),
+                searchDomains = strings("search_domains"),
                 rejected = (0 until rejected.length()).map {
                     val member = rejected.getJSONObject(it)
                     mapOf("instance_id" to member.getString("instance_id"), "error" to member.getString("error"))

@@ -121,7 +121,7 @@ index 7d11b106..a6058281 100644
      let config_cstr = match jstring_to_cstring(&mut env, &config) {
          Ok(cstr) => cstr,
 diff --git a/easytier-contrib/easytier-ffi/src/lib.rs b/easytier-contrib/easytier-ffi/src/lib.rs
-index 6c332c89..13223be6 100644
+index 6c332c89..1e4f8078 100644
 --- a/easytier-contrib/easytier-ffi/src/lib.rs
 +++ b/easytier-contrib/easytier-ffi/src/lib.rs
 @@ -12,6 +12,8 @@
@@ -141,14 +141,15 @@ index 6c332c89..13223be6 100644
  mod state;
  mod strings;
  mod types;
-@@ -196,6 +199,50 @@ pub unsafe extern "C" fn set_tun_fd(inst_name: *const c_char, fd: c_int) -> c_in
+@@ -196,6 +199,51 @@ pub unsafe extern "C" fn set_tun_fd(inst_name: *const c_char, fd: c_int) -> c_in
      unsafe { instance_api::set_tun_fd(inst_name, fd) }
  }
  
 +/// Get shared mobile TUN settings for a JSON array of instance UUID strings.
 +///
 +/// Uses the same instance manager as local and config-server instances. The
-+/// returned JSON contains `instance_ids`, `addresses`, `routes`, `dns`, and
++/// returned JSON contains `instance_ids`, `addresses`, `routes`, `dns`,
++/// `search_domains`, and
 +/// per-member `rejected` errors. Conflicting members do not displace unchanged
 +/// attached members. Only Android and iOS support this operation.
 +///
@@ -354,10 +355,59 @@ index c008a66f..a6d68bad 100644
      for info in infos {
          free_string(info.key);
 diff --git a/easytier/src/instance/factory/mobile_tun.rs b/easytier/src/instance/factory/mobile_tun.rs
-index 1327a467..63653c13 100644
+index 1327a467..873617f6 100644
 --- a/easytier/src/instance/factory/mobile_tun.rs
 +++ b/easytier/src/instance/factory/mobile_tun.rs
-@@ -130,6 +130,24 @@ fn config_for_members(
+@@ -16,6 +16,7 @@ pub struct MobileTunConfig {
+     pub addresses: Vec<String>,
+     pub routes: Vec<String>,
+     pub dns: Option<String>,
++    pub search_domains: Vec<String>,
+     pub rejected: Vec<MobileTunMemberError>,
+ }
+
+@@ -30,7 +31,7 @@ struct MobileTunMember {
+     instance_id: uuid::Uuid,
+     claims: SharedIfConfigClaims,
+     current_claims: Option<SharedIfConfigClaims>,
+-    dns: bool,
++    dns_zone: Option<String>,
+ }
+
+ #[cfg(any(mobile, test))]
+@@ -69,7 +70,7 @@ fn select_members(
+     let mut accepted = Vec::new();
+     for member in members {
+         let mut claims = member.claims.clone();
+-        if member.dns {
++        if member.dns_zone.is_some() {
+             claims.ipv4_routes.insert(magic_dns_route());
+         }
+         if let Err(error) = ifcfg.ensure_disjoint(member.instance_id, &claims) {
+@@ -96,6 +97,7 @@ fn config_for_members(
+     };
+     let mut addresses = BTreeSet::new();
+     let mut routes = BTreeSet::new();
++    let mut search_domains = BTreeSet::new();
+     for member in members {
+         config.instance_ids.push(member.instance_id);
+         for address in &member.claims.ipv4_addresses {
+@@ -116,8 +118,9 @@ fn config_for_members(
+                 routes.insert(format!("{:#}", route.network()));
+             }
+         }
+-        if member.dns {
++        if let Some(zone) = &member.dns_zone {
+             config.dns = Some(crate::instance::dns_server::MAGIC_DNS_FAKE_IP.to_owned());
++            search_domains.insert(zone.clone());
+             routes.insert(format!(
+                 "{}/32",
+                 crate::instance::dns_server::MAGIC_DNS_FAKE_IP
+@@ -127,9 +130,28 @@ fn config_for_members(
+     config.instance_ids.sort();
+     config.addresses = addresses.into_iter().collect();
+     config.routes = routes.into_iter().collect();
++    config.search_domains = search_domains.into_iter().collect();
      config
  }
  
@@ -382,7 +432,7 @@ index 1327a467..63653c13 100644
  #[cfg(mobile)]
  async fn collect_members(
      manager: &NativeInstanceManager,
-@@ -143,6 +161,16 @@ async fn collect_members(
+@@ -143,6 +165,16 @@ async fn collect_members(
              continue;
          }
          let instance = manager.instance(instance_id);
@@ -399,7 +449,24 @@ index 1327a467..63653c13 100644
          let runtime = instance
              .as_ref()
              .filter(|instance| instance.state() == CoreInstanceState::Running)
-@@ -220,6 +248,12 @@ pub async fn attach_mobile_tun_fd(
+@@ -155,14 +187,14 @@ async fn collect_members(
+             });
+             continue;
+         };
+-        let (claims, current_claims, dns) = runtime
++        let (claims, current_claims, dns_zone) = runtime
+             .mobile_tun_claims(&instance.as_ref().unwrap().packet_plane())
+             .await;
+         members.push(MobileTunMember {
+             instance_id,
+             claims,
+             current_claims,
+-            dns,
++            dns_zone,
+         });
+     }
+     (members, rejected)
+@@ -220,6 +252,12 @@ pub async fn attach_mobile_tun_fd(
      }
      let (members, rejected) = collect_members(manager, instance_ids.unwrap_or(&all_ids)).await;
      let (members, mut rejected) = select_members(members, rejected);
@@ -412,7 +479,16 @@ index 1327a467..63653c13 100644
      let mut attached = Vec::new();
      // Open once; a rejected member never replaces or tears down this shared fd.
      for member in members {
-@@ -313,6 +347,26 @@ mod tests {
+@@ -283,7 +321,7 @@ mod tests {
+                 ..Default::default()
+             },
+             current_claims: None,
+-            dns: false,
++            dns_zone: None,
+         }
+     }
+
+@@ -313,10 +351,30 @@ mod tests {
          assert_eq!(config.rejected[0].instance_id, uuid::Uuid::from_u128(1));
      }
  
@@ -439,6 +515,79 @@ index 1327a467..63653c13 100644
      #[test]
      fn projects_ipv6_and_shared_dns_and_rejects_overlapping_proxy_routes() {
          let mut first = member(1, "10.0.1.1/24");
+-        first.dns = true;
++        first.dns_zone = Some("et.net".to_owned());
+         first
+             .claims
+             .ipv4_addresses
+@@ -330,7 +388,7 @@ mod tests {
+             .ipv6_routes
+             .insert(SharedIpv6Route::new("::".parse().unwrap(), 0, Some(5)));
+         let mut second = member(2, "10.0.2.1/24");
+-        second.dns = true;
++        second.dns_zone = Some("et.net".to_owned());
+         let (members, rejected) = select_members(
+             vec![first, second, member(3, "100.100.100.101/32")],
+             Vec::new(),
+@@ -351,6 +409,7 @@ mod tests {
+             1
+         );
+         assert_eq!(config.dns.as_deref(), Some("100.100.100.101"));
++        assert_eq!(config.search_domains, vec!["et.net"]);
+         assert_eq!(config.rejected[0].instance_id, uuid::Uuid::from_u128(3));
+         let mut route_owner = member(2, "10.0.2.1/24");
+         route_owner.claims.ipv4_routes.insert(SharedIpv4Route::new(
+@@ -365,6 +424,24 @@ mod tests {
+         assert_eq!(config.rejected[0].instance_id, uuid::Uuid::from_u128(2));
+     }
+
++    #[test]
++    fn projects_only_accepted_dns_zones_and_clears_them_with_dns_disabled() {
++        let mut first = member(1, "10.0.1.1/24");
++        first.dns_zone = Some("et.net".to_owned());
++        let mut second = member(2, "10.0.2.1/24");
++        second.dns_zone = Some("nas.internal".to_owned());
++        let mut rejected = member(3, "10.0.1.2/24");
++        rejected.dns_zone = Some("rejected.internal".to_owned());
++        let (members, rejected) = select_members(vec![first, second, rejected], Vec::new());
++        let config = config_for_members(&members, rejected);
++        assert_eq!(config.search_domains, vec!["et.net", "nas.internal"]);
++
++        let config = config_for_members(&[member(1, "10.0.1.1/24")], Vec::new());
++        assert!(config.dns.is_none());
++        assert!(config.search_domains.is_empty());
++        assert!(!config.routes.contains(&"100.100.100.101/32".to_owned()));
++    }
++
+     #[test]
+     fn distinguishes_claim_conflicts_from_device_failures_through_context() {
+         let mut claims = SharedIfConfig::default();
+diff --git a/easytier/src/instance/runtime_host.rs b/easytier/src/instance/runtime_host.rs
+index 8a32be27..57dc6f5c 100644
+--- a/easytier/src/instance/runtime_host.rs
++++ b/easytier/src/instance/runtime_host.rs
+@@ -172,15 +172,17 @@ impl NativeInstanceRuntimeHost {
+     ) -> (
+         crate::instance::shared_virtual_nic::SharedIfConfigClaims,
+         Option<crate::instance::shared_virtual_nic::SharedIfConfigClaims>,
+-        bool,
++        Option<String>,
+     ) {
++        let flags = self.global_ctx.get_flags();
+         (
+             crate::instance::virtual_nic::NicCtx::mobile_tun_claims(&self.global_ctx, packet_plane)
+                 .await,
+             self.tun.current_mobile_tun_claims().await,
+-            cfg!(feature = "magic-dns")
+-                && self.global_ctx.get_flags().accept_dns
+-                && self.global_ctx.get_ipv4().is_some(),
++            (cfg!(feature = "magic-dns")
++                && flags.accept_dns
++                && self.global_ctx.get_ipv4().is_some())
++            .then(|| flags.tld_dns_zone.trim_end_matches('.').to_owned()),
+         )
+     }
+
 diff --git a/easytier/src/instance/shared_virtual_nic.rs b/easytier/src/instance/shared_virtual_nic.rs
 index 444ba7f0..becdb104 100644
 --- a/easytier/src/instance/shared_virtual_nic.rs

@@ -13,6 +13,7 @@ interface EasyTierVpnBuilderOperations {
     fun addAddress(address: String, prefixLength: Int)
     fun addRoute(address: String, prefixLength: Int)
     fun addDnsServer(server: String)
+    fun addSearchDomain(domain: String)
     fun setMetered(metered: Boolean)
 }
 
@@ -20,6 +21,7 @@ data class AndroidVpnAppliedConfig(
     val addresses: List<String>,
     val routes: List<String>,
     val dnsServers: List<String>,
+    val searchDomains: List<String>,
     val disallowedApplications: List<String>,
     val ignoredDisallowedApplications: List<String>,
     val allowBypass: Boolean,
@@ -58,6 +60,10 @@ class EasyTierVpnServiceBuilderOperations(
 
     override fun addDnsServer(server: String) {
         builder.addDnsServer(server)
+    }
+
+    override fun addSearchDomain(domain: String) {
+        builder.addSearchDomain(domain)
     }
 
     override fun setMetered(metered: Boolean) {
@@ -119,6 +125,10 @@ object EasyTierVpnBuilderConfigurator {
             builderDnsServers.add(server)
         }
 
+        for (domain in config.searchDomains) {
+            builder.addSearchDomain(domain)
+        }
+
         if (sdkInt >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
@@ -127,6 +137,7 @@ object EasyTierVpnBuilderConfigurator {
             addresses = builderAddresses,
             routes = builderRoutes,
             dnsServers = builderDnsServers,
+            searchDomains = config.searchDomains,
             disallowedApplications = builderDisallowedApplications,
             ignoredDisallowedApplications = ignoredDisallowedApplications,
             allowBypass = allowBypass && sdkInt >= Build.VERSION_CODES.LOLLIPOP,
