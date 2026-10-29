@@ -4,14 +4,22 @@ class _UserMenu extends StatelessWidget {
   const _UserMenu({
     required this.userName,
     required this.workspaceName,
+    required this.workspaces,
+    required this.selectedWorkspaceId,
     required this.initial,
+    required this.onSelectWorkspace,
+    required this.onRefreshWorkspaces,
     required this.onShowSettings,
     required this.onLogout,
   });
 
   final String userName;
   final String workspaceName;
+  final List<ConsoleWorkspace> workspaces;
+  final String? selectedWorkspaceId;
   final String initial;
+  final ValueChanged<String> onSelectWorkspace;
+  final Future<void> Function() onRefreshWorkspaces;
   final VoidCallback onShowSettings;
   final Future<void> Function() onLogout;
 
@@ -57,6 +65,51 @@ class _UserMenu extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
+          ),
+          FItemGroup(
+            children: [
+              FItem.raw(
+                enabled: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: SelectionContainer.disabled(
+                    child: Text(
+                      '工作区',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF737373),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              for (final workspace in workspaces)
+                FItem(
+                  key: ValueKey('workspace-option-${workspace.id}'),
+                  title: SelectionContainer.disabled(
+                    child: Text(workspace.name),
+                  ),
+                  suffix: workspace.id == selectedWorkspaceId
+                      ? const Icon(Icons.check, size: 16)
+                      : null,
+                  onPress: () {
+                    unawaited(controller.hide());
+                    onSelectWorkspace(workspace.id);
+                  },
+                ),
+              FItem(
+                title: SelectionContainer.disabled(child: const Text('刷新工作区')),
+                prefix: const Icon(Icons.refresh, size: 16),
+                onPress: () {
+                  unawaited(controller.hide());
+                  unawaited(onRefreshWorkspaces());
+                },
+              ),
+            ],
+          ),
+          FItemGroup(
+            divider: FItemDivider.full,
+            children: [
               FItem(
                 key: const ValueKey<String>('user-menu-settings'),
                 prefix: const Icon(Icons.settings_outlined, size: 18),
@@ -78,6 +131,7 @@ class _UserMenu extends StatelessWidget {
           ),
         ],
         builder: (context, controller, child) => FButton(
+          key: const ValueKey<String>('user-menu-button'),
           variant: .ghost,
           size: .sm,
           onPress: () => unawaited(controller.toggle()),

@@ -1271,11 +1271,32 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(FSwitch).first);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      expect(find.byKey(const ValueKey('workspace-switcher')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pumpAndSettle();
+      expect(find.text('工作区'), findsOneWidget);
+      expect(find.text('刷新工作区'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('workspace-option-tenant-1')),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
       await tester.pumpAndSettle();
       expect(find.text('团队网络'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('workspace-option-tenant-2')),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
+      await tester.pumpAndSettle();
       expect(core.sourceWorkspaceId, 'tenant-1');
       expect(
         core.networkConnections.value['net-1']?.phase,
@@ -1328,7 +1349,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(FSwitch).first);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
       await tester.pumpAndSettle();
@@ -1393,7 +1414,7 @@ void main() {
   });
 
   testWidgets(
-    'narrow mobile header keeps long workspace and connected summary reachable',
+    'narrow mobile header keeps user menu and connected summary reachable',
     (tester) async {
       tester.view.physicalSize = const Size(320, 780);
       tester.view.devicePixelRatio = 1;
@@ -1433,7 +1454,7 @@ void main() {
       await tester.tap(find.byType(FSwitch).first);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      final switcher = find.byKey(const ValueKey('workspace-switcher'));
+      final switcher = find.byKey(const ValueKey('user-menu-button'));
       final summary = find.byKey(const ValueKey('workspace-connections'));
       expect(
         tester.getRect(switcher).overlaps(tester.getRect(summary)),
@@ -1485,7 +1506,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
       await tester.pumpAndSettle();
@@ -1592,7 +1613,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('workspace-switcher')));
+      await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('workspace-option-tenant-2')));
       await tester.pumpAndSettle();
@@ -3789,8 +3810,9 @@ void main() {
       of: find.byType(FItemGroup),
       matching: find.text('个人空间'),
     );
-    expect(menuWorkspace, findsOneWidget);
-    expect(_hasSelectionAreaAncestor(tester, menuWorkspace), isFalse);
+    expect(menuWorkspace, findsNWidgets(2));
+    expect(_hasSelectionAreaAncestor(tester, menuWorkspace.first), isFalse);
+    expect(_hasSelectionAreaAncestor(tester, menuWorkspace.last), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('设置')), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
   });

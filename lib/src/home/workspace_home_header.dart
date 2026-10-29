@@ -2,9 +2,7 @@ part of 'workspace_home_view.dart';
 
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
-    required this.userName,
-    required this.workspaceName,
-    required this.workspaceSelector,
+    required this.userMenu,
     required this.connectionSummary,
     required this.activeView,
     required this.networks,
@@ -14,14 +12,10 @@ class _DashboardHeader extends StatelessWidget {
     required this.onShowOverview,
     required this.onSelectNetwork,
     required this.onShowDevices,
-    required this.onShowSettings,
-    required this.onLogout,
     required this.coreStatusListenable,
   });
 
-  final String userName;
-  final String workspaceName;
-  final Widget workspaceSelector;
+  final Widget userMenu;
   final Widget connectionSummary;
   final _DashboardView activeView;
   final List<ConsoleNetwork> networks;
@@ -31,15 +25,10 @@ class _DashboardHeader extends StatelessWidget {
   final VoidCallback onShowOverview;
   final ValueChanged<String> onSelectNetwork;
   final VoidCallback onShowDevices;
-  final VoidCallback onShowSettings;
-  final Future<void> Function() onLogout;
   final ValueListenable<CoreRunStatus> coreStatusListenable;
 
   @override
   Widget build(BuildContext context) {
-    final trimmedName = userName.trim();
-    final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
-
     return HomeDashboardDesktopHeader(
       contentKey: const ValueKey<String>('desktop-dashboard-header-content'),
       activeView: _homeDashboardViewFor(activeView),
@@ -75,19 +64,12 @@ class _DashboardHeader extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          workspaceSelector,
           connectionSummary,
           const HomeOpenConsoleButton(
             buttonKey: ValueKey<String>('workspace-open-console'),
           ),
           const SizedBox(width: 4),
-          _UserMenu(
-            userName: trimmedName,
-            workspaceName: workspaceName,
-            initial: initial,
-            onShowSettings: onShowSettings,
-            onLogout: onLogout,
-          ),
+          userMenu,
         ],
       ),
     );
@@ -96,28 +78,19 @@ class _DashboardHeader extends StatelessWidget {
 
 class _MobileDashboardHeader extends StatelessWidget {
   const _MobileDashboardHeader({
-    required this.userName,
-    required this.workspaceName,
-    required this.workspaceSelector,
+    required this.userMenu,
     required this.connectionSummary,
-    required this.onShowSettings,
-    required this.onLogout,
+    required this.showConnectionSummary,
     required this.coreStatusListenable,
   });
 
-  final String userName;
-  final String workspaceName;
-  final Widget workspaceSelector;
+  final Widget userMenu;
   final Widget connectionSummary;
-  final VoidCallback onShowSettings;
-  final Future<void> Function() onLogout;
+  final bool showConnectionSummary;
   final ValueListenable<CoreRunStatus> coreStatusListenable;
 
   @override
   Widget build(BuildContext context) {
-    final trimmedName = userName.trim();
-    final initial = trimmedName.isEmpty ? 'U' : trimmedName.substring(0, 1);
-
     return Column(
       children: [
         HomeShellMobileHeader(
@@ -128,34 +101,21 @@ class _MobileDashboardHeader extends StatelessWidget {
             const HomeOpenConsoleButton(
               buttonKey: ValueKey<String>('workspace-mobile-open-console'),
             ),
-            _UserMenu(
-              userName: trimmedName,
-              workspaceName: workspaceName,
-              initial: initial,
-              onShowSettings: onShowSettings,
-              onLogout: onLogout,
-            ),
+            userMenu,
           ],
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-          decoration: const BoxDecoration(
-            color: Color(0xFFFFFFFF),
-            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+        if (showConnectionSummary)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFFFFF),
+              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+            ),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: connectionSummary,
+            ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: workspaceSelector,
-                ),
-              ),
-              const SizedBox(width: 8),
-              connectionSummary,
-            ],
-          ),
-        ),
       ],
     );
   }

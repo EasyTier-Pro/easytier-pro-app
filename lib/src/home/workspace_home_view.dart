@@ -400,6 +400,19 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
   @override
   Widget build(BuildContext context) {
     final workspaceName = _workspace?.name ?? '未关联工作区';
+    final userName = widget.session.user.effectiveName.trim();
+    final userMenu = _UserMenu(
+      userName: userName,
+      workspaceName: workspaceName,
+      workspaces: _workspaces,
+      selectedWorkspaceId: _workspace?.id,
+      initial: userName.isEmpty ? 'U' : userName.substring(0, 1),
+      onSelectWorkspace: (id) =>
+          unawaited(widget.coreLifecycleService.selectWorkspace(id)),
+      onRefreshWorkspaces: _refreshWorkspaceMemberships,
+      onShowSettings: _showSettings,
+      onLogout: widget.onLogout,
+    );
     final contentKey = ValueKey<String>(
       [
         _workspace?.id ?? 'none',
@@ -410,9 +423,7 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
 
     return HomeShell(
       desktopHeader: _DashboardHeader(
-        userName: widget.session.user.effectiveName,
-        workspaceName: workspaceName,
-        workspaceSelector: _workspaceSelector(),
+        userMenu: userMenu,
         connectionSummary: _connectionSummary(),
         activeView: _activeView,
         networks: _networks,
@@ -422,17 +433,13 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
         onShowOverview: _showOverview,
         onSelectNetwork: _selectNetwork,
         onShowDevices: _showDevices,
-        onShowSettings: _showSettings,
-        onLogout: widget.onLogout,
         coreStatusListenable: widget.coreLifecycleService.status,
       ),
       mobileHeader: _MobileDashboardHeader(
-        userName: widget.session.user.effectiveName,
-        workspaceName: workspaceName,
-        workspaceSelector: _workspaceSelector(),
+        userMenu: userMenu,
         connectionSummary: _connectionSummary(),
-        onShowSettings: _showSettings,
-        onLogout: widget.onLogout,
+        showConnectionSummary:
+            widget.coreLifecycleService.networkConnections.value.isNotEmpty,
         coreStatusListenable: widget.coreLifecycleService.status,
       ),
       mobileNavigation: _MobileDashboardNavigation(

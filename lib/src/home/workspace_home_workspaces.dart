@@ -145,57 +145,6 @@ extension _WorkspaceHomeWorkspaces on _WorkspaceHomeViewState {
     }
   }
 
-  Widget _workspaceSelector() => FPopoverMenu(
-    menuAnchor: Alignment.topLeft,
-    childAnchor: Alignment.bottomLeft,
-    menuBuilder: (context, controller, _) => [
-      FItemGroup(
-        children: [
-          for (final workspace in _workspaces)
-            FItem(
-              key: ValueKey('workspace-option-${workspace.id}'),
-              title: Text(workspace.name),
-              suffix: workspace.id == _workspace?.id
-                  ? const Icon(Icons.check, size: 16)
-                  : null,
-              onPress: () {
-                unawaited(controller.hide());
-                unawaited(
-                  widget.coreLifecycleService.selectWorkspace(workspace.id),
-                );
-              },
-            ),
-          FItem(
-            title: const Text('刷新工作区'),
-            prefix: const Icon(Icons.refresh, size: 16),
-            onPress: () {
-              unawaited(controller.hide());
-              unawaited(_refreshWorkspaceMemberships());
-            },
-          ),
-        ],
-      ),
-    ],
-    builder: (context, controller, _) => FButton(
-      key: const ValueKey('workspace-switcher'),
-      variant: .ghost,
-      size: .sm,
-      mainAxisSize: MainAxisSize.min,
-      onPress: () => unawaited(controller.toggle()),
-      suffix: const Icon(Icons.keyboard_arrow_down, size: 16),
-      child: Flexible(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 160),
-          child: Text(
-            _workspace?.name ?? '未关联工作区',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    ),
-  );
-
   Widget _connectionSummary() {
     final connections = widget
         .coreLifecycleService
