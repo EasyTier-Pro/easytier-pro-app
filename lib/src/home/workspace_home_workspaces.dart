@@ -145,128 +145,157 @@ extension _WorkspaceHomeWorkspaces on _WorkspaceHomeViewState {
     }
   }
 
-  Widget _connectionSummary() {
-    final connections = widget
-        .coreLifecycleService
-        .networkConnections
-        .value
-        .values
-        .toList();
-    final running = connections
-        .where(
-          (c) => c.ready && widget.coreLifecycleService.status.value.isRunning,
-        )
-        .length;
-    if (connections.isEmpty) return const SizedBox.shrink();
-    return FButton(
-      key: const ValueKey('workspace-connections'),
-      variant: .ghost,
-      size: .sm,
-      onPress: _showConnections,
-      prefix: MediaQuery.sizeOf(context).width < _mobileShellBreakpoint
-          ? const Icon(Icons.hub_outlined, size: 16)
-          : null,
-      child: Text(
-        MediaQuery.sizeOf(context).width < _mobileShellBreakpoint
-            ? '$running'
-            : '$running 已连接',
+  Future<void> _showConnections() async {
+    Widget
+    connectionList() => ValueListenableBuilder<Map<String, CoreNetworkConnection>>(
+      valueListenable: widget.coreLifecycleService.networkConnections,
+      builder: (context, connections, _) => ValueListenableBuilder<CoreRunStatus>(
+        valueListenable: widget.coreLifecycleService.status,
+        builder: (context, status, _) => SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (connections.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Text('暂无网络连接'),
+                ),
+              for (final connection in connections.values)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              connection.network.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: const Color(0xFF0F172A),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${connection.workspace.name}${connection.workspace.id == widget.coreLifecycleService.selectedWorkspaceId.value ? ' · 当前工作区' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              connection.message ??
+                                  switch (connection.phase) {
+                                    CoreNetworkConnectionPhase.joining =>
+                                      '正在连接',
+                                    CoreNetworkConnectionPhase.leaving =>
+                                      '正在断开',
+                                    CoreNetworkConnectionPhase.error => '连接失败',
+                                    CoreNetworkConnectionPhase.joined =>
+                                      connection.ready && status.isRunning
+                                          ? connection.ipv4 ?? '已连接'
+                                          : '等待实例就绪',
+                                  },
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FButton(
+                        variant: .outline,
+                        size: .sm,
+                        onPress:
+                            connection.phase ==
+                                    CoreNetworkConnectionPhase.joining ||
+                                connection.phase ==
+                                    CoreNetworkConnectionPhase.leaving
+                            ? null
+                            : () async {
+                                try {
+                                  await widget.coreLifecycleService
+                                      .disconnectNetwork(
+                                        connection.workspace,
+                                        connection.network,
+                                      );
+                                } catch (error) {
+                                  if (mounted) {
+                                    _showNetworkActionToast(
+                                      _normalizeError(error),
+                                      destructive: true,
+                                    );
+                                  }
+                                }
+                              },
+                        child: const Text('断开'),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
-  }
 
-  Future<void> _showConnections() async {
-    await showFDialog<void>(
-      context: context,
-      builder: (dialogContext, _, animation) => FDialog.adaptive(
-        animation: animation,
-        title: const Text('所有工作区的连接'),
-        body: ValueListenableBuilder<Map<String, CoreNetworkConnection>>(
-          valueListenable: widget.coreLifecycleService.networkConnections,
-          builder: (context, connections, _) => ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (connections.isEmpty) const Text('暂无网络连接'),
-                  for (final connection in connections.values)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${connection.workspace.name} · ${connection.network.name}',
-                                ),
-                                Text(
-                                  connection.message ??
-                                      switch (connection.phase) {
-                                        CoreNetworkConnectionPhase.joining =>
-                                          '正在连接',
-                                        CoreNetworkConnectionPhase.leaving =>
-                                          '正在断开',
-                                        CoreNetworkConnectionPhase.error =>
-                                          '连接失败',
-                                        CoreNetworkConnectionPhase.joined =>
-                                          connection.ready &&
-                                                  widget
-                                                      .coreLifecycleService
-                                                      .status
-                                                      .value
-                                                      .isRunning
-                                              ? connection.ipv4 ?? '已连接'
-                                              : '等待实例就绪',
-                                      },
-                                ),
-                              ],
-                            ),
-                          ),
-                          FButton(
-                            variant: .ghost,
-                            size: .sm,
-                            onPress:
-                                connection.phase ==
-                                        CoreNetworkConnectionPhase.joining ||
-                                    connection.phase ==
-                                        CoreNetworkConnectionPhase.leaving
-                                ? null
-                                : () async {
-                                    try {
-                                      await widget.coreLifecycleService
-                                          .disconnectNetwork(
-                                            connection.workspace,
-                                            connection.network,
-                                          );
-                                    } catch (error) {
-                                      if (mounted) {
-                                        _showNetworkActionToast(
-                                          _normalizeError(error),
-                                          destructive: true,
-                                        );
-                                      }
-                                    }
-                                  },
-                            child: const Text('断开'),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+    if (MediaQuery.sizeOf(context).width < _mobileShellBreakpoint) {
+      await showFSheet<void>(
+        context: context,
+        side: FLayout.btt,
+        mainAxisMaxRatio: 0.7,
+        builder: (sheetContext) => SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '已接入网络',
+                  style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Flexible(child: connectionList()),
+              ],
             ),
           ),
         ),
-        actions: [
-          FButton(
-            variant: .outline,
-            onPress: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
+      );
+    } else {
+      await showFDialog<void>(
+        context: context,
+        builder: (dialogContext, _, animation) => FDialog.adaptive(
+          animation: animation,
+          title: const Text('已接入网络'),
+          body: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: connectionList(),
           ),
-        ],
-      ),
-    );
+          actions: [
+            FButton(
+              variant: .outline,
+              onPress: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }

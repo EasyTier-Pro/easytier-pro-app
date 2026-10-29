@@ -1297,15 +1297,27 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pumpAndSettle();
+      expect(find.text('已接入 1 个网络'), findsOneWidget);
       expect(core.sourceWorkspaceId, 'tenant-1');
       expect(
         core.networkConnections.value['net-1']?.phase,
         CoreNetworkConnectionPhase.joined,
       );
       expect(auth.removedNodeIds, isEmpty);
-      await tester.tap(find.byKey(const ValueKey('workspace-connections')));
+      var connectionFocused = false;
+      for (var i = 0; i < 50 && !connectionFocused; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final focusedContext = FocusManager.instance.primaryFocus?.context;
+        connectionFocused =
+            focusedContext?.findAncestorWidgetOfExactType<FButton>()?.key ==
+            const ValueKey('workspace-connections');
+      }
+      expect(connectionFocused, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(find.text('个人空间 · 个人网络'), findsOneWidget);
+      expect(find.text('个人空间'), findsOneWidget);
+      expect(find.text('个人网络'), findsOneWidget);
       await tester.tap(find.text('断开'));
       await tester.pumpAndSettle();
       expect(auth.removedNodeIds, ['node-1']);
@@ -1359,6 +1371,7 @@ void main() {
         core.networkConnections.value.keys,
         containsAll(['net-1', 'net-2']),
       );
+      expect(find.text('已接入 2 个网络'), findsOneWidget);
       auth.networkDevices['net-2'] = [];
       await tester.tap(find.byKey(const ValueKey('network-refresh-button')));
       await tester.pumpAndSettle();
@@ -1366,8 +1379,9 @@ void main() {
       expect(tester.widget<FSwitch>(find.byType(FSwitch).first).value, isFalse);
       await tester.tap(find.byKey(const ValueKey('workspace-connections')));
       await tester.pumpAndSettle();
-      expect(find.text('个人空间 · 个人网络'), findsOneWidget);
-      expect(find.text('团队空间 · 团队网络'), findsNothing);
+      expect(find.text('个人空间'), findsOneWidget);
+      expect(find.text('个人网络'), findsOneWidget);
+      expect(find.text('团队空间 · 当前工作区'), findsNothing);
       expect(auth.removedNodeIds, isEmpty);
     },
   );
@@ -1409,7 +1423,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(core.networkConnections.value['net-1']?.ready, isFalse);
-    expect(find.text('0 已连接'), findsOneWidget);
+    expect(find.text('已接入 0 个网络'), findsOneWidget);
     expect(auth.removedNodeIds, isEmpty);
   });
 
@@ -1464,8 +1478,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(summary);
       await tester.pumpAndSettle();
-      expect(find.text('所有工作区的连接'), findsOneWidget);
-      await tester.tap(find.text('关闭'));
+      expect(find.text('已接入网络'), findsOneWidget);
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await tester.tap(switcher);
       await tester.pumpAndSettle();
@@ -1946,7 +1960,7 @@ void main() {
     expect(find.textContaining('100 KiB/s'), findsNothing);
     expect(find.textContaining('300 KiB/s'), findsNothing);
     expect(find.text('已在线'), findsOneWidget);
-    expect(find.text('1 个网络'), findsOneWidget);
+    expect(find.text('已接入 1 个网络'), findsOneWidget);
   });
 
   testWidgets('keeps traffic sparkline x-axis stable as samples grow', (

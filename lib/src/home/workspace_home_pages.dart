@@ -53,11 +53,14 @@ extension _WorkspaceHomePages on _WorkspaceHomeViewState {
           engineVersionListenable:
               widget.coreLifecycleService.engineVersionStatus,
           joinedCount: joinedNetworks.length,
+          connections: widget.coreLifecycleService.networkConnections.value,
+          onShowConnections: _showConnections,
           downloadRate: totalDownloadRate,
           uploadRate: totalUploadRate,
           hasTrafficStats: hasTrafficStats,
           onRepair: widget.coreLifecycleService.repair,
-          onRepairWithElevation: widget.coreLifecycleService.repairWithElevation,
+          onRepairWithElevation:
+              widget.coreLifecycleService.repairWithElevation,
         ),
         const SizedBox(height: 24),
         if (_networkError != null && _networks.isEmpty)

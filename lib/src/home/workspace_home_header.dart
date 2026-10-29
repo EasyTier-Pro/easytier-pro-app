@@ -3,7 +3,6 @@ part of 'workspace_home_view.dart';
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.userMenu,
-    required this.connectionSummary,
     required this.activeView,
     required this.networks,
     required this.deviceCount,
@@ -16,7 +15,6 @@ class _DashboardHeader extends StatelessWidget {
   });
 
   final Widget userMenu;
-  final Widget connectionSummary;
   final _DashboardView activeView;
   final List<ConsoleNetwork> networks;
   final int deviceCount;
@@ -64,7 +62,6 @@ class _DashboardHeader extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          connectionSummary,
           const HomeOpenConsoleButton(
             buttonKey: ValueKey<String>('workspace-open-console'),
           ),
@@ -79,43 +76,23 @@ class _DashboardHeader extends StatelessWidget {
 class _MobileDashboardHeader extends StatelessWidget {
   const _MobileDashboardHeader({
     required this.userMenu,
-    required this.connectionSummary,
-    required this.showConnectionSummary,
     required this.coreStatusListenable,
   });
 
   final Widget userMenu;
-  final Widget connectionSummary;
-  final bool showConnectionSummary;
   final ValueListenable<CoreRunStatus> coreStatusListenable;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        HomeShellMobileHeader(
-          title: 'EasyTier Pro',
-          subtitle: '',
-          suffixes: [
-            HomeCoreStatusDot(statusListenable: coreStatusListenable),
-            const HomeOpenConsoleButton(
-              buttonKey: ValueKey<String>('workspace-mobile-open-console'),
-            ),
-            userMenu,
-          ],
+    return HomeShellMobileHeader(
+      title: 'EasyTier Pro',
+      subtitle: '',
+      suffixes: [
+        HomeCoreStatusDot(statusListenable: coreStatusListenable),
+        const HomeOpenConsoleButton(
+          buttonKey: ValueKey<String>('workspace-mobile-open-console'),
         ),
-        if (showConnectionSummary)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-            decoration: const BoxDecoration(
-              color: Color(0xFFFFFFFF),
-              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-            ),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: connectionSummary,
-            ),
-          ),
+        userMenu,
       ],
     );
   }
@@ -162,6 +139,8 @@ class _StatusBadge extends StatelessWidget {
     required this.statusListenable,
     required this.engineVersionListenable,
     required this.joinedCount,
+    required this.connections,
+    required this.onShowConnections,
     required this.downloadRate,
     required this.uploadRate,
     required this.hasTrafficStats,
@@ -172,6 +151,8 @@ class _StatusBadge extends StatelessWidget {
   final ValueListenable<CoreRunStatus> statusListenable;
   final ValueListenable<CoreEngineVersionStatus> engineVersionListenable;
   final int joinedCount;
+  final Map<String, CoreNetworkConnection> connections;
+  final VoidCallback onShowConnections;
   final double downloadRate;
   final double uploadRate;
   final bool hasTrafficStats;
@@ -272,14 +253,20 @@ class _StatusBadge extends StatelessWidget {
               subtitle = consoleVersion == null || consoleVersion.isEmpty
                   ? '连接引擎可更新'
                   : '连接引擎可更新至 $consoleVersion';
-            } else if (joinedCount > 0) {
-              subtitle = '$joinedCount 个网络';
+            } else if (connections.isNotEmpty && running) {
+              subtitle = '';
             } else {
               subtitle = machineId?.isNotEmpty == true
                   ? '设备 ${_shortId(machineId!)} · 尚未加入网络'
                   : '正在初始化设备...';
             }
 
+            final connectedCount = running
+                ? connections.values
+                      .where((connection) => connection.ready)
+                      .length
+                : 0;
+            final showConnections = connections.isNotEmpty;
             final statusBody = Row(
               children: [
                 Container(
@@ -317,15 +304,40 @@ class _StatusBadge extends StatelessWidget {
                             ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w500,
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: const Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      if (showConnections)
+                        FButton(
+                          key: const ValueKey('workspace-connections'),
+                          variant: .ghost,
+                          size: .sm,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: onShowConnections,
+                          suffix: const Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: Color(0xFF2563EB),
+                          ),
+                          child: Text(
+                            '已接入 $connectedCount 个网络',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: const Color(0xFF2563EB),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -399,7 +411,7 @@ class _StatusBadge extends StatelessWidget {
                     );
                   }
 
-                  if (trafficStrip != null && constraints.maxWidth < 240) {
+                  if (trafficStrip != null && constraints.maxWidth < 420) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

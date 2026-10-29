@@ -424,7 +424,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
     return HomeShell(
       desktopHeader: _DashboardHeader(
         userMenu: userMenu,
-        connectionSummary: _connectionSummary(),
         activeView: _activeView,
         networks: _networks,
         deviceCount: _totalDeviceCount,
@@ -437,9 +436,6 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
       ),
       mobileHeader: _MobileDashboardHeader(
         userMenu: userMenu,
-        connectionSummary: _connectionSummary(),
-        showConnectionSummary:
-            widget.coreLifecycleService.networkConnections.value.isNotEmpty,
         coreStatusListenable: widget.coreLifecycleService.status,
       ),
       mobileNavigation: _MobileDashboardNavigation(

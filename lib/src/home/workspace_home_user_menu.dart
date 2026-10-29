@@ -87,7 +87,13 @@ class _UserMenu extends StatelessWidget {
                 FItem(
                   key: ValueKey('workspace-option-${workspace.id}'),
                   title: SelectionContainer.disabled(
-                    child: Text(workspace.name),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Text(
+                        workspace.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                   suffix: workspace.id == selectedWorkspaceId
                       ? const Icon(Icons.check, size: 16)
