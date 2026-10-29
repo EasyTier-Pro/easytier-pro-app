@@ -399,11 +399,9 @@ class _WorkspaceHomeViewState extends State<WorkspaceHomeView>
 
   @override
   Widget build(BuildContext context) {
-    final workspaceName = _workspace?.name ?? '未关联工作区';
     final userName = widget.session.user.effectiveName.trim();
     final userMenu = _UserMenu(
       userName: userName,
-      workspaceName: workspaceName,
       workspaces: _workspaces,
       selectedWorkspaceId: _workspace?.id,
       initial: userName.isEmpty ? 'U' : userName.substring(0, 1),

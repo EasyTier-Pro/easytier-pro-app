@@ -3,7 +3,6 @@ part of 'workspace_home_view.dart';
 class _UserMenu extends StatelessWidget {
   const _UserMenu({
     required this.userName,
-    required this.workspaceName,
     required this.workspaces,
     required this.selectedWorkspaceId,
     required this.initial,
@@ -14,7 +13,6 @@ class _UserMenu extends StatelessWidget {
   });
 
   final String userName;
-  final String workspaceName;
   final List<ConsoleWorkspace> workspaces;
   final String? selectedWorkspaceId;
   final String initial;
@@ -41,26 +39,13 @@ class _UserMenu extends StatelessWidget {
                 child: SizedBox(
                   width: 200,
                   child: SelectionContainer.disabled(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: const Color(0xFF0A0A0A),
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          workspaceName,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFF737373)),
-                        ),
-                      ],
+                    child: Text(
+                      displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF0A0A0A),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),

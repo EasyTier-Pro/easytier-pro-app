@@ -3832,9 +3832,8 @@ void main() {
       of: find.byType(FItemGroup),
       matching: find.text('个人空间'),
     );
-    expect(menuWorkspace, findsNWidgets(2));
-    expect(_hasSelectionAreaAncestor(tester, menuWorkspace.first), isFalse);
-    expect(_hasSelectionAreaAncestor(tester, menuWorkspace.last), isFalse);
+    expect(menuWorkspace, findsOneWidget);
+    expect(_hasSelectionAreaAncestor(tester, menuWorkspace), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('设置')), isFalse);
     expect(_hasSelectionAreaAncestor(tester, find.text('退出登录')), isFalse);
   });
