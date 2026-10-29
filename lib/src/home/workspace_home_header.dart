@@ -316,26 +316,38 @@ class _StatusBadge extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       if (showConnections)
-                        FButton(
-                          key: const ValueKey('workspace-connections'),
-                          variant: .ghost,
-                          size: .sm,
-                          mainAxisSize: MainAxisSize.min,
-                          onPress: onShowConnections,
-                          suffix: const Icon(
-                            Icons.chevron_right,
-                            size: 16,
-                            color: Color(0xFF2563EB),
-                          ),
-                          child: Text(
-                            '已接入 $connectedCount 个网络',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: const Color(0xFF2563EB),
-                                  fontWeight: FontWeight.w600,
+                        FittedBox(
+                          alignment: Alignment.centerLeft,
+                          fit: BoxFit.scaleDown,
+                          child: FButton(
+                            key: const ValueKey('workspace-connections'),
+                            variant: .ghost,
+                            size: .sm,
+                            style: .delta(
+                              contentStyle: .delta(
+                                padding: .value(EdgeInsets.zero),
+                                constraints: const BoxConstraints(
+                                  minHeight: 24,
                                 ),
+                                spacing: 2,
+                              ),
+                            ),
+                            mainAxisSize: MainAxisSize.min,
+                            semanticsLabel: '已接入 $connectedCount 个网络',
+                            onPress: onShowConnections,
+                            suffix: const Icon(
+                              Icons.chevron_right,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
+                            child: Text(
+                              '$connectedCount 个网络',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFF2563EB),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
                           ),
                         ),
                     ],
@@ -407,20 +419,6 @@ class _StatusBadge extends StatelessWidget {
                         statusBody,
                         const SizedBox(height: 12),
                         actionButton,
-                      ],
-                    );
-                  }
-
-                  if (trafficStrip != null && constraints.maxWidth < 420) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        statusBody,
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: trafficStrip,
-                        ),
                       ],
                     );
                   }

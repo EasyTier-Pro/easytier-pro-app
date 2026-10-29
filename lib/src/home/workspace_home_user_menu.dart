@@ -71,14 +71,11 @@ class _UserMenu extends StatelessWidget {
             children: [
               FItem.raw(
                 enabled: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: SelectionContainer.disabled(
-                    child: Text(
-                      '工作区',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF737373),
-                      ),
+                child: SelectionContainer.disabled(
+                  child: Text(
+                    '工作区',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF737373),
                     ),
                   ),
                 ),

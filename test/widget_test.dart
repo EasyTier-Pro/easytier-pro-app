@@ -1297,7 +1297,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('user-menu-button')));
       await tester.pumpAndSettle();
-      expect(find.text('已接入 1 个网络'), findsOneWidget);
+      expect(find.text('1 个网络'), findsOneWidget);
       expect(core.sourceWorkspaceId, 'tenant-1');
       expect(
         core.networkConnections.value['net-1']?.phase,
@@ -1371,7 +1371,7 @@ void main() {
         core.networkConnections.value.keys,
         containsAll(['net-1', 'net-2']),
       );
-      expect(find.text('已接入 2 个网络'), findsOneWidget);
+      expect(find.text('2 个网络'), findsOneWidget);
       auth.networkDevices['net-2'] = [];
       await tester.tap(find.byKey(const ValueKey('network-refresh-button')));
       await tester.pumpAndSettle();
@@ -1423,7 +1423,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(core.networkConnections.value['net-1']?.ready, isFalse);
-    expect(find.text('已接入 0 个网络'), findsOneWidget);
+    expect(find.text('0 个网络'), findsOneWidget);
     expect(auth.removedNodeIds, isEmpty);
   });
 
@@ -1960,7 +1960,15 @@ void main() {
     expect(find.textContaining('100 KiB/s'), findsNothing);
     expect(find.textContaining('300 KiB/s'), findsNothing);
     expect(find.text('已在线'), findsOneWidget);
-    expect(find.text('已接入 1 个网络'), findsOneWidget);
+    expect(find.text('1 个网络'), findsOneWidget);
+    final connection = tester.getRect(
+      find.byKey(const ValueKey('workspace-connections')),
+    );
+    final traffic = tester.getRect(
+      find.byKey(const ValueKey('status-traffic-strip')),
+    );
+    expect(traffic.left, greaterThan(connection.right));
+    expect(traffic.center.dy, lessThan(connection.bottom));
   });
 
   testWidgets('keeps traffic sparkline x-axis stable as samples grow', (
