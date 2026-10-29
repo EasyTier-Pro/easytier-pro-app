@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import java.io.IOException
 import org.json.JSONObject
@@ -22,6 +23,7 @@ class EasyTierVpnService : VpnService() {
     private var activeBuilderConfig: AndroidVpnAppliedConfig? = null
     private var activeConfigServerConfig: ConfigServerConfig? = null
     private var membershipChanged = true
+    private val startingInstances = mutableMapOf<String, Long>()
     @Volatile private var explicitStopSelfRequested = false
     @Volatile private var destroyed = false
     private var lastRefreshError: String? = null
@@ -36,6 +38,7 @@ class EasyTierVpnService : VpnService() {
             if (destroyed || activeConfigServerConfig == null) return
             try {
                 refreshVpn()
+                updateStartingInstances()
                 lastRefreshError = null
             } catch (error: Throwable) {
                 val message = error.message ?: error.toString()
@@ -47,7 +50,9 @@ class EasyTierVpnService : VpnService() {
                 vpnState = vpnState + mapOf("error" to message)
             } finally {
                 if (!destroyed && activeConfigServerConfig != null) {
-                    worker.postDelayed(this, 3000)
+                    val now = SystemClock.elapsedRealtime()
+                    startingInstances.entries.removeAll { it.value <= now }
+                    worker.postDelayed(this, if (startingInstances.isEmpty()) 3000 else 200)
                 }
             }
         }
@@ -116,9 +121,19 @@ class EasyTierVpnService : VpnService() {
                 // The service owns membership even when Flutter is suspended or detached.
                 worker.post {
                     if (destroyed || activeConfigServerConfig != config) return@post
+                    val event = parseJson(payload) as? Map<*, *>
+                    val instanceId = event?.get("instance_id") as? String
+                    if (!instanceId.isNullOrEmpty()) {
+                        when (event["event"]) {
+                            "run_network_instance" -> if (event["success"] != false) {
+                                startingInstances[instanceId] = SystemClock.elapsedRealtime() + 60_000
+                            }
+                            "delete_network_instance" -> startingInstances.remove(instanceId)
+                        }
+                    }
                     EasyTierFlutterBridge.emitFromService(
                         "config_server",
-                        mapOf("raw" to payload, "payload" to (parseJson(payload) ?: mapOf("raw" to payload))),
+                        mapOf("raw" to payload, "payload" to (event ?: mapOf("raw" to payload))),
                     )
                     // A replacement may reuse the UUID and addresses with a new runtime host.
                     membershipChanged = true
@@ -131,6 +146,30 @@ class EasyTierVpnService : VpnService() {
             "config_server_started", mapOf("hostname" to hostname, "alreadyStarted" to alreadyStarted),
         )
         scheduleRefresh()
+    }
+
+    private fun updateStartingInstances() {
+        val state = vpnState
+        val attached = (state["instance_ids"] as? List<*>)?.toSet().orEmpty()
+        val rejected = (state["rejected"] as? List<*>)
+            ?.mapNotNull { (it as? Map<*, *>)?.get("instance_id") as? String }
+            ?.toSet().orEmpty()
+        startingInstances.keys.toList().forEach { id ->
+            if (id in rejected) {
+                startingInstances.remove(id)
+            } else if (id in attached) {
+                val config = EasyTierMobileTunConfig.parse(EasyTierNative.getMobileTunConfig(listOf(id)))
+                val installed = activeTunConfig
+                if (id in config.instanceIds && config.addresses.isNotEmpty() &&
+                    installed != null &&
+                    config.addresses.all { it in installed.addresses } &&
+                    config.routes.all { it in installed.routes } &&
+                    config.searchDomains.all { it in installed.searchDomains } &&
+                    (config.dns == null || config.dns == installed.dns)) {
+                    startingInstances.remove(id)
+                }
+            }
+        }
     }
 
     private fun refreshVpn() {
@@ -231,6 +270,7 @@ class EasyTierVpnService : VpnService() {
     private fun stopRuntime(reason: String? = null, stopService: Boolean = true) {
         worker.removeCallbacks(refresh)
         activeConfigServerConfig = null
+        startingInstances.clear()
         stopVpn(reason)
         EasyTierNative.stopConfigServerClient()
         EasyTierNative.stopAllInstances()

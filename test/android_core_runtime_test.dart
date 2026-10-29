@@ -425,6 +425,7 @@ void main() {
       calls = <MethodCall>[];
       vpnState = {
         'instance_ids': ['instance-a'],
+        'addresses': ['10.10.0.2/24'],
         'rejected': <Object?>[],
       };
       vpnPrepared = true;
@@ -1063,18 +1064,27 @@ void main() {
         };
         vpnState = {
           'instance_ids': ['instance-a'],
+          'addresses': ['10.1.0.2/24'],
           'rejected': <Object?>[],
         };
         expect(await runtime.isNetworkInstanceRunning('network-a'), isTrue);
         expect(await runtime.isNetworkInstanceRunning('network-b'), isFalse);
         vpnState = {
           'instance_ids': ['instance-a', 'instance-b'],
+          'addresses': ['10.1.0.2/24'],
+          'rejected': <Object?>[],
+        };
+        expect(await runtime.isNetworkInstanceRunning('network-b'), isFalse);
+        vpnState = {
+          'instance_ids': ['instance-a', 'instance-b'],
+          'addresses': ['10.1.0.2/24', '10.2.0.2/24'],
           'rejected': <Object?>[],
         };
         expect(await runtime.isNetworkInstanceRunning('network-a'), isTrue);
         expect(await runtime.isNetworkInstanceRunning('network-b'), isTrue);
         vpnState = {
           'instance_ids': ['instance-b'],
+          'addresses': ['10.2.0.2/24'],
           'rejected': <Object?>[],
         };
         expect(await runtime.isNetworkInstanceRunning('network-a'), isFalse);
@@ -1095,6 +1105,7 @@ void main() {
         );
         vpnState = {
           'instance_ids': ['instance-a'],
+          'addresses': ['10.10.0.2/24'],
           'rejected': [
             {'instance_id': 'instance-b', 'error': 'overlapping route'},
           ],
@@ -1113,6 +1124,114 @@ void main() {
           ),
         );
         expect(await runtime.isNetworkInstanceRunning('network-a'), isTrue);
+      },
+    );
+
+    test('VPN events wake and confirm the requested network', () async {
+      await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+      vpnState = {
+        'instance_ids': ['instance-b'],
+        'addresses': ['10.20.0.2/24'],
+        'rejected': <Object?>[],
+      };
+      var consoleReads = 0;
+      var completed = false;
+      final connection = runtime
+          .waitForNetworkConnection(
+            'network-a',
+            readInstanceId: () async {
+              consoleReads++;
+              return 'instance-a';
+            },
+          )
+          .then((value) {
+            completed = true;
+            return value;
+          });
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      nativeEvents.add({'type': CoreRuntimeEventTypes.vpnStarted});
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(completed, isFalse);
+      expect(consoleReads, 2);
+
+      vpnState = {
+        'instance_ids': ['instance-a', 'instance-b'],
+        'addresses': ['10.20.0.2/24'],
+        'rejected': <Object?>[],
+      };
+      nativeEvents.add({'type': CoreRuntimeEventTypes.vpnConfigRefreshed});
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(completed, isFalse);
+      expect(consoleReads, 3);
+      vpnState = {
+        'instance_ids': ['instance-a', 'instance-b'],
+        'addresses': ['10.10.0.2/24', '10.20.0.2/24'],
+        'rejected': <Object?>[],
+      };
+      nativeEvents.add({'type': CoreRuntimeEventTypes.vpnConfigRefreshed});
+      expect(
+        await connection.timeout(const Duration(milliseconds: 500)),
+        '10.10.0.2/24',
+      );
+      expect(consoleReads, 4);
+    });
+
+    test(
+      'does not accept a VPN event for a node detached during startup',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        vpnState = {'instance_ids': <String>[], 'rejected': <Object?>[]};
+        var reads = 0;
+        var completed = false;
+        final connection = runtime
+            .waitForNetworkConnection(
+              'network-a',
+              readInstanceId: () async {
+                reads++;
+                return reads == 1 ? 'instance-a' : null;
+              },
+            )
+            .then((value) {
+              completed = true;
+              return value;
+            });
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        vpnState = {
+          'instance_ids': ['instance-a'],
+          'addresses': ['10.10.0.2/24'],
+          'rejected': <Object?>[],
+        };
+        nativeEvents.add({'type': CoreRuntimeEventTypes.vpnStarted});
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(reads, 2);
+        expect(completed, isFalse);
+        await runtime.stop();
+        await expectLater(connection, throwsStateError);
+      },
+    );
+
+    test(
+      'VPN event refreshes an instance ID not yet reported by console',
+      () async {
+        await runtime.ensureRunning(_androidBootstrap(), forceReinstall: false);
+        vpnState = {'instance_ids': <String>[], 'rejected': <Object?>[]};
+        var reads = 0;
+        final connection = runtime.waitForNetworkConnection(
+          'network-a',
+          readInstanceId: () async => ++reads == 1 ? null : 'instance-a',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        vpnState = {
+          'instance_ids': ['instance-a'],
+          'addresses': ['10.10.0.2/24'],
+          'rejected': <Object?>[],
+        };
+        nativeEvents.add({'type': CoreRuntimeEventTypes.vpnStarted});
+        expect(
+          await connection.timeout(const Duration(milliseconds: 500)),
+          '10.10.0.2/24',
+        );
+        expect(reads, 2);
       },
     );
 
@@ -1169,6 +1288,7 @@ void main() {
         // A subsequent success clears the previous error instead of poisoning retries.
         vpnState = {
           'instance_ids': ['instance-a', 'instance-b'],
+          'addresses': ['10.10.0.2/24', '10.2.0.2/24'],
           'rejected': <Object?>[],
         };
         networkInfos = {

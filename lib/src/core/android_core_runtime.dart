@@ -192,7 +192,11 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
       return false;
     }
     final state = await _readVpnState();
-    return _readStringList(state['instance_ids']).contains(instance.id);
+    final installedAddresses = _readStringList(state['addresses']);
+    return _readStringList(state['instance_ids']).contains(instance.id) &&
+        _readStringList(
+          instance.vpnConfig?['addresses'],
+        ).any(installedAddresses.contains);
   }
 
   Future<Map<String, Object?>> _readVpnState() async {
@@ -207,41 +211,96 @@ class AndroidCoreRuntime extends CorePlatformRuntime {
     String runtimeNetworkName, {
     required Future<String?> Function() readInstanceId,
   }) async {
-    for (var attempt = 0; attempt < 60; attempt++) {
-      if (_disposed || !_vpnPrepared) {
-        throw StateError('Android VPN 未获得授权或已停止');
-      }
-      final id = await readInstanceId();
-      final state = await _readVpnState();
-      if (id != null && id.isNotEmpty) {
-        _instanceIdsByRuntimeName[runtimeNetworkName] = id;
-        final instanceError = _instanceErrorsById.remove(id);
-        if (instanceError != null) throw StateError(instanceError);
-        for (final rejected in _readList(state['rejected'])) {
-          final member = _readMap(rejected);
-          if (member?['instance_id'] == id) {
-            throw StateError(_readString(member?['error']));
-          }
-        }
-        if (_readStringList(state['instance_ids']).contains(id)) {
-          final instances = await _listInstances();
-          for (final entry in instances.entries) {
-            if (entry.value != id) continue;
-            _instanceNamesByRuntimeName[runtimeNetworkName] = entry.key;
-            final instance = await _readJsonRpcNetworkInstance(
-              entry.key,
-              instanceId: id,
-            );
-            final addresses = _readStringList(instance.vpnConfig?['addresses']);
-            if (addresses.isNotEmpty) return addresses.first;
-          }
+    final stopwatch = Stopwatch()..start();
+    var nextInstanceRead = Duration.zero;
+    String? id;
+    var eventCount = 0;
+    var instanceReadEventCount = 0;
+    Completer<void>? wake;
+    final subscription = events.listen((event) {
+      if (event.type == CoreRuntimeEventTypes.vpnStarted ||
+          event.type == CoreRuntimeEventTypes.vpnConfigRefreshed ||
+          event.type == CoreRuntimeEventTypes.vpnStopped ||
+          event.type == 'vpn_config_error') {
+        eventCount++;
+        if (wake case final pending?) {
+          if (!pending.isCompleted) pending.complete();
         }
       }
-      final error = _readString(state['error']);
-      if (error.isNotEmpty) throw StateError(error);
-      await Future<void>.delayed(const Duration(seconds: 1));
+    });
+    try {
+      connectionLoop:
+      while (stopwatch.elapsed < const Duration(seconds: 60)) {
+        final observedEvents = eventCount;
+        if (_disposed || !_vpnPrepared) {
+          throw StateError('Android VPN 未获得授权或已停止');
+        }
+        if (stopwatch.elapsed >= nextInstanceRead ||
+            eventCount != instanceReadEventCount) {
+          instanceReadEventCount = eventCount;
+          id = await readInstanceId();
+          nextInstanceRead = stopwatch.elapsed + const Duration(seconds: 1);
+        }
+        final state = await _readVpnState();
+        if (instanceReadEventCount != eventCount) continue;
+        if (id != null && id.isNotEmpty) {
+          _instanceIdsByRuntimeName[runtimeNetworkName] = id;
+          final instanceError = _instanceErrorsById.remove(id);
+          if (instanceError != null) throw StateError(instanceError);
+          for (final rejected in _readList(state['rejected'])) {
+            final member = _readMap(rejected);
+            if (member?['instance_id'] == id) {
+              throw StateError(_readString(member?['error']));
+            }
+          }
+          if (_readStringList(state['instance_ids']).contains(id)) {
+            final instances = await _listInstances();
+            for (final entry in instances.entries) {
+              if (entry.value != id) continue;
+              _instanceNamesByRuntimeName[runtimeNetworkName] = entry.key;
+              final instance = await _readJsonRpcNetworkInstance(
+                entry.key,
+                instanceId: id,
+              );
+              final addresses = _readStringList(
+                instance.vpnConfig?['addresses'],
+              );
+              final installedAddresses = _readStringList(state['addresses']);
+              final address = addresses
+                  .where(installedAddresses.contains)
+                  .firstOrNull;
+              if (eventCount != instanceReadEventCount) {
+                continue connectionLoop;
+              }
+              if (address != null) return address;
+            }
+          }
+        }
+        final error = _readString(state['error']);
+        if (error.isNotEmpty) throw StateError(error);
+        if (eventCount != observedEvents) continue;
+
+        final pending = Completer<void>();
+        wake = pending;
+        final remaining = nextInstanceRead - stopwatch.elapsed;
+        if (remaining > Duration.zero) {
+          final timer = Timer(remaining, () {
+            if (!pending.isCompleted) pending.complete();
+          });
+          try {
+            await pending.future;
+          } finally {
+            timer.cancel();
+            wake = null;
+          }
+        } else {
+          wake = null;
+        }
+      }
+      throw StateError('等待 Android 网络接入 VPN 超时');
+    } finally {
+      await subscription.cancel();
     }
-    throw StateError('等待 Android 网络接入 VPN 超时');
   }
 
   @override
