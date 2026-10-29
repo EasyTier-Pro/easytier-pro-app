@@ -21,7 +21,11 @@ abstract class AuthService {
 
   Future<DeviceAuthInfo> startDeviceAuth();
 
-  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info);
+  Future<AuthSession> completeDeviceAuth(
+    DeviceAuthInfo info, {
+    Future<bool> Function()? waitForForeground,
+    int Function()? lifecycleGeneration,
+  });
 
   Future<List<ConsoleNetwork>> fetchNetworks({
     required String accessToken,

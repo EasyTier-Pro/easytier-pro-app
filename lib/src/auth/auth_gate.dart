@@ -64,6 +64,8 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _sessionExpirationInFlight = false;
   bool _logoutInFlight = false;
   int _approvalGeneration = 0;
+  int _lifecycleGeneration = 0;
+  Completer<void>? _foregroundWaiter;
   Timer? _sessionRefreshTimer;
   StreamSubscription<SessionExpiredException>? _sessionExpirationSubscription;
   final AppLogger _logger = AppLogger.instance;
@@ -84,6 +86,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _approvalGeneration++;
+    _foregroundWaiter?.complete();
+    _foregroundWaiter = null;
     _sessionRefreshTimer?.cancel();
     unawaited(_sessionExpirationSubscription?.cancel());
     super.dispose();
@@ -91,6 +96,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_lifecycleState == AppLifecycleState.resumed &&
+        state != AppLifecycleState.resumed) {
+      _lifecycleGeneration++;
+    }
     _lifecycleState = state;
     _logger.debug(
       'auth.gate',
@@ -98,6 +107,8 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       context: {'state': state.name},
     );
     if (state == AppLifecycleState.resumed) {
+      _foregroundWaiter?.complete();
+      _foregroundWaiter = null;
       _startApprovalPollingIfReady();
       final session = _session;
       if (session != null) {
@@ -184,13 +195,21 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   Future<void> _waitForApproval(DeviceAuthInfo info, int generation) async {
     try {
-      final session = await widget.authService.completeDeviceAuth(info);
-      if (generation != _approvalGeneration) {
+      final session = await widget.authService.completeDeviceAuth(
+        info,
+        waitForForeground: _shouldWaitForBrowserReturn
+            ? () => _waitForApprovalForeground(generation)
+            : null,
+        lifecycleGeneration: _shouldWaitForBrowserReturn
+            ? () => _lifecycleGeneration
+            : null,
+      );
+      if (!mounted || generation != _approvalGeneration) {
         return;
       }
       _setSession(session);
     } catch (error) {
-      if (generation != _approvalGeneration) {
+      if (!mounted || generation != _approvalGeneration) {
         return;
       }
       _logger.error(
@@ -204,6 +223,16 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         _approvalWaitInFlight = false;
       }
     }
+  }
+
+  Future<bool> _waitForApprovalForeground(int generation) async {
+    while (mounted &&
+        generation == _approvalGeneration &&
+        _lifecycleState != AppLifecycleState.resumed) {
+      _foregroundWaiter ??= Completer<void>();
+      await _foregroundWaiter!.future;
+    }
+    return mounted && generation == _approvalGeneration;
   }
 
   Future<bool> _openBrowser(String url) async {

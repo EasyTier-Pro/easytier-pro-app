@@ -176,7 +176,11 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
   }
 
   @override
-  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) async {
+  Future<AuthSession> completeDeviceAuth(
+    DeviceAuthInfo info, {
+    Future<bool> Function()? waitForForeground,
+    int Function()? lifecycleGeneration,
+  }) async {
     _logger.info('auth', 'Waiting for device authorization approval');
     final deadline = DateTime.now().toUtc().add(
       Duration(seconds: info.expiresIn),
@@ -193,15 +197,32 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
         await Future<void>.delayed(Duration(seconds: delaySeconds));
       }
 
-      final response = await _post(
-        Uri.parse('$consoleBaseUrl/api/v1/auth/device/token'),
-        operation: 'completeDeviceAuth',
-        body: {
-          'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-          'device_code': info.deviceCode,
-          'client_id': '',
-        },
-      );
+      if (waitForForeground != null && !await waitForForeground()) {
+        throw const AuthException('登录已取消。');
+      }
+      if (!DateTime.now().toUtc().isBefore(deadline)) {
+        break;
+      }
+      final requestGeneration = lifecycleGeneration?.call();
+      late final http.Response response;
+      try {
+        response = await _post(
+          Uri.parse('$consoleBaseUrl/api/v1/auth/device/token'),
+          operation: 'completeDeviceAuth',
+          body: {
+            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+            'device_code': info.deviceCode,
+            'client_id': '',
+          },
+        );
+      } on _ConsoleNetworkException {
+        if (lifecycleGeneration == null ||
+            lifecycleGeneration() == requestGeneration) {
+          rethrow;
+        }
+        delaySeconds = 0;
+        continue;
+      }
 
       if (response.statusCode.toString().startsWith('2')) {
         final body = _decodeObject(response.body);
@@ -215,15 +236,21 @@ class ConsoleAuthService implements AuthService, RefreshableAuthService {
         );
 
         await _saveNewTokenSet(tokenSet);
+        if (waitForForeground != null && !await waitForForeground()) {
+          throw const AuthException('登录已取消。');
+        }
         final user = await fetchCurrentUser(tokenSet.accessToken);
         _logger.info(
           'auth',
           'Device authorization completed',
           context: {'workspace_count': user.workspaces.length},
         );
-        return AuthSession(user: user, tokenSet: tokenSet);
+        return AuthSession(user: user, tokenSet: _activeTokenSet ?? tokenSet);
       }
 
+      if (waitForForeground != null && !await waitForForeground()) {
+        throw const AuthException('登录已取消。');
+      }
       final body = _tryDecodeObject(response.body);
       final error = body?['error']?.toString() ?? 'unknown_error';
       final description =

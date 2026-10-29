@@ -167,6 +167,99 @@ void main() {
     );
   }
 
+  testWidgets('mobile device login pauses polling in the background', (
+    WidgetTester tester,
+  ) async {
+    final previousLauncher = UrlLauncherPlatform.instance;
+    UrlLauncherPlatform.instance = _FakeUrlLauncherPlatform();
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final inFlight = Completer<http.Response>();
+    var tokenRequests = 0;
+    var userRequests = 0;
+    final authService = ConsoleAuthService(
+      tokenStore: OAuthTokenStore(preferences),
+      consoleBaseUrl: 'http://console.test',
+      httpClient: MockClient((request) async {
+        switch (request.url.path) {
+          case '/api/v1/auth/device':
+            return _jsonResponse({
+              'device_code': 'device-code',
+              'user_code': 'USER-CODE',
+              'verification_uri': 'http://console.test/verify',
+              'expires_in': 600,
+              'interval': 5,
+            });
+          case '/api/v1/auth/device/token':
+            tokenRequests++;
+            if (tokenRequests == 1) {
+              return _jsonResponse({'error': 'authorization_pending'}, 400);
+            }
+            if (tokenRequests == 2) {
+              return inFlight.future;
+            }
+            return _jsonResponse({
+              'access_token': 'access-token',
+              'token_type': 'Bearer',
+              'expires_in': 3600,
+            });
+          case '/api/v1/auth/me':
+            userRequests++;
+            return _jsonResponse({
+              'user': {'email': 'tester@example.com'},
+              'tenants': [
+                {'id': 'tenant-1', 'name': 'Test Workspace'},
+              ],
+            });
+          default:
+            return _jsonResponse({'message': 'not found'}, 404);
+        }
+      }),
+    );
+
+    try {
+      await tester.pumpWidget(
+        MyApp(
+          authService: authService,
+          traySupport: createTraySupport(),
+          coreLifecycleService: _NoopCoreLifecycleService(
+            authService: authService,
+            machineId: 'machine-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FButton, '开始登录'));
+      await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(tokenRequests, 2);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      inFlight.completeError(http.ClientException('connection aborted'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 10));
+      expect(tokenRequests, 2);
+      expect(find.text('登录失败'), findsNothing);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(tokenRequests, 3);
+      expect(userRequests, 1);
+      expect(find.text('登录失败'), findsNothing);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      UrlLauncherPlatform.instance = previousLauncher;
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   test('network detail collapse controller coordinates list scroll', () {
     final controller = HomeNetworkDetailHeaderCollapseController();
     final metrics = FixedScrollMetrics(
@@ -5455,6 +5548,104 @@ void main() {
     expect(requestedPaths, ['/api/v1/auth/device/token', '/api/v1/auth/me']);
   });
 
+  test(
+    'device token received in background is saved before resuming',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final tokenStore = OAuthTokenStore(preferences);
+      final waiting = Completer<void>();
+      final resume = Completer<bool>();
+      var foregroundChecks = 0;
+      var userRequests = 0;
+      final service = ConsoleAuthService(
+        tokenStore: tokenStore,
+        consoleBaseUrl: 'http://console.test',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/api/v1/auth/device/token') {
+            return _jsonResponse({
+              'access_token': 'access-token',
+              'refresh_token': 'refresh-token',
+              'expires_in': 0,
+            });
+          }
+          if (request.url.path == '/api/v1/auth/device/refresh') {
+            return _jsonResponse({
+              'access_token': 'refreshed-token',
+              'expires_in': 3600,
+            });
+          }
+          userRequests++;
+          return _jsonResponse({
+            'user': {'email': 'tester@example.com'},
+            'tenants': <Object>[],
+          });
+        }),
+      );
+      final login = service.completeDeviceAuth(
+        const DeviceAuthInfo(
+          deviceCode: 'device-code',
+          userCode: 'USER-CODE',
+          verificationUri: 'http://console.test/verify',
+          verificationUriComplete: 'http://console.test/verify',
+          expiresIn: 600,
+          interval: 5,
+        ),
+        waitForForeground: () {
+          if (++foregroundChecks == 1) {
+            return Future.value(true);
+          }
+          waiting.complete();
+          return resume.future;
+        },
+        lifecycleGeneration: () => 0,
+      );
+
+      await waiting.future;
+      expect((await tokenStore.load())?.accessToken, 'access-token');
+      expect(userRequests, 0);
+      resume.complete(true);
+      final session = await login;
+      expect(session.user.email, 'tester@example.com');
+      expect(session.tokenSet.accessToken, 'refreshed-token');
+      expect((await tokenStore.load())?.accessToken, 'refreshed-token');
+    },
+  );
+
+  test(
+    'device token network failures in the foreground are reported',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      var requests = 0;
+      final service = ConsoleAuthService(
+        tokenStore: OAuthTokenStore(preferences),
+        consoleBaseUrl: 'http://console.test',
+        httpClient: MockClient((request) async {
+          requests++;
+          throw http.ClientException('connection aborted');
+        }),
+      );
+
+      await expectLater(
+        service.completeDeviceAuth(
+          const DeviceAuthInfo(
+            deviceCode: 'device-code',
+            userCode: 'USER-CODE',
+            verificationUri: 'http://console.test/verify',
+            verificationUriComplete: 'http://console.test/verify',
+            expiresIn: 600,
+            interval: 5,
+          ),
+          waitForForeground: () async => true,
+          lifecycleGeneration: () => 0,
+        ),
+        throwsA(isA<AuthException>()),
+      );
+      expect(requests, 1);
+    },
+  );
+
   test('console service fast polls pending device authorization', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -6391,7 +6582,11 @@ class _LoginFlowAuthService implements AuthService {
   }
 
   @override
-  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) async {
+  Future<AuthSession> completeDeviceAuth(
+    DeviceAuthInfo info, {
+    Future<bool> Function()? waitForForeground,
+    int Function()? lifecycleGeneration,
+  }) async {
     completeDeviceAuthCount++;
     return AuthSession(
       user: const ConsoleUser(
@@ -6683,7 +6878,11 @@ class _FakeAuthService implements AuthService {
   int networkDeviceFetchCount = 0;
 
   @override
-  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) {
+  Future<AuthSession> completeDeviceAuth(
+    DeviceAuthInfo info, {
+    Future<bool> Function()? waitForForeground,
+    int Function()? lifecycleGeneration,
+  }) {
     throw UnimplementedError();
   }
 

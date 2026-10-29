@@ -2174,7 +2174,11 @@ class _LifecycleAuthService implements AuthService {
   }
 
   @override
-  Future<AuthSession> completeDeviceAuth(DeviceAuthInfo info) {
+  Future<AuthSession> completeDeviceAuth(
+    DeviceAuthInfo info, {
+    Future<bool> Function()? waitForForeground,
+    int Function()? lifecycleGeneration,
+  }) {
     throw UnimplementedError();
   }
 
